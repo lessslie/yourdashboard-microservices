@@ -57,16 +57,41 @@ export class AuthController {
    * 👤 GET /auth/me
    * Obtener información del usuario autenticado
    */
-  @Get('me')
-  async getProfile(@Headers('authorization') authHeader: string) {
+ /**
+ * 👤 GET /auth/me
+ * Obtener información del usuario autenticado CON FOTO
+ */
+@Get('me')
+async getProfile(@Headers('authorization') authHeader: string) {
+  try {
     if (!authHeader) {
       throw new UnauthorizedException('Token de autorización requerido');
     }
 
-    const token = authHeader.replace('Bearer ', '');
-    return this.authTraditionalService.getProfile(token);
-  }
+    const jwtToken = authHeader.replace('Bearer ', '');
+    
+    // ✅ USAR MÉTODO EXISTENTE (sin foto)
+    const profileData = await this.authTraditionalService.getProfile(jwtToken);
+    
+    if (!profileData.success) {
+      throw new UnauthorizedException('Token inválido o expirado');
+    }
 
+    // ✅ DEVOLVER PERFIL SIMPLE (sin foto)
+    return {
+      success: true,
+      user: {
+        ...profileData.user,
+        profilePicture: null  // Por ahora sin foto
+      },
+      connections: profileData.connections || []
+    };
+
+  } catch (error) {
+    console.error('❌ Error obteniendo perfil:', error);
+    throw new UnauthorizedException('Error obteniendo perfil de usuario');
+  }
+}
   /**
    * 🚪 POST /auth/logout
    * Cerrar sesión
