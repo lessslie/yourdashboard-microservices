@@ -21,7 +21,7 @@ export class EmailsController {
   constructor(private readonly emailsService: EmailsService) {}
 
   /**
-   * 📧 GET /emails/inbox?userId=123&page=1&limit=10
+   * 📧 GET /emails/inbox?userId=${getCurrentUserId()}23&page=1&limit=10
    * VERSIÓN MICROSERVICIOS: Recibe token del orchestrator
    */
   @Get('inbox')
@@ -50,7 +50,7 @@ export class EmailsController {
   }
 
   /**
-   * 🔍 GET /emails/search?userId=123&q=palabra&page=1&limit=10
+   * 🔍 GET /emails/search?userId=${getCurrentUserId()}23&q=palabra&page=1&limit=10
    * VERSIÓN MICROSERVICIOS: Recibe token del orchestrator
    */
   @Get('search')
@@ -92,7 +92,7 @@ export class EmailsController {
   }
 
   /**
-   * 📊 GET /emails/stats?userId=123
+   * 📊 GET /emails/stats?userId=${getCurrentUserId()}23
    * VERSIÓN MICROSERVICIOS: Recibe token del orchestrator
    */
   @Get('stats')
@@ -118,7 +118,7 @@ export class EmailsController {
   }
 
   /**
-   * 📧 GET /emails/:id?userId=123
+   * 📧 GET /emails/:id?userId=${getCurrentUserId()}23
    * VERSIÓN MICROSERVICIOS: Recibe token del orchestrator
    */
   @Get(':id')

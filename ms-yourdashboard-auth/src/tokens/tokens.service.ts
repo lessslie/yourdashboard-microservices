@@ -31,13 +31,14 @@ export class TokensService {
         throw new NotFoundException(`ID de usuario inválido: ${userId}`);
       }
 
-      // Buscar tokens del usuario
-      const query = `
-        SELECT ut.access_token, ut.refresh_token, ut.expires_at, u.email, u.name
-        FROM user_tokens ut
-        JOIN users u ON ut.user_id = u.id
-        WHERE ut.user_id = $1
-      `;
+      // Buscar tokens del usuario por el mail asociado
+    const query = `
+  SELECT ut.access_token, ut.refresh_token, ut.expires_at, u.email, u.name
+  FROM user_tokens ut
+  JOIN users u ON ut.user_id = u.id
+  JOIN accounts a ON u.email = a.email
+  WHERE a.id = $1
+`;
 
       const result = await this.databaseService.query<TokenData>(query, [userIdNum]);
       

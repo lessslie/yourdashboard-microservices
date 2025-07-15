@@ -9,7 +9,6 @@ import {
   Headers, 
   UnauthorizedException,
   BadRequestException,
-  HttpStatus
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Response, Request } from 'express';
@@ -201,45 +200,38 @@ googleAuth(): void {
   // Esta función termina inmediatamente después del log
 }
 
-  /**
-   * 🔐 GET /auth/google/callback
-   * Callback de Google OAuth
-   */
-  @Get('google/callback')
-  @UseGuards(AuthGuard('google'))
-  async googleAuthRedirect(
-    @Req() req: AuthenticatedRequest,
-    @Res() res: Response
-  ): Promise<void> {
-    try {
-      console.log('🔵 MS-AUTH - Callback recibido de Google');
-      
-      const result = await this.authService.handleGoogleCallback(req.user);
-      
-      // Devolver JSON con información del usuario
-      res.status(HttpStatus.OK).json({
-        success: true,
-        message: 'Autorización OAuth exitosa',
-        userId: result.user.id,
-        user: {
-          id: result.user.id,
-          name: result.user.name,
-          email: result.user.email,
-          googleId: result.user.google_id
-        },
-        authType: 'oauth'
-      });
-      
-    } catch (error) {
-      console.error('❌ MS-AUTH - Error en callback de OAuth:', error);
-      
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
-        success: false,
-        error: 'Error al procesar autorización de Google',
-        message: error instanceof Error ? error.message : 'Error desconocido'
-      });
-    }
+/**
+ * 🔐 GET /auth/google/callback
+ * Callback de Google OAuth
+ */
+@Get('google/callback')
+@UseGuards(AuthGuard('google'))
+async googleAuthRedirect(
+  @Req() req: AuthenticatedRequest,
+  @Res() res: Response
+): Promise<void> {
+  try {
+    console.log('🔵 MS-AUTH - Callback recibido de Google');
+    
+    const result = await this.authService.handleGoogleCallback(req.user);
+    
+    console.log('✅ MS-AUTH - Callback procesado');
+    //Redirigir al dashboard 
+    const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}?auth=success&userId=${result.user.id}`;
+
+    console.log(`✅ MS-AUTH - Redirigiendo a: ${redirectUrl}`);
+    
+    res.redirect(redirectUrl);
+    
+  } catch (error) {
+    console.error('❌ MS-AUTH - Error en callback de OAuth:', error);
+    
+    // ✅ CAMBIO: Redirigir a página de error en lugar de JSON
+    const errorUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}?auth=error&message=${encodeURIComponent(error instanceof Error ? error.message : 'Error desconocido')}`;
+    
+    res.redirect(errorUrl);
   }
+}
 
   // ================================
   // ENDPOINTS DE INFORMACIÓN

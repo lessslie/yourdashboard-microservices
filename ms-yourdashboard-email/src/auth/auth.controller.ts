@@ -14,19 +14,6 @@ export class AuthController {
     // Redirige automáticamente a Google
   }
 
-  // @Get('google/callback')
-  // @UseGuards(AuthGuard('google'))
-  // async googleAuthRedirect(@Req() req: any, @Res() res: Response) {
-  //   try {
-  //     const result = await this.authService.handleGoogleCallback(req.user);
-      
-  //     // ✅ AGREGAR userId a la respuesta
-  //     res.redirect(`http://localhost:3000/success?emails=${result.emailsCount}&userId=${result.user.id}`);
-  //   } catch (error) {
-  //     console.error('Error en callback de OAuth:', error);
-  //     res.redirect(`http://localhost:3000/error?message=${error.message}`);
-  //   }
-  // }
 
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))

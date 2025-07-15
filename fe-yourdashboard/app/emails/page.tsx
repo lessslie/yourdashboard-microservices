@@ -40,24 +40,37 @@ export default function EmailsPage() {
   const [isLoadingEmail, setIsLoadingEmail] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const { isLoggedIn } = useAuth();
+  const { isLoggedIn, getCurrentUserId } = useAuth(); // ✅ AGREGADO getCurrentUserId
   const router = useRouter();
 
   const goBack = () => {
     router.push('/');
   };
 
-  // Función para obtener emails
+  // ✅ NUEVA: Función helper para obtener userId con manejo de errores
+  const getUserId = (): string => {
+    const userId = getCurrentUserId();
+    if (!userId) {
+      console.error('❌ No se pudo obtener userId, redirigiendo al login...');
+      router.push('/login');
+      throw new Error('Usuario no autenticado');
+    }
+    console.log('✅ Usando userId:', userId);
+    return userId;
+  };
+
+  // ✅ FUNCIÓN CORREGIDA: fetchEmails
   const fetchEmails = async (page: number = 1, search: string = '') => {
     setIsLoading(true);
     setError('');
 
     try {
+      const userId = getUserId(); // ✅ DINÁMICO
       const orchestratorUrl = process.env.NEXT_PUBLIC_MS_ORCHESTRATOR_URL || 'http://localhost:3003';
-      let url = `${orchestratorUrl}/emails/inbox?userId=1&page=${page}&limit=10`;
+      let url = `${orchestratorUrl}/emails/inbox?userId=${userId}&page=${page}&limit=10`; // ✅ CORREGIDO
       
       if (search.trim()) {
-        url = `${orchestratorUrl}/emails/search?userId=1&q=${encodeURIComponent(search)}&page=${page}&limit=10`;
+        url = `${orchestratorUrl}/emails/search?userId=${userId}&q=${encodeURIComponent(search)}&page=${page}&limit=10`; // ✅ CORREGIDO
       }
 
       console.log(`🔵 Llamando a: ${url}`);
@@ -113,14 +126,15 @@ export default function EmailsPage() {
     setCurrentPage(newPage);
   };
 
-  // Abrir email específico
+  // ✅ FUNCIÓN CORREGIDA: openEmail
   const openEmail = async (emailId: string) => {
     setIsLoadingEmail(true);
     setError('');
     
     try {
+      const userId = getUserId(); // ✅ DINÁMICO
       const orchestratorUrl = process.env.NEXT_PUBLIC_MS_ORCHESTRATOR_URL || 'http://localhost:3003';
-      const response = await fetch(`${orchestratorUrl}/emails/${emailId}?userId=1`);
+      const response = await fetch(`${orchestratorUrl}/emails/${emailId}?userId=${userId}`); // ✅ CORREGIDO
       
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`);

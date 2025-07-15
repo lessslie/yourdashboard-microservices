@@ -12,10 +12,11 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
   
-  await app.listen(process.env.PORT ?? 3003);
+await app.listen(process.env.PORT ?? 3003);
   console.log(`🎭 MS-ORCHESTRATOR running on: ${await app.getUrl()}`);
-  console.log(`🔗 Main endpoint: http://localhost:3003/emails/inbox?userId=1`);
+  console.log(`🔗 Main endpoint: http://localhost:3003/emails/inbox?userId=:userId`);
   console.log(`📊 Health check: http://localhost:3003/health`);
   console.log(`📋 Info: http://localhost:3003/`);
 }
+
 bootstrap();

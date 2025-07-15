@@ -50,7 +50,7 @@ export class OrchestratorController {
   }
 
   /**
-   * 📧 GET /emails/inbox?userId=1&page=1&limit=10
+   * 📧 GET /emails/inbox?userId=${getCurrentUserId()}&page=1&limit=10
    * Obtener inbox del usuario (orquesta ms-auth + ms-email)
    */
   @Get('emails/inbox')
@@ -67,7 +67,7 @@ export class OrchestratorController {
   }
 
   /**
-   * 🔍 GET /emails/search?userId=1&q=term&page=1&limit=10
+   * 🔍 GET /emails/search?userId=${getCurrentUserId()}&q=term&page=1&limit=10
    * Buscar emails (orquesta ms-auth + ms-email)
    */
   @Get('emails/search')
@@ -102,7 +102,7 @@ export class OrchestratorController {
   }
 
   /**
-   * 📊 GET /emails/stats?userId=1
+   * 📊 GET /emails/stats?userId=${getCurrentUserId()}
    * Estadísticas de emails (orquesta ms-auth + ms-email)
    */
   @Get('emails/stats')
@@ -115,7 +115,7 @@ export class OrchestratorController {
   }
 
   /**
-   * 📧 GET /emails/:id?userId=1
+   * 📧 GET /emails/:id?userId=${getCurrentUserId()}
    * Obtener email específico (orquesta ms-auth + ms-email)
    */
   @Get('emails/:id')
@@ -131,7 +131,7 @@ export class OrchestratorController {
   }
 
   /**
-   * 📊 GET /dashboard/summary?userId=1
+   * 📊 GET /dashboard/summary?userId=${getCurrentUserId()}
    * Resumen del dashboard (orquesta múltiples llamadas)
    */
   @Get('dashboard/summary')

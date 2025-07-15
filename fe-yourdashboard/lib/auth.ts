@@ -103,7 +103,33 @@ export const isAuthenticated = (): boolean => {
   return !!getToken();
 };
 
-// ✅ Hook personalizado SIMPLE (sin loops)
+//  Función para obtener userId del usuario autenticado
+export const getCurrentUserId = (): string | null => {
+  // Si estás usando JWT, el ID debería estar en el token
+  // Por ahora, vamos a obtenerlo del localStorage como fallback
+  
+  const token = getToken();
+  if (!token) return null;
+  
+  try {
+    // Decodificar JWT para obtener userId
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.userId?.toString() || null;
+  } catch (error) {
+    console.error('Error decodificando token:', error);
+    
+    // Fallback: intentar obtener del localStorage
+    const userData = localStorage.getItem('user_data');
+    if (userData) {
+      const user = JSON.parse(userData);
+      return user.id?.toString() || null;
+    }
+    
+    return null;
+  }
+};
+
+// Hook useAuth
 export const useAuth = () => {
   const token = getToken();
   const isLoggedIn = !!token;
@@ -112,6 +138,8 @@ export const useAuth = () => {
     const response = await authService.login(email, password);
     if (response.success) {
       saveToken(response.token);
+      // Guardar datos del usuario para acceso rápido
+      localStorage.setItem('user_data', JSON.stringify(response.user));
       return response;
     }
     throw new Error(response.message);
@@ -121,6 +149,8 @@ export const useAuth = () => {
     const response = await authService.register(email, password, name);
     if (response.success) {
       saveToken(response.token);
+      //  Guardar datos del usuario
+      localStorage.setItem('user_data', JSON.stringify(response.user));
       return response;
     }
     throw new Error(response.message);
@@ -128,7 +158,24 @@ export const useAuth = () => {
 
   const logout = async () => {
     await authService.logout();
+    // Limpiar datos del usuario
+    localStorage.removeItem('user_data');
     window.location.href = '/login';
+  };
+
+  //Función para obtener el ID del usuario actual
+  const getCurrentUserId = (): string | null => {
+    try {
+      const userData = localStorage.getItem('user_data');
+      if (userData) {
+        const user = JSON.parse(userData);
+        return user.id?.toString() || null;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error obteniendo userId:', error);
+      return null;
+    }
   };
 
   return {
@@ -137,6 +184,7 @@ export const useAuth = () => {
     login,
     register,
     logout,
+    getCurrentUserId, 
     getProfile: authService.getProfile,
     connectGoogle: authService.connectGoogle,
   };

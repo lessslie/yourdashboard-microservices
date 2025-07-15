@@ -91,7 +91,7 @@ export class DatabaseService implements OnModuleDestroy {
   async saveEmail(emailData: DatabaseEmailData): Promise<DbUser | null> {
     const query = `
       INSERT INTO emails (
-        user_id, message_id, subject, from_email, from_name, to_emails, 
+        user_id, message_id, subject, from_email, from_name, to_emails,
         body_text, body_html, received_date, is_read, has_attachments
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
