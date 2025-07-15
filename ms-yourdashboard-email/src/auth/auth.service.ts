@@ -1,22 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { EmailsService } from '../emails/emails.service';
+import { AuthData, CallbackResult } from '../emails/interfaces/email.interfaces';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private databaseService: DatabaseService,
-    private emailsService: EmailsService,
+    private readonly databaseService: DatabaseService,
+    private readonly emailsService: EmailsService,
   ) {}
 
-  async handleGoogleCallback(userData: {
-    googleId: string;
-    email: string;
-    name: string;
-    accessToken: string;
-    refreshToken: string;
-  }) {
+  async handleGoogleCallback(userData: AuthData): Promise<CallbackResult> {
     try {
+      // Validar datos de entrada
+      if (!userData.googleId || !userData.email || !userData.name) {
+        throw new Error('Datos de usuario incompletos de Google');
+      }
+
       // 1. Guardar usuario en base de datos
       const user = await this.databaseService.upsertUser({
         googleId: userData.googleId,
@@ -34,7 +34,11 @@ export class AuthService {
       console.log('✅ Tokens guardados para consultas en tiempo real');
 
       return {
-        user: user,
+        user: {
+          id: user.id.toString(),
+          email: user.email,
+          name: user.name
+        },
         emailsCount: 0, // Ya no importa este número
         status: 'success',
       };
@@ -47,7 +51,7 @@ export class AuthService {
   /**
    * 💾 Guardar tokens directamente en user_tokens
    */
-  private async saveTokensDirectly(userId: string, accessToken: string, refreshToken: string) {
+  private async saveTokensDirectly(userId: string, accessToken: string, refreshToken: string): Promise<void> {
     const query = `
       INSERT INTO user_tokens (user_id, access_token, refresh_token, expires_at, created_at)
       VALUES ($1, $2, $3, $4, NOW())
@@ -59,8 +63,8 @@ export class AuthService {
         updated_at = NOW()
     `;
 
-    // Los tokens de Google duran 1 hora por defecto
-    const expiresAt = new Date(Date.now() + 3600000); // 1 hora desde ahora
+    // Los tokens de Google duran 24 hora por defecto
+    const expiresAt = new Date(Date.now() + 86400000 ); // 24 hora desde ahora
 
     await this.databaseService.query(query, [
       userId,

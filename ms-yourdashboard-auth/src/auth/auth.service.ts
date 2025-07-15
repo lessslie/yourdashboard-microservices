@@ -1,20 +1,36 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
-import { google } from 'googleapis';
+
+interface GoogleCallbackUser {
+  googleId: string;
+  email: string;
+  name: string;
+  accessToken: string;
+  refreshToken: string;
+}
+
+interface GoogleCallbackResult {
+  user: {
+    id: number;
+    email: string;
+    name: string;
+    google_id: string;
+  };
+  status: string;
+}
 
 @Injectable()
 export class AuthService {
-  constructor(private databaseService: DatabaseService) {}
+  constructor(private readonly databaseService: DatabaseService) {}
 
-  async handleGoogleCallback(userData: {
-    googleId: string;
-    email: string;
-    name: string;
-    accessToken: string;
-    refreshToken: string;
-  }) {
+  async handleGoogleCallback(userData: GoogleCallbackUser): Promise<GoogleCallbackResult> {
     try {
       console.log('🔵 MS-AUTH - Procesando callback de Google para:', userData.email);
+
+      // Validar datos de entrada
+      if (!userData.googleId || !userData.email || !userData.name) {
+        throw new Error('Datos de usuario incompletos de Google');
+      }
 
       // 1. Guardar usuario en base de datos
       const user = await this.databaseService.upsertUser({
@@ -31,13 +47,18 @@ export class AuthService {
       await this.databaseService.saveUserTokens(user.id, {
         access_token: userData.accessToken,
         refresh_token: userData.refreshToken,
-        expiry_date: Date.now() + 3600000 // 1 hora
+        expiry_date: Date.now() + 86400000 // 24 hora
       });
 
       console.log('✅ MS-AUTH - Tokens guardados para usuario ID:', user.id);
 
       return {
-        user: user,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          google_id: user.google_id
+        },
         status: 'success',
       };
     } catch (error) {
@@ -45,7 +66,4 @@ export class AuthService {
       throw error;
     }
   }
-
-
-
 }

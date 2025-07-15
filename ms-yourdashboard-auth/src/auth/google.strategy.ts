@@ -1,11 +1,31 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
-import { Strategy, VerifyCallback } from 'passport-google-oauth20';
+import { Strategy, VerifyCallback, Profile } from 'passport-google-oauth20';
+
+interface GoogleProfile extends Profile {
+  id: string;
+  name: {
+    familyName: string;
+    givenName: string;
+  };
+  emails: Array<{
+    value: string;
+    verified: boolean;
+  }>;
+}
+
+interface GoogleUser {
+  googleId: string;
+  email: string;
+  name: string;
+  accessToken: string;
+  refreshToken: string;
+}
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
-  constructor(private configService: ConfigService) {
+  constructor(private readonly configService: ConfigService) {
     const clientId = configService.get<string>('GOOGLE_CLIENT_ID');
     const clientSecret = configService.get<string>('GOOGLE_CLIENT_SECRET');
     
@@ -24,15 +44,21 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     });
   }
 
-  async validate(
-    accessToken: string,
-    refreshToken: string,
-    profile: any,
-    done: VerifyCallback,
-  ): Promise<any> {
+  validate(
+  accessToken: string,
+  refreshToken: string,
+  profile: GoogleProfile,
+  done: VerifyCallback,
+): void {
+  try {
     const { id, name, emails } = profile;
     
-    const user = {
+    // Validar que tengamos la información necesaria
+    if (!id || !name || !emails || emails.length === 0) {
+      return done(new Error('Información incompleta del perfil de Google'), undefined);
+    }
+
+    const user: GoogleUser = {
       googleId: id,
       email: emails[0].value,
       name: `${name.givenName} ${name.familyName}`,
@@ -42,5 +68,10 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     
     console.log('✅ Usuario autenticado:', user.email);
     done(null, user);
-  } 
+    
+  } catch (error) {
+    console.error('❌ Error validando usuario de Google:', error);
+    done(error, undefined);
+  }
+}
 }

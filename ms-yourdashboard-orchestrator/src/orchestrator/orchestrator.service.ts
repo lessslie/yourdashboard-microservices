@@ -1,13 +1,23 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import axios, { AxiosResponse } from 'axios';
+import {
+  TokenResponse,
+  EmailListResponse,
+  EmailStats,
+  EmailDetail,
+  OrchestratorResponse,
+  DashboardSummary,
+  AuthStartResponse,
+  ApiError
+} from './interfaces/orchestrator.interfaces';
 
 @Injectable()
 export class OrchestratorService {
   private readonly msAuthUrl: string;
   private readonly msEmailUrl: string;
 
-  constructor(private configService: ConfigService) {
+  constructor(private readonly configService: ConfigService) {
     this.msAuthUrl = this.configService.get<string>('MS_AUTH_URL') || 'http://localhost:3001';
     this.msEmailUrl = this.configService.get<string>('MS_EMAIL_URL') || 'http://localhost:3002';
   }
@@ -19,7 +29,7 @@ export class OrchestratorService {
     try {
       console.log(`🔵 ORCHESTRATOR - Solicitando token para usuario ${userId} a ms-auth...`);
       
-      const response = await axios.get(`${this.msAuthUrl}/tokens/${userId}`);
+      const response: AxiosResponse<TokenResponse> = await axios.get(`${this.msAuthUrl}/tokens/${userId}`);
       
       if (!response.data.success) {
         throw new Error('No se pudo obtener token válido');
@@ -29,9 +39,10 @@ export class OrchestratorService {
       return response.data.accessToken;
 
     } catch (error) {
-      console.error(`❌ ORCHESTRATOR - Error obteniendo token:`, error.message);
+      const apiError = error as ApiError;
+      console.error(`❌ ORCHESTRATOR - Error obteniendo token:`, apiError.message);
       throw new HttpException(
-        `Error obteniendo token del usuario: ${error.message}`,
+        `Error obteniendo token del usuario: ${apiError.message}`,
         HttpStatus.UNAUTHORIZED
       );
     }
@@ -40,7 +51,7 @@ export class OrchestratorService {
   /**
    * 📧 Obtener inbox del usuario
    */
-  async getInbox(userId: string, page: number = 1, limit: number = 10) {
+  async getInbox(userId: string, page: number = 1, limit: number = 10): Promise<OrchestratorResponse<EmailListResponse>> {
     try {
       console.log(`🔵 ORCHESTRATOR - Obteniendo inbox para usuario ${userId}`);
 
@@ -50,7 +61,7 @@ export class OrchestratorService {
       // 2. Llamar al ms-email con el token
       console.log(`🔵 ORCHESTRATOR - Llamando a ms-email...`);
       
-      const response = await axios.get(`${this.msEmailUrl}/emails/inbox`, {
+      const response: AxiosResponse<EmailListResponse> = await axios.get(`${this.msEmailUrl}/emails/inbox`, {
         params: { userId, page, limit },
         headers: {
           'Authorization': `Bearer ${accessToken}`
@@ -66,9 +77,10 @@ export class OrchestratorService {
       };
 
     } catch (error) {
-      console.error(`❌ ORCHESTRATOR - Error obteniendo inbox:`, error.message);
+      const apiError = error as ApiError;
+      console.error(`❌ ORCHESTRATOR - Error obteniendo inbox:`, apiError.message);
       throw new HttpException(
-        `Error obteniendo inbox: ${error.response?.data?.message || error.message}`,
+        `Error obteniendo inbox: ${apiError.response?.data?.message || apiError.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
@@ -77,7 +89,12 @@ export class OrchestratorService {
   /**
    * 🔍 Buscar emails del usuario
    */
-  async searchEmails(userId: string, searchTerm: string, page: number = 1, limit: number = 10) {
+  async searchEmails(
+    userId: string, 
+    searchTerm: string, 
+    page: number = 1, 
+    limit: number = 10
+  ): Promise<OrchestratorResponse<EmailListResponse>> {
     try {
       console.log(`🔵 ORCHESTRATOR - Buscando emails para usuario ${userId}: "${searchTerm}"`);
 
@@ -85,7 +102,7 @@ export class OrchestratorService {
       const accessToken = await this.getValidToken(userId);
 
       // 2. Llamar al ms-email para búsqueda
-      const response = await axios.get(`${this.msEmailUrl}/emails/search`, {
+      const response: AxiosResponse<EmailListResponse> = await axios.get(`${this.msEmailUrl}/emails/search`, {
         params: { userId, q: searchTerm, page, limit },
         headers: {
           'Authorization': `Bearer ${accessToken}`
@@ -102,9 +119,10 @@ export class OrchestratorService {
       };
 
     } catch (error) {
-      console.error(`❌ ORCHESTRATOR - Error buscando emails:`, error.message);
+      const apiError = error as ApiError;
+      console.error(`❌ ORCHESTRATOR - Error buscando emails:`, apiError.message);
       throw new HttpException(
-        `Error buscando emails: ${error.response?.data?.message || error.message}`,
+        `Error buscando emails: ${apiError.response?.data?.message || apiError.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
@@ -113,7 +131,7 @@ export class OrchestratorService {
   /**
    * 📊 Obtener estadísticas de emails
    */
-  async getEmailStats(userId: string) {
+  async getEmailStats(userId: string): Promise<OrchestratorResponse<EmailStats>> {
     try {
       console.log(`🔵 ORCHESTRATOR - Obteniendo estadísticas para usuario ${userId}`);
 
@@ -121,7 +139,7 @@ export class OrchestratorService {
       const accessToken = await this.getValidToken(userId);
 
       // 2. Llamar al ms-email para estadísticas
-      const response = await axios.get(`${this.msEmailUrl}/emails/stats`, {
+      const response: AxiosResponse<EmailStats> = await axios.get(`${this.msEmailUrl}/emails/stats`, {
         params: { userId },
         headers: {
           'Authorization': `Bearer ${accessToken}`
@@ -137,9 +155,10 @@ export class OrchestratorService {
       };
 
     } catch (error) {
-      console.error(`❌ ORCHESTRATOR - Error obteniendo estadísticas:`, error.message);
+      const apiError = error as ApiError;
+      console.error(`❌ ORCHESTRATOR - Error obteniendo estadísticas:`, apiError.message);
       throw new HttpException(
-        `Error obteniendo estadísticas: ${error.response?.data?.message || error.message}`,
+        `Error obteniendo estadísticas: ${apiError.response?.data?.message || apiError.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
@@ -148,7 +167,7 @@ export class OrchestratorService {
   /**
    * 📧 Obtener email específico
    */
-  async getEmailById(userId: string, emailId: string) {
+  async getEmailById(userId: string, emailId: string): Promise<OrchestratorResponse<EmailDetail>> {
     try {
       console.log(`🔵 ORCHESTRATOR - Obteniendo email ${emailId} para usuario ${userId}`);
 
@@ -156,7 +175,7 @@ export class OrchestratorService {
       const accessToken = await this.getValidToken(userId);
 
       // 2. Llamar al ms-email para email específico
-      const response = await axios.get(`${this.msEmailUrl}/emails/${emailId}`, {
+      const response: AxiosResponse<EmailDetail> = await axios.get(`${this.msEmailUrl}/emails/${emailId}`, {
         params: { userId },
         headers: {
           'Authorization': `Bearer ${accessToken}`
@@ -172,9 +191,10 @@ export class OrchestratorService {
       };
 
     } catch (error) {
-      console.error(`❌ ORCHESTRATOR - Error obteniendo email:`, error.message);
+      const apiError = error as ApiError;
+      console.error(`❌ ORCHESTRATOR - Error obteniendo email:`, apiError.message);
       throw new HttpException(
-        `Error obteniendo email: ${error.response?.data?.message || error.message}`,
+        `Error obteniendo email: ${apiError.response?.data?.message || apiError.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
@@ -183,7 +203,7 @@ export class OrchestratorService {
   /**
    * 🔄 Iniciar proceso de autenticación (redirige al ms-auth)
    */
-  async startAuthentication() {
+  startAuthentication(): AuthStartResponse {
     return {
       success: true,
       message: 'Redirigir al ms-auth para autenticación',
@@ -195,7 +215,7 @@ export class OrchestratorService {
   /**
    * 📊 Dashboard resumen (combinando múltiples fuentes)
    */
-  async getDashboardSummary(userId: string) {
+  async getDashboardSummary(userId: string): Promise<OrchestratorResponse<DashboardSummary>> {
     try {
       console.log(`🔵 ORCHESTRATOR - Obteniendo resumen de dashboard para usuario ${userId}`);
 
@@ -204,11 +224,11 @@ export class OrchestratorService {
 
       // 2. Llamadas paralelas para optimizar
       const [statsResponse, recentEmailsResponse] = await Promise.all([
-        axios.get(`${this.msEmailUrl}/emails/stats`, {
+        axios.get<EmailStats>(`${this.msEmailUrl}/emails/stats`, {
           params: { userId },
           headers: { 'Authorization': `Bearer ${accessToken}` }
         }),
-        axios.get(`${this.msEmailUrl}/emails/inbox`, {
+        axios.get<EmailListResponse>(`${this.msEmailUrl}/emails/inbox`, {
           params: { userId, page: 1, limit: 5 },
           headers: { 'Authorization': `Bearer ${accessToken}` }
         })
@@ -227,9 +247,10 @@ export class OrchestratorService {
       };
 
     } catch (error) {
-      console.error(`❌ ORCHESTRATOR - Error obteniendo resumen:`, error.message);
+      const apiError = error as ApiError;
+      console.error(`❌ ORCHESTRATOR - Error obteniendo resumen:`, apiError.message);
       throw new HttpException(
-        `Error obteniendo resumen de dashboard: ${error.response?.data?.message || error.message}`,
+        `Error obteniendo resumen de dashboard: ${apiError.response?.data?.message || apiError.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }

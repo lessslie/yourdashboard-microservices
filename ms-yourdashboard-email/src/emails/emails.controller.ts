@@ -1,5 +1,20 @@
-import { Controller, Get, Query, Param, ParseIntPipe, DefaultValuePipe, UnauthorizedException, Headers } from '@nestjs/common';
+import { 
+  Controller, 
+  Get, 
+  Query, 
+  Param, 
+  ParseIntPipe, 
+  DefaultValuePipe, 
+  UnauthorizedException, 
+  Headers 
+} from '@nestjs/common';
 import { EmailsService } from './emails.service';
+import { 
+  EmailListResponse, 
+  EmailStats, 
+  EmailDetail, 
+  HealthResponse 
+} from './interfaces/email.interfaces';
 
 @Controller('emails')
 export class EmailsController {
@@ -15,7 +30,7 @@ export class EmailsController {
     @Query('userId') userId: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number
-  ) {
+  ): Promise<EmailListResponse> {
     if (!userId) {
       throw new UnauthorizedException('User ID is required');
     }
@@ -26,6 +41,10 @@ export class EmailsController {
     
     // Extraer token del header Bearer
     const accessToken = authHeader.replace('Bearer ', '');
+    
+    if (!accessToken) {
+      throw new UnauthorizedException('Valid Bearer token is required');
+    }
     
     return this.emailsService.getInboxWithToken(accessToken, userId, page, limit);
   }
@@ -41,7 +60,7 @@ export class EmailsController {
     @Query('q') searchTerm: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number
-  ) {
+  ): Promise<EmailListResponse> {
     if (!userId) {
       throw new UnauthorizedException('User ID is required');
     }
@@ -65,6 +84,10 @@ export class EmailsController {
 
     const accessToken = authHeader.replace('Bearer ', '');
     
+    if (!accessToken) {
+      throw new UnauthorizedException('Valid Bearer token is required');
+    }
+    
     return this.emailsService.searchEmailsWithToken(accessToken, userId, searchTerm, page, limit);
   }
 
@@ -76,7 +99,7 @@ export class EmailsController {
   async getInboxStats(
     @Headers('authorization') authHeader: string,
     @Query('userId') userId: string
-  ) {
+  ): Promise<EmailStats> {
     if (!userId) {
       throw new UnauthorizedException('User ID is required');
     }
@@ -86,6 +109,10 @@ export class EmailsController {
     }
     
     const accessToken = authHeader.replace('Bearer ', '');
+    
+    if (!accessToken) {
+      throw new UnauthorizedException('Valid Bearer token is required');
+    }
     
     return this.emailsService.getInboxStatsWithToken(accessToken, userId);
   }
@@ -99,7 +126,7 @@ export class EmailsController {
     @Headers('authorization') authHeader: string,
     @Query('userId') userId: string,
     @Param('id') messageId: string
-  ) {
+  ): Promise<EmailDetail> {
     if (!userId) {
       throw new UnauthorizedException('User ID is required');
     }
@@ -108,7 +135,15 @@ export class EmailsController {
       throw new UnauthorizedException('Authorization header is required');
     }
     
+    if (!messageId) {
+      throw new UnauthorizedException('Message ID is required');
+    }
+    
     const accessToken = authHeader.replace('Bearer ', '');
+    
+    if (!accessToken) {
+      throw new UnauthorizedException('Valid Bearer token is required');
+    }
     
     return this.emailsService.getEmailByIdWithToken(accessToken, userId, messageId);
   }
@@ -118,7 +153,7 @@ export class EmailsController {
    * Health check del microservicio
    */
   @Get('health')
-  getHealth() {
+  getHealth(): HealthResponse {
     return {
       service: 'ms-yourdashboard-email',
       status: 'OK',

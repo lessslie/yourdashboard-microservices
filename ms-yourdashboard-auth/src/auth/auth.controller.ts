@@ -1,18 +1,89 @@
-import { Controller, Get, Post, UseGuards, Req, Res, Body, Headers, UnauthorizedException } from '@nestjs/common';
+import { 
+  Controller, 
+  Get, 
+  Post, 
+  UseGuards, 
+  Req, 
+  Res, 
+  Body, 
+  Headers, 
+  UnauthorizedException,
+  BadRequestException,
+  HttpStatus
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { AuthTraditionalService } from './auth-traditional.service';
-import { Response } from 'express';
+import { RegisterData, LoginCredentials } from './interfaces/auth.interfaces';
+
+interface AuthenticatedRequest extends Request {
+  user: {
+    googleId: string;
+    email: string;
+    name: string;
+    accessToken: string;
+    refreshToken: string;
+  };
+}
+
+interface ProfileResponse {
+  success: boolean;
+  user: {
+    id: number;
+    email: string;
+    name: string;
+    isEmailVerified: boolean;
+    createdAt: Date;
+    profilePicture: string | null;
+  };
+  connections: any[];
+}
+
+interface HealthResponse {
+  service: string;
+  status: string;
+  timestamp: string;
+  port: string | number;
+  features: {
+    traditional_auth: boolean;
+    oauth_google: boolean;
+    jwt_sessions: boolean;
+    multi_provider_support: boolean;
+  };
+}
+
+interface InfoResponse {
+  service: string;
+  description: string;
+  endpoints: {
+    traditional: {
+      register: string;
+      login: string;
+      profile: string;
+      logout: string;
+    };
+    oauth: {
+      google: string;
+      callback: string;
+    };
+    tokens: {
+      get_token: string;
+    };
+  };
+  supported_providers: string[];
+  upcoming_providers: string[];
+}
 
 @Controller('auth')
 export class AuthController {
   constructor(
-    private authService: AuthService,
-    private authTraditionalService: AuthTraditionalService
+    private readonly authService: AuthService,
+    private readonly authTraditionalService: AuthTraditionalService
   ) {}
 
   // ================================
-  // ENDPOINTS TRADICIONALES (nuevos)
+  // ENDPOINTS TRADICIONALES
   // ================================
 
   /**
@@ -20,18 +91,20 @@ export class AuthController {
    * Registrar usuario con email/password
    */
   @Post('register')
-  async register(@Body() registerData: {
-    email: string;
-    password: string;
-    name: string;
-  }) {
+  async register(@Body() registerData: RegisterData) {
     // Validaciones básicas
     if (!registerData.email || !registerData.password || !registerData.name) {
-      throw new UnauthorizedException('Email, password y nombre son requeridos');
+      throw new BadRequestException('Email, password y nombre son requeridos');
     }
 
     if (registerData.password.length < 6) {
-      throw new UnauthorizedException('La contraseña debe tener al menos 6 caracteres');
+      throw new BadRequestException('La contraseña debe tener al menos 6 caracteres');
+    }
+
+    // Validar formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(registerData.email)) {
+      throw new BadRequestException('Formato de email inválido');
     }
 
     return this.authTraditionalService.register(registerData);
@@ -42,12 +115,9 @@ export class AuthController {
    * Login con email/password
    */
   @Post('login')
-  async login(@Body() loginData: {
-    email: string;
-    password: string;
-  }) {
+  async login(@Body() loginData: LoginCredentials) {
     if (!loginData.email || !loginData.password) {
-      throw new UnauthorizedException('Email y password son requeridos');
+      throw new BadRequestException('Email y password son requeridos');
     }
 
     return this.authTraditionalService.login(loginData);
@@ -57,41 +127,45 @@ export class AuthController {
    * 👤 GET /auth/me
    * Obtener información del usuario autenticado
    */
- /**
- * 👤 GET /auth/me
- * Obtener información del usuario autenticado CON FOTO
- */
-@Get('me')
-async getProfile(@Headers('authorization') authHeader: string) {
-  try {
-    if (!authHeader) {
-      throw new UnauthorizedException('Token de autorización requerido');
+  @Get('me')
+  async getProfile(@Headers('authorization') authHeader: string): Promise<ProfileResponse> {
+    try {
+      if (!authHeader) {
+        throw new UnauthorizedException('Token de autorización requerido');
+      }
+
+      const jwtToken = authHeader.replace('Bearer ', '');
+      
+      if (!jwtToken) {
+        throw new UnauthorizedException('Token JWT inválido');
+      }
+      
+      const profileData = await this.authTraditionalService.getProfile(jwtToken);
+      
+      if (!profileData.success) {
+        throw new UnauthorizedException('Token inválido o expirado');
+      }
+
+      return {
+        success: true,
+        user: {
+          ...profileData.user,
+          profilePicture: null  // Por ahora sin foto
+        },
+        connections: profileData.connections || []
+      };
+
+    } catch (error) {
+      console.error('❌ Error obteniendo perfil:', error);
+      
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      
+      throw new UnauthorizedException('Error obteniendo perfil de usuario');
     }
-
-    const jwtToken = authHeader.replace('Bearer ', '');
-    
-    // ✅ USAR MÉTODO EXISTENTE (sin foto)
-    const profileData = await this.authTraditionalService.getProfile(jwtToken);
-    
-    if (!profileData.success) {
-      throw new UnauthorizedException('Token inválido o expirado');
-    }
-
-    // ✅ DEVOLVER PERFIL SIMPLE (sin foto)
-    return {
-      success: true,
-      user: {
-        ...profileData.user,
-        profilePicture: null  // Por ahora sin foto
-      },
-      connections: profileData.connections || []
-    };
-
-  } catch (error) {
-    console.error('❌ Error obteniendo perfil:', error);
-    throw new UnauthorizedException('Error obteniendo perfil de usuario');
   }
-}
+
   /**
    * 🚪 POST /auth/logout
    * Cerrar sesión
@@ -103,23 +177,29 @@ async getProfile(@Headers('authorization') authHeader: string) {
     }
 
     const token = authHeader.replace('Bearer ', '');
+    
+    if (!token) {
+      throw new UnauthorizedException('Token JWT inválido');
+    }
+
     return this.authTraditionalService.logout(token);
   }
 
   // ================================
-  // ENDPOINTS OAUTH (ya existían)
+  // ENDPOINTS OAUTH
   // ================================
 
   /**
    * 🔐 GET /auth/google
    * Iniciar proceso de OAuth con Google
    */
-  @Get('google')
-  @UseGuards(AuthGuard('google'))
-  async googleAuth() {
-    console.log('🔵 MS-AUTH - Iniciando OAuth con Google...');
-    // Redirige automáticamente a Google
-  }
+@Get('google')
+@UseGuards(AuthGuard('google'))
+googleAuth(): void {
+  console.log('🔵 MS-AUTH - Redirigiendo a Google OAuth...');
+  // Passport/Guard maneja la redirección automáticamente
+  // Esta función termina inmediatamente después del log
+}
 
   /**
    * 🔐 GET /auth/google/callback
@@ -127,14 +207,17 @@ async getProfile(@Headers('authorization') authHeader: string) {
    */
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
-  async googleAuthRedirect(@Req() req: any, @Res() res: Response) {
+  async googleAuthRedirect(
+    @Req() req: AuthenticatedRequest,
+    @Res() res: Response
+  ): Promise<void> {
     try {
       console.log('🔵 MS-AUTH - Callback recibido de Google');
       
       const result = await this.authService.handleGoogleCallback(req.user);
       
       // Devolver JSON con información del usuario
-      res.status(200).json({
+      res.status(HttpStatus.OK).json({
         success: true,
         message: 'Autorización OAuth exitosa',
         userId: result.user.id,
@@ -150,10 +233,10 @@ async getProfile(@Headers('authorization') authHeader: string) {
     } catch (error) {
       console.error('❌ MS-AUTH - Error en callback de OAuth:', error);
       
-      res.status(500).json({
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         error: 'Error al procesar autorización de Google',
-        message: error.message
+        message: error instanceof Error ? error.message : 'Error desconocido'
       });
     }
   }
@@ -167,7 +250,7 @@ async getProfile(@Headers('authorization') authHeader: string) {
    * Health check del microservicio
    */
   @Get('health')
-  getHealth() {
+  getHealth(): HealthResponse {
     return {
       service: 'ms-yourdashboard-auth',
       status: 'OK',
@@ -187,7 +270,7 @@ async getProfile(@Headers('authorization') authHeader: string) {
    * Información del servicio de autenticación
    */
   @Get('info')
-  getInfo() {
+  getInfo(): InfoResponse {
     return {
       service: 'ms-yourdashboard-auth',
       description: 'Microservicio de autenticación completo',

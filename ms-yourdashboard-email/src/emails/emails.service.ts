@@ -1,23 +1,32 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { google } from 'googleapis';
+import { google, gmail_v1 } from 'googleapis';
 import { DatabaseService } from '../database/database.service';
+import {
+  EmailListResponse,
+  EmailStats,
+  EmailDetail,
+  EmailMetadata,
+  EmailBodyData,
+  GmailMessage,
+  GmailHeader,
+  GmailPayload,
+  EmailServiceError
+} from './interfaces/email.interfaces';
 
 @Injectable()
 export class EmailsService {
-  constructor(private databaseService: DatabaseService) {}
-
-  // ✅ ESTOS 4 MÉTODOS SON LOS QUE USA EL ORCHESTRATOR:
+  constructor(private readonly databaseService: DatabaseService) {}
 
   /**
    * 📧 INBOX - Lista de emails con paginación
-   * ✨ AQUÍ MANEJAS LA PAGINACIÓN PARA SOFI
+   * ✨ AQUÍ MANEJAS LA PAGINACIÓN
    */
   async getInboxWithToken(
     accessToken: string, 
     userId: string, 
-    page: number = 1,      // 👈 Si Sofi no manda página, usa 1
-    limit: number = 10     // 👈 Si Sofi no manda limit, usa 10
-  ) {
+    page: number = 1,
+    limit: number = 10
+  ): Promise<EmailListResponse> {
     try {
       console.log(`🔵 MS-EMAIL - Obteniendo inbox para usuario ${userId} - Página ${page}, ${limit} por página`);
 
@@ -39,8 +48,8 @@ export class EmailsService {
       return {
         emails: emailsForPage,
         total: realTotalEmails,
-        page,                    // 👈 Le devuelves la página que pidió
-        limit,                   // 👈 Le devuelves cuántos por página pidió  
+        page,
+        limit,
         totalPages,
         hasNextPage: page < totalPages,
         hasPreviousPage: page > 1
@@ -48,21 +57,21 @@ export class EmailsService {
 
     } catch (error) {
       console.error('❌ MS-EMAIL - Error al obtener inbox:', error);
-      throw new Error('Error al consultar Gmail: ' + error.message);
+      const emailError = error as EmailServiceError;
+      throw new Error('Error al consultar Gmail: ' + emailError.message);
     }
   }
 
   /**
    * 🔍 BÚSQUEDA - Con paginación igual que inbox
-   * ✨ AQUÍ TAMBIÉN MANEJAS LA PAGINACIÓN
    */
   async searchEmailsWithToken(
     accessToken: string, 
     userId: string, 
     searchTerm: string, 
-    page: number = 1,      // 👈 Página por defecto
-    limit: number = 10     // 👈 Cantidad por defecto
-  ) {
+    page: number = 1,
+    limit: number = 10
+  ): Promise<EmailListResponse> {
     try {
       console.log(`🔵 MS-EMAIL - Buscando "${searchTerm}" - Página ${page}, ${limit} por página`);
       
@@ -81,8 +90,8 @@ export class EmailsService {
       return {
         emails: emailsForPage,
         total: realTotalEmails,
-        page,                    // 👈 Página solicitada
-        limit,                   // 👈 Cantidad solicitada
+        page,
+        limit,
         totalPages,
         hasNextPage: page < totalPages,
         hasPreviousPage: page > 1,
@@ -91,14 +100,15 @@ export class EmailsService {
 
     } catch (error) {
       console.error('❌ MS-EMAIL - Error en búsqueda:', error);
-      throw new Error('Error al buscar en Gmail: ' + error.message);
+      const emailError = error as EmailServiceError;
+      throw new Error('Error al buscar en Gmail: ' + emailError.message);
     }
   }
 
   /**
    * 📊 ESTADÍSTICAS - Totales de emails
    */
-  async getInboxStatsWithToken(accessToken: string, userId: string) {
+  async getInboxStatsWithToken(accessToken: string, userId: string): Promise<EmailStats> {
     try {
       console.log(`🔵 MS-EMAIL - Obteniendo estadísticas para usuario ${userId}`);
       
@@ -117,8 +127,8 @@ export class EmailsService {
         })
       ]);
 
-      const totalEmails = totalResponse.data.resultSizeEstimate || 0;
-      const unreadEmails = unreadResponse.data.resultSizeEstimate || 0;
+      const totalEmails = unreadResponse.data.resultSizeEstimate || 0;
+      const unreadEmails = totalResponse.data.resultSizeEstimate || 0;
       const readEmails = totalEmails - unreadEmails;
 
       console.log(`✅ MS-EMAIL - Estadísticas obtenidas`);
@@ -138,7 +148,11 @@ export class EmailsService {
   /**
    * 📧 EMAIL ESPECÍFICO - Contenido completo
    */
-  async getEmailByIdWithToken(accessToken: string, userId: string, messageId: string) {
+  async getEmailByIdWithToken(
+    accessToken: string, 
+    userId: string, 
+    messageId: string
+  ): Promise<EmailDetail> {
     try {
       console.log(`🔵 MS-EMAIL - Obteniendo email ${messageId} para usuario ${userId}`);
       
@@ -154,7 +168,13 @@ export class EmailsService {
 
       console.log(`✅ MS-EMAIL - Email obtenido`);
 
-      return this.extractFullEmailData(emailDetail.data);
+      const extractedData = this.extractFullEmailData(emailDetail.data);
+      
+      if (!extractedData) {
+        throw new NotFoundException(`Email con ID ${messageId} no pudo ser procesado`);
+      }
+
+      return extractedData;
 
     } catch (error) {
       console.error('❌ MS-EMAIL - Error al obtener email:', error);
@@ -162,17 +182,15 @@ export class EmailsService {
     }
   }
 
-  // 🔧 MÉTODOS AUXILIARES (los necesitas):
-
   /**
    * 🔢 Obtener conteo real de emails
    */
-  private async getRealEmailCount(gmail: any, query: string = 'in:inbox'): Promise<number> {
+  private async getRealEmailCount(gmail: gmail_v1.Gmail, query: string = 'in:inbox'): Promise<number> {
     try {
       console.log(`🔍 Obteniendo conteo REAL de emails con query: "${query}"`);
       
       let totalCount = 0;
-      let nextPageToken = undefined;
+      let nextPageToken: string | undefined = undefined;
       let pageNumber = 1;
 
       do {
@@ -187,7 +205,7 @@ export class EmailsService {
 
         const messages = response.data.messages || [];
         totalCount += messages.length;
-        nextPageToken = response.data.nextPageToken;
+        nextPageToken = response.data.nextPageToken || undefined;
         
         console.log(`📊 Página ${pageNumber}: ${messages.length} emails (Total: ${totalCount})`);
         pageNumber++;
@@ -211,13 +229,18 @@ export class EmailsService {
   /**
    * 📄 Obtener emails específicos de una página
    */
-  private async getEmailsForPage(gmail: any, query: string, targetPage: number, limit: number): Promise<any[]> {
+  private async getEmailsForPage(
+    gmail: gmail_v1.Gmail, 
+    query: string, 
+    targetPage: number, 
+    limit: number
+  ): Promise<EmailMetadata[]> {
     try {
       console.log(`📄 Obteniendo emails de la página ${targetPage}...`);
 
       let currentPage = 1;
-      let nextPageToken = undefined;
-      let targetEmails: any[] = [];
+      let nextPageToken: string | undefined = undefined;
+      let targetEmails: GmailMessage[] = [];
 
       while (currentPage <= targetPage) {
         const messagesResponse = await gmail.users.messages.list({
@@ -235,7 +258,7 @@ export class EmailsService {
           break;
         }
 
-        nextPageToken = messagesResponse.data.nextPageToken;
+        nextPageToken = messagesResponse.data.nextPageToken || undefined;
         if (!nextPageToken) {
           console.log(`⚠️ No hay página ${targetPage}. Última página: ${currentPage - 1}`);
           break;
@@ -245,24 +268,31 @@ export class EmailsService {
       }
 
       const emails = await Promise.all(
-        targetEmails.map(async (message) => {
+        targetEmails.map(async (message): Promise<EmailMetadata | null> => {
           try {
+            // Validar que el mensaje tenga ID
+            if (!message.id) {
+              console.error('❌ Mensaje sin ID encontrado');
+              return null;
+            }
+
             const emailDetail = await gmail.users.messages.get({
               userId: 'me',
-              id: message.id!,
+              id: message.id,
               format: 'metadata',
               metadataHeaders: ['Subject', 'From', 'Date', 'To']
             });
             
             return this.extractEmailMetadata(emailDetail.data);
           } catch (error) {
-            console.error(`❌ Error procesando email ${message.id}:`, error.message);
+            const emailError = error as EmailServiceError;
+            console.error(`❌ Error procesando email ${message.id}:`, emailError.message);
             return null;
           }
         })
       );
 
-      return emails.filter(email => email !== null);
+      return emails.filter((email): email is EmailMetadata => email !== null);
 
     } catch (error) {
       console.error('❌ Error obteniendo emails de página:', error);
@@ -273,16 +303,22 @@ export class EmailsService {
   /**
    * 🔧 Extraer metadata del email (para listados)
    */
-  private extractEmailMetadata(emailData: any) {
+  private extractEmailMetadata(emailData: GmailMessage): EmailMetadata | null {
     try {
+      // Validar que tenemos un ID
+      if (!emailData.id) {
+        console.error('Email sin ID encontrado');
+        return null;
+      }
+
       const payload = emailData.payload;
-      const headers = payload.headers || [];
+      const headers = payload?.headers || [];
 
       const subject = this.getHeader(headers, 'Subject') || 'Sin asunto';
       const from = this.getHeader(headers, 'From') || '';
       const date = this.getHeader(headers, 'Date') || new Date().toISOString();
 
-      const fromMatch = from.match(/^(.+?)\s*<(.+?)>$/) || [null, from, from];
+      const fromMatch = RegExp(/^(.+?)\s*<(.+?)>$/).exec(from) || [null, from, from];
       const fromName = fromMatch[1]?.trim().replace(/"/g, '') || '';
       const fromEmail = fromMatch[2]?.trim() || from;
 
@@ -306,17 +342,23 @@ export class EmailsService {
   /**
    * 🔧 Extraer datos completos del email (para vista detalle)
    */
-  private extractFullEmailData(emailData: any) {
+  private extractFullEmailData(emailData: GmailMessage): EmailDetail | null {
     try {
+      // Validar que tenemos un ID
+      if (!emailData.id) {
+        console.error('Email sin ID encontrado');
+        return null;
+      }
+
       const payload = emailData.payload;
-      const headers = payload.headers || [];
+      const headers = payload?.headers || [];
 
       const subject = this.getHeader(headers, 'Subject') || 'Sin asunto';
       const from = this.getHeader(headers, 'From') || '';
       const to = this.getHeader(headers, 'To') || '';
       const date = this.getHeader(headers, 'Date') || new Date().toISOString();
 
-      const fromMatch = from.match(/^(.+?)\s*<(.+?)>$/) || [null, from, from];
+      const fromMatch = RegExp(/^(.+?)\s*<(.+?)>$/).exec(from) || [null, from, from];
       const fromName = fromMatch[1]?.trim().replace(/"/g, '') || '';
       const fromEmail = fromMatch[2]?.trim() || from;
 
@@ -342,16 +384,16 @@ export class EmailsService {
     }
   }
 
-  private getHeader(headers: any[], name: string): string {
-    const header = headers.find(h => h.name.toLowerCase() === name.toLowerCase());
+  private getHeader(headers: GmailHeader[], name: string): string {
+    const header = headers.find(h => h.name?.toLowerCase() === name.toLowerCase());
     return header?.value || '';
   }
 
-  private extractBody(payload: any): { text: string; html: string } {
+  private extractBody(payload: GmailPayload | null | undefined): EmailBodyData {
     let textBody = '';
     let htmlBody = '';
 
-    if (payload.body?.data) {
+    if (payload?.body?.data) {
       const mimeType = payload.mimeType || '';
       const bodyData = Buffer.from(payload.body.data, 'base64').toString('utf-8');
       
@@ -360,8 +402,8 @@ export class EmailsService {
       } else if (mimeType.includes('text/html')) {
         htmlBody = bodyData;
       }
-    } else if (payload.parts) {
-      payload.parts.forEach((part: any) => {
+    } else if (payload?.parts) {
+      payload.parts.forEach((part: GmailPayload) => {
         if (part.mimeType === 'text/plain' && part.body?.data) {
           textBody = Buffer.from(part.body.data, 'base64').toString('utf-8');
         } else if (part.mimeType === 'text/html' && part.body?.data) {
@@ -373,9 +415,9 @@ export class EmailsService {
     return { text: textBody, html: htmlBody };
   }
 
-  private hasAttachments(payload: any): boolean {
-    if (payload.parts) {
-      return payload.parts.some((part: any) => 
+  private hasAttachments(payload: GmailPayload | null | undefined): boolean {
+    if (payload?.parts) {
+      return payload.parts.some((part: GmailPayload) => 
         part.filename && part.filename.length > 0
       );
     }

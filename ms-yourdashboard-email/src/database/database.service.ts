@@ -1,12 +1,32 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Pool } from 'pg';
+import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
+import { DatabaseUserData, DatabaseEmailData } from '../emails/interfaces/email.interfaces';
+
+interface DbUser {
+  id: string;
+  google_id: string;
+  email: string;
+  name: string;
+  access_token: string;
+  refresh_token: string | null;
+  token_expires_at: Date | null;
+  provider: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface QueryResultGeneric<T = any> {
+  rows: T[];
+  rowCount: number | null;
+  command: string;
+}
 
 @Injectable()
 export class DatabaseService implements OnModuleDestroy {
-  private pool: Pool;
+  private readonly pool: Pool;
 
-  constructor(private configService: ConfigService) {
+  constructor(private readonly configService: ConfigService) {
     this.pool = new Pool({
       host: this.configService.get<string>('DB_HOST'),
       port: this.configService.get<number>('DB_PORT'),
@@ -16,30 +36,30 @@ export class DatabaseService implements OnModuleDestroy {
     });
   }
 
-  async onModuleDestroy() {
+  async onModuleDestroy(): Promise<void> {
     await this.pool.end();
   }
 
   // Ejecutar queries SQL puro
-  async query(text: string, params?: any[]) {
-    const client = await this.pool.connect();
+  async query<T extends QueryResultRow = any>(
+    text: string, 
+    params?: any[]
+  ): Promise<QueryResultGeneric<T>> {
+    const client: PoolClient = await this.pool.connect();
     try {
-      const result = await client.query(text, params);
-      return result;
+      const result: QueryResult<T> = await client.query<T>(text, params);
+      return {
+        rows: result.rows,
+        rowCount: result.rowCount,
+        command: result.command
+      };
     } finally {
       client.release();
     }
   }
 
   // Guardar o actualizar usuario
-  async upsertUser(userData: {
-    googleId: string;
-    email: string;
-    name: string;
-    accessToken: string;
-    refreshToken?: string;
-    tokenExpiresAt?: string;
-  }) {
+  async upsertUser(userData: DatabaseUserData): Promise<DbUser> {
     const query = `
       INSERT INTO users (google_id, email, name, access_token, refresh_token, token_expires_at, provider, updated_at)
       VALUES ($1, $2, $3, $4, $5, $6, 'google', NOW())
@@ -63,24 +83,12 @@ export class DatabaseService implements OnModuleDestroy {
       userData.tokenExpiresAt || null,
     ];
 
-    const result = await this.query(query, values);
+    const result = await this.query<DbUser>(query, values);
     return result.rows[0];
   }
 
   // Guardar email
-  async saveEmail(emailData: {
-    userId: string;
-    messageId: string;
-    subject: string;
-    fromEmail: string;
-    fromName?: string;
-    toEmails: string[];
-    bodyText?: string;
-    bodyHtml?: string;
-    receivedDate: Date;
-    isRead: boolean;
-    hasAttachments: boolean;
-  }) {
+  async saveEmail(emailData: DatabaseEmailData): Promise<DbUser | null> {
     const query = `
       INSERT INTO emails (
         user_id, message_id, subject, from_email, from_name, to_emails, 
@@ -105,7 +113,18 @@ export class DatabaseService implements OnModuleDestroy {
       emailData.hasAttachments,
     ];
 
-    const result = await this.query(query, values);
-    return result.rows[0];
+    const result = await this.query<DbUser>(query, values);
+    return result.rows[0] || null;
+  }
+
+  // Verificar salud de la conexión
+  async healthCheck(): Promise<boolean> {
+    try {
+      const result = await this.query<{ health: number }>('SELECT 1 as health');
+      return result.rows[0]?.health === 1;
+    } catch (error) {
+      console.error('❌ Database health check failed:', error);
+      return false;
+    }
   }
 }

@@ -3,22 +3,29 @@ import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import * as bcrypt from 'bcrypt';
 import { sign, verify } from 'jsonwebtoken';
+import { 
+  UserAccount, 
+  LoginCredentials, 
+  RegisterData, 
+  AuthResponse, 
+  ProfileResponse, 
+  OAuthConnection, 
+  Session, 
+  OAuthData,
+  JWTPayload
+} from './interfaces/auth.interfaces';
 
 @Injectable()
 export class AuthTraditionalService {
   constructor(
-    private databaseService: DatabaseService,
-    private configService: ConfigService
+    private readonly databaseService: DatabaseService,
+    private readonly configService: ConfigService
   ) {}
 
   /**
    * 📝 Registrar nuevo usuario
    */
-  async register(userData: {
-    email: string;
-    password: string;
-    name: string;
-  }) {
+  async register(userData: RegisterData): Promise<AuthResponse> {
     try {
       console.log(`🔵 MS-AUTH - Registrando usuario: ${userData.email}`);
 
@@ -39,7 +46,7 @@ export class AuthTraditionalService {
         RETURNING id, email, name, is_email_verified, created_at
       `;
 
-      const result = await this.databaseService.query(query, [
+      const result = await this.databaseService.query<UserAccount>(query, [
         userData.email,
         passwordHash,
         userData.name,
@@ -77,10 +84,7 @@ export class AuthTraditionalService {
   /**
    * 🔑 Login de usuario
    */
-  async login(credentials: {
-    email: string;
-    password: string;
-  }) {
+  async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
       console.log(`🔵 MS-AUTH - Login intento: ${credentials.email}`);
 
@@ -91,7 +95,7 @@ export class AuthTraditionalService {
       }
 
       // 2. Verificar password
-      const isPasswordValid = await bcrypt.compare(credentials.password, account.password_hash);
+      const isPasswordValid = await bcrypt.compare(credentials.password, account.password_hash!);
       if (!isPasswordValid) {
         throw new UnauthorizedException('Credenciales inválidas');
       }
@@ -125,7 +129,7 @@ export class AuthTraditionalService {
   /**
    * 👤 Obtener información del usuario por JWT
    */
-  async getProfile(token: string) {
+  async getProfile(token: string): Promise<ProfileResponse> {
     try {
       console.log(`🔵 MS-AUTH - Obteniendo perfil de usuario`);
 
@@ -170,7 +174,7 @@ export class AuthTraditionalService {
   /**
    * 🚪 Logout - Cerrar sesión
    */
-  async logout(token: string) {
+  async logout(token: string): Promise<{ success: boolean; message: string }> {
     try {
       console.log(`🔵 MS-AUTH - Cerrando sesión`);
 
@@ -182,7 +186,7 @@ export class AuthTraditionalService {
         RETURNING account_id
       `;
 
-      const result = await this.databaseService.query(query, [token]);
+      await this.databaseService.query(query, [token]);
 
       console.log(`✅ MS-AUTH - Sesión cerrada`);
 
@@ -200,12 +204,11 @@ export class AuthTraditionalService {
   /**
    * 🔗 Conectar proveedor OAuth
    */
-  async connectOAuth(accountId: number, provider: string, oauthData: {
-    providerUserId: string;
-    accessToken: string;
-    refreshToken?: string;
-    expiresAt?: Date;
-  }) {
+  async connectOAuth(
+    accountId: number, 
+    provider: string, 
+    oauthData: OAuthData
+  ): Promise<OAuthConnection> {
     try {
       console.log(`🔵 MS-AUTH - Conectando ${provider} para usuario ${accountId}`);
 
@@ -226,7 +229,7 @@ export class AuthTraditionalService {
         RETURNING *
       `;
 
-      const result = await this.databaseService.query(query, [
+      const result = await this.databaseService.query<OAuthConnection>(query, [
         accountId,
         provider,
         oauthData.providerUserId,
@@ -249,19 +252,19 @@ export class AuthTraditionalService {
   // MÉTODOS AUXILIARES PRIVADOS
   // ================================
 
-  private async findAccountByEmail(email: string) {
+  private async findAccountByEmail(email: string): Promise<UserAccount | null> {
     const query = `SELECT * FROM accounts WHERE email = $1`;
-    const result = await this.databaseService.query(query, [email]);
+    const result = await this.databaseService.query<UserAccount>(query, [email]);
     return result.rows[0] || null;
   }
 
-  private async findAccountById(id: number) {
+  private async findAccountById(id: number): Promise<UserAccount | null> {
     const query = `SELECT * FROM accounts WHERE id = $1`;
-    const result = await this.databaseService.query(query, [id]);
+    const result = await this.databaseService.query<UserAccount>(query, [id]);
     return result.rows[0] || null;
   }
 
-  private generateJWT(account: any): string {
+  private generateJWT(account: UserAccount): string {
     const secret = this.configService.get<string>('JWT_SECRET');
     const expiresIn = this.configService.get<string>('JWT_EXPIRATION') || '24h';
 
@@ -269,28 +272,26 @@ export class AuthTraditionalService {
       throw new Error('JWT_SECRET no está configurado en las variables de entorno');
     }
 
-    return sign(
-      {
-        userId: account.id,
-        email: account.email,
-        name: account.name
-      },
-      secret,
-      { expiresIn } as any // Bypass del tipo temporalmente
-    );
+    const payload: JWTPayload = {
+      userId: account.id,
+      email: account.email,
+      name: account.name
+    };
+
+    return sign(payload, secret, { expiresIn });
   }
 
-  private verifyJWT(token: string): any {
+  private verifyJWT(token: string): JWTPayload {
     const secret = this.configService.get<string>('JWT_SECRET');
     
     if (!secret) {
       throw new Error('JWT_SECRET no está configurado en las variables de entorno');
     }
     
-    return verify(token, secret) as any; // Bypass del tipo temporalmente
+    return verify(token, secret) as JWTPayload;
   }
 
-  private async saveSession(accountId: number, token: string) {
+  private async saveSession(accountId: number, token: string): Promise<void> {
     // JWT expira en 24h por defecto
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 24);
@@ -303,23 +304,23 @@ export class AuthTraditionalService {
     await this.databaseService.query(query, [accountId, token, expiresAt]);
   }
 
-  private async findActiveSession(token: string) {
+  private async findActiveSession(token: string): Promise<Session | null> {
     const query = `
       SELECT * FROM sessions 
       WHERE jwt_token = $1 AND is_active = TRUE AND expires_at > NOW()
     `;
-    const result = await this.databaseService.query(query, [token]);
+    const result = await this.databaseService.query<Session>(query, [token]);
     return result.rows[0] || null;
   }
 
-  private async getOAuthConnections(accountId: number) {
+  private async getOAuthConnections(accountId: number): Promise<OAuthConnection[]> {
     const query = `
       SELECT provider, is_connected, connected_at, expires_at
       FROM oauth_connections 
       WHERE account_id = $1
       ORDER BY connected_at DESC
     `;
-    const result = await this.databaseService.query(query, [accountId]);
+    const result = await this.databaseService.query<OAuthConnection>(query, [accountId]);
     return result.rows;
   }
 }

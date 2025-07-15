@@ -1,9 +1,14 @@
 import { Controller, Get, Param, NotFoundException } from '@nestjs/common';
 import { TokensService } from './tokens.service';
+import { 
+  ValidTokenResponse, 
+  TokenStats, 
+  UsersListResponse 
+} from '../auth/interfaces/auth.interfaces';
 
 @Controller('tokens')
 export class TokensController {
-  constructor(private tokensService: TokensService) {}
+  constructor(private readonly tokensService: TokensService) {}
 
   /**
    * 🔑 GET /tokens/:userId
@@ -11,7 +16,7 @@ export class TokensController {
    * Este endpoint será usado por otros microservicios
    */
   @Get(':userId')
-  async getToken(@Param('userId') userId: string) {
+  async getToken(@Param('userId') userId: string): Promise<ValidTokenResponse> {
     if (!userId) {
       throw new NotFoundException('User ID is required');
     }
@@ -24,7 +29,7 @@ export class TokensController {
    * Estadísticas de tokens
    */
   @Get('stats')
-  async getStats() {
+  async getStats(): Promise<TokenStats> {
     return this.tokensService.getTokensStats();
   }
 
@@ -33,7 +38,7 @@ export class TokensController {
    * Listar usuarios con sus tokens
    */
   @Get('users/list')
-  async getUsersList() {
+  async getUsersList(): Promise<UsersListResponse> {
     return this.tokensService.getUsersList();
   }
 }

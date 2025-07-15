@@ -1,16 +1,26 @@
 import { Controller, Get, Query, Param, ParseIntPipe, DefaultValuePipe, BadRequestException } from '@nestjs/common';
 import { OrchestratorService } from './orchestrator.service';
+import {
+  OrchestratorResponse,
+  EmailListResponse,
+  EmailStats,
+  EmailDetail,
+  DashboardSummary,
+  AuthStartResponse,
+  ServiceInfo,
+  HealthCheck
+} from './interfaces/orchestrator.interfaces';
 
 @Controller()
 export class OrchestratorController {
-  constructor(private orchestratorService: OrchestratorService) {}
+  constructor(private readonly orchestratorService: OrchestratorService) {}
 
   /**
    * 🏠 GET /
    * Health check y info del orchestrator
    */
   @Get()
-  getInfo() {
+  getInfo(): ServiceInfo {
     return {
       service: 'ms-yourdashboard-orchestrator',
       status: 'OK',
@@ -35,7 +45,7 @@ export class OrchestratorController {
    * Iniciar proceso de autenticación
    */
   @Get('auth/start')
-  async startAuth() {
+  startAuth(): AuthStartResponse {
     return this.orchestratorService.startAuthentication();
   }
 
@@ -48,7 +58,7 @@ export class OrchestratorController {
     @Query('userId') userId: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number
-  ) {
+  ): Promise<OrchestratorResponse<EmailListResponse>> {
     if (!userId) {
       throw new BadRequestException('userId es requerido');
     }
@@ -66,7 +76,7 @@ export class OrchestratorController {
     @Query('q') searchTerm: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number
-  ) {
+  ): Promise<OrchestratorResponse<EmailListResponse>> {
     if (!userId) {
       throw new BadRequestException('userId es requerido');
     }
@@ -96,7 +106,7 @@ export class OrchestratorController {
    * Estadísticas de emails (orquesta ms-auth + ms-email)
    */
   @Get('emails/stats')
-  async getEmailStats(@Query('userId') userId: string) {
+  async getEmailStats(@Query('userId') userId: string): Promise<OrchestratorResponse<EmailStats>> {
     if (!userId) {
       throw new BadRequestException('userId es requerido');
     }
@@ -112,7 +122,7 @@ export class OrchestratorController {
   async getEmailById(
     @Param('id') emailId: string,
     @Query('userId') userId: string
-  ) {
+  ): Promise<OrchestratorResponse<EmailDetail>> {
     if (!userId) {
       throw new BadRequestException('userId es requerido');
     }
@@ -125,7 +135,7 @@ export class OrchestratorController {
    * Resumen del dashboard (orquesta múltiples llamadas)
    */
   @Get('dashboard/summary')
-  async getDashboardSummary(@Query('userId') userId: string) {
+  async getDashboardSummary(@Query('userId') userId: string): Promise<OrchestratorResponse<DashboardSummary>> {
     if (!userId) {
       throw new BadRequestException('userId es requerido');
     }
@@ -138,7 +148,7 @@ export class OrchestratorController {
    * Health check detallado
    */
   @Get('health')
-  getHealth() {
+  getHealth(): HealthCheck {
     return {
       service: 'ms-yourdashboard-orchestrator',
       status: 'OK',
