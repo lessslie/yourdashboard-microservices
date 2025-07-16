@@ -1,5 +1,3 @@
-// src/auth/interfaces/auth.interfaces.ts
-
 // ================================
 // INTERFACES EXISTENTES (mantener)
 // ================================
