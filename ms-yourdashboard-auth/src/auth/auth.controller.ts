@@ -11,68 +11,11 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { Response, Request } from 'express';
+import { Response } from 'express';
 import { AuthService } from './auth.service';
 import { AuthTraditionalService } from './auth-traditional.service';
-import { RegisterData, LoginCredentials } from './interfaces/auth.interfaces';
+import { RegisterData, LoginCredentials,ProfileResponse, AuthenticatedRequest, HealthResponse, InfoResponse } from './interfaces/auth.interfaces';
 
-interface AuthenticatedRequest extends Request {
-  user: {
-    googleId: string;
-    email: string;
-    name: string;
-    accessToken: string;
-    refreshToken: string;
-  };
-}
-
-interface ProfileResponse {
-  success: boolean;
-  user: {
-    id: number;
-    email: string;
-    name: string;
-    isEmailVerified: boolean;
-    createdAt: Date;
-    profilePicture: string | null;
-  };
-  connections: any[];
-}
-
-interface HealthResponse {
-  service: string;
-  status: string;
-  timestamp: string;
-  port: string | number;
-  features: {
-    traditional_auth: boolean;
-    oauth_google: boolean;
-    jwt_sessions: boolean;
-    multi_provider_support: boolean;
-  };
-}
-
-interface InfoResponse {
-  service: string;
-  description: string;
-  endpoints: {
-    traditional: {
-      register: string;
-      login: string;
-      profile: string;
-      logout: string;
-    };
-    oauth: {
-      google: string;
-      callback: string;
-    };
-    tokens: {
-      get_token: string;
-    };
-  };
-  supported_providers: string[];
-  upcoming_providers: string[];
-}
 
 @Controller('auth')
 export class AuthController {
@@ -200,9 +143,14 @@ googleAuth(): void {
   // Esta función termina inmediatamente después del log
 }
 
+// ===========================================
+// CONTROLADOR OAUTH MEJORADO
+// ===========================================
+
+
 /**
  * 🔐 GET /auth/google/callback
- * Callback de Google OAuth
+ * Callback de Google OAuth CON JWT
  */
 @Get('google/callback')
 @UseGuards(AuthGuard('google'))
@@ -215,21 +163,29 @@ async googleAuthRedirect(
     
     const result = await this.authService.handleGoogleCallback(req.user);
     
-    console.log('✅ MS-AUTH - Callback procesado');
-    //Redirigir al dashboard 
-    const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}?auth=success&userId=${result.user.id}`;
-
-    console.log(`✅ MS-AUTH - Redirigiendo a: ${redirectUrl}`);
+    console.log('✅ MS-AUTH - Callback procesado exitosamente');
+    console.log(`🔑 MS-AUTH - JWT generado para usuario: ${result.user.email}`);
     
-    res.redirect(redirectUrl);
+    // Incluir JWT en los parámetros
+    const redirectUrl = new URL(`${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
+    redirectUrl.searchParams.set('auth', 'success');
+    redirectUrl.searchParams.set('userId', result.accountId.toString()); //  accountId, no user.id
+    redirectUrl.searchParams.set('token', result.jwt); //  Incluir JWT
+    redirectUrl.searchParams.set('provider', 'google');
+
+    console.log(`✅ MS-AUTH - Redirigiendo a: ${redirectUrl.toString()}`);
+    
+    res.redirect(redirectUrl.toString());
     
   } catch (error) {
     console.error('❌ MS-AUTH - Error en callback de OAuth:', error);
     
-    // ✅ CAMBIO: Redirigir a página de error en lugar de JSON
-    const errorUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}?auth=error&message=${encodeURIComponent(error instanceof Error ? error.message : 'Error desconocido')}`;
+    //  Redirigir a página de error en lugar de JSON
+    const errorUrl = new URL(`${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
+    errorUrl.searchParams.set('auth', 'error');
+    errorUrl.searchParams.set('message', encodeURIComponent(error instanceof Error ? error.message : 'Error desconocido'));
     
-    res.redirect(errorUrl);
+    res.redirect(errorUrl.toString());
   }
 }
 

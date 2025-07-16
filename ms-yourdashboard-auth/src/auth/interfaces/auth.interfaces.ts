@@ -1,5 +1,9 @@
 // src/auth/interfaces/auth.interfaces.ts
 
+// ================================
+// INTERFACES EXISTENTES (mantener)
+// ================================
+
 export interface UserAccount {
   id: number;
   email: string;
@@ -41,6 +45,7 @@ export interface ProfileResponse {
     name: string;
     isEmailVerified: boolean;
     createdAt: Date;
+    profilePicture?: string | null;
   };
   connections: OAuthConnection[];
 }
@@ -156,4 +161,95 @@ export interface UserData {
   name: string;
   accessToken: string;
   refreshToken?: string;
+}
+
+// ================================
+//  INTERFACES PARA OAUTH + JWT
+// ================================
+
+// Para el callback de Google OAuth
+export interface GoogleCallbackUser {
+  googleId: string;
+  email: string;
+  name: string;
+  accessToken: string;
+  refreshToken: string;
+}
+
+// Respuesta del callback OAuth mejorado
+export interface GoogleCallbackResult {
+  user: {
+    id: number;
+    email: string;
+    name: string;
+    google_id: string;
+  };
+  jwt: string;
+  accountId: number;
+  status: string;
+}
+
+// Para consultas de la tabla accounts
+export interface AccountRow {
+  id: number;
+  email: string;
+  name: string;
+  password_hash?: string;
+  is_email_verified: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+// Para el request autenticado de Express
+export interface AuthenticatedRequest {
+  user: GoogleCallbackUser;
+}
+
+// Para respuestas del controlador
+export interface ProfileControllerResponse {
+  success: boolean;
+  user: {
+    id: number;
+    email: string;
+    name: string;
+    isEmailVerified: boolean;
+    createdAt: Date;
+    profilePicture: string | null;
+  };
+  connections: any[];
+}
+
+export interface HealthResponse {
+  service: string;
+  status: string;
+  timestamp: string;
+  port: string | number;
+  features: {
+    traditional_auth: boolean;
+    oauth_google: boolean;
+    jwt_sessions: boolean;
+    multi_provider_support: boolean;
+  };
+}
+
+export interface InfoResponse {
+  service: string;
+  description: string;
+  endpoints: {
+    traditional: {
+      register: string;
+      login: string;
+      profile: string;
+      logout: string;
+    };
+    oauth: {
+      google: string;
+      callback: string;
+    };
+    tokens: {
+      get_token: string;
+    };
+  };
+  supported_providers: string[];
+  upcoming_providers: string[];
 }

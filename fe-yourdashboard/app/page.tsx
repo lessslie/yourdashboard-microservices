@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '../lib/auth';
+import { useAuth, saveToken } from '../lib/auth'; // ✅ AGREGADO saveToken
 
 interface UserProfile {
   id: number;
@@ -20,8 +20,65 @@ export default function DashboardPage() {
   const router = useRouter();
   const { isLoggedIn, logout, getProfile } = useAuth();
 
-  // ✅ ARREGLADO: useEffect sin dependencias problemáticas
+  // ✅ NUEVO: useEffect para manejar callback OAuth + cargar datos
   useEffect(() => {
+    // ✅ PASO 1: Manejar callback OAuth con JWT
+    const handleOAuthCallback = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const authStatus = urlParams.get('auth');
+      const token = urlParams.get('token');
+      const userId = urlParams.get('userId');
+      const provider = urlParams.get('provider');
+
+      if (authStatus === 'success' && token && userId) {
+        console.log('✅ OAuth callback exitoso, guardando JWT...');
+        console.log('🔑 Token recibido:', token.substring(0, 50) + '...');
+        console.log('👤 UserId:', userId);
+        
+        // Guardar JWT como cualquier usuario tradicional
+        saveToken(token);
+        
+        // Guardar datos del usuario para acceso rápido
+        const userData = {
+          id: parseInt(userId),
+          provider: provider || 'google',
+          authenticatedAt: new Date().toISOString()
+        };
+        localStorage.setItem('user_data', JSON.stringify(userData));
+        
+        console.log(`✅ Sesión OAuth establecida para userId: ${userId}`);
+        
+        // Limpiar parámetros de URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+        
+        // Recargar datos del usuario
+        window.location.reload();
+        return true; // Indica que se manejó OAuth
+      }
+
+      if (authStatus === 'error') {
+        const errorMessage = urlParams.get('message');
+        console.error('❌ Error en OAuth:', errorMessage);
+        setError(decodeURIComponent(errorMessage || 'Error en autenticación OAuth'));
+        
+        // Limpiar parámetros de URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setIsLoading(false);
+        return true; // Indica que se manejó OAuth (con error)
+      }
+
+      return false; // No había callback OAuth
+    };
+
+    // ✅ PASO 2: Ejecutar manejo OAuth PRIMERO
+    const wasOAuthCallback = handleOAuthCallback();
+    
+    // Si fue callback OAuth, no continuar (se va a recargar)
+    if (wasOAuthCallback) {
+      return;
+    }
+
+    // ✅ PASO 3: Cargar datos normalmente si no fue callback OAuth
     const loadUserData = async () => {
       if (!isLoggedIn) {
         console.log('❌ Usuario no autenticado, redirigiendo al login...');
@@ -42,7 +99,6 @@ export default function DashboardPage() {
       } catch (err: any) {
         console.error('❌ Error cargando perfil:', err);
         setError('Error cargando datos del usuario');
-        // ✅ CAMBIO: Llamar logout directamente sin await en dependencias
         logout().catch(console.error);
       } finally {
         setIsLoading(false);
@@ -50,9 +106,9 @@ export default function DashboardPage() {
     };
 
     loadUserData();
-  }, []); // ✅ ARREGLADO: Array vacío para ejecutar solo una vez
+  }, []); // ✅ Array vacío para ejecutar solo una vez
 
-  // ✅ NUEVO: useEffect separado para manejar cambios de autenticación
+  // ✅ MANTENER: useEffect separado para manejar cambios de autenticación
   useEffect(() => {
     if (!isLoggedIn && !isLoading) {
       router.push('/login');
@@ -84,7 +140,7 @@ export default function DashboardPage() {
     }
   };
 
-  // ✅ NUEVO: Early return si no está autenticado
+  // ✅ MANTENER: Early return si no está autenticado
   if (!isLoggedIn && !isLoading) {
     return null; // El useEffect ya redirige
   }
