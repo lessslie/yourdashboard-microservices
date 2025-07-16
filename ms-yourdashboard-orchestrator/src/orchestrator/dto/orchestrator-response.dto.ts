@@ -62,16 +62,16 @@ export class OrchestratorEmailListDto {
     description: 'Datos de emails con paginación',
     type: 'object',
     properties: {
-      emails: {
+    emails: {
         type: 'array',
         items: { $ref: '#/components/schemas/OrchestratorEmailDto' }
-      },
-      total: { type: 'number', example: 150 },
-      page: { type: 'number', example: 1 },
-      limit: { type: 'number', example: 10 },
-      totalPages: { type: 'number', example: 15 },
-      hasNextPage: { type: 'boolean', example: true },
-      hasPreviousPage: { type: 'boolean', example: false }
+    },
+    total: { type: 'number', example: 150 },
+    page: { type: 'number', example: 1 },
+    limit: { type: 'number', example: 10 },
+    totalPages: { type: 'number', example: 15 },
+    hasNextPage: { type: 'boolean', example: true },
+    hasPreviousPage: { type: 'boolean', example: false }
     }
   })
   data: {
