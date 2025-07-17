@@ -116,18 +116,18 @@ export class OrchestratorController {
    */
   @Get('emails/inbox')
   @ApiTags('Emails')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Obtener inbox de emails',
     description: 'Coordina MS-Auth (tokens) + MS-Email (datos) para obtener la lista de emails del usuario.'
   })
   @ApiQuery({ name: 'userId', description: 'ID del usuario', example: '1' })
   @ApiQuery({ name: 'page', description: 'Número de página', example: 1, required: false })
   @ApiQuery({ name: 'limit', description: 'Emails por página (máx 50)', example: 10, required: false })
-  @ApiOkResponse({ 
+  @ApiOkResponse({
     description: 'Inbox obtenido exitosamente',
     type: OrchestratorEmailListDto
   })
-  @ApiBadRequestResponse({ 
+  @ApiBadRequestResponse({
     description: 'userId es requerido',
     type: OrchestratorErrorDto 
   })
@@ -145,8 +145,8 @@ export class OrchestratorController {
     }
 
     return this.orchestratorService.getInbox(
-      query.userId, 
-      query.page || 1, 
+      query.userId,
+      query.page || 1,
       query.limit || 10
     );
   }

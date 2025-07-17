@@ -11,10 +11,13 @@ import {
   GmailPayload,
   EmailServiceError
 } from './interfaces/email.interfaces';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class EmailsService {
-  constructor() {}
+  constructor(
+    private readonly configService: ConfigService
+  ) {}
 
   /**
    * 📧 INBOX - Lista de emails con paginación
