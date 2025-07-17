@@ -1,10 +1,19 @@
+
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { OrchestratorController } from './orchestrator.controller';
 import { OrchestratorService } from './orchestrator.service';
-import { ConfigModule } from '@nestjs/config';
+import { EmailsOrchestratorModule } from './emails/emails.module';
+import { AuthOrchestratorModule } from './auth/auth.module';
 
 @Module({
-  imports: [ConfigModule],
+  imports: [
+    ConfigModule,
+    EmailsOrchestratorModule,
+    AuthOrchestratorModule,
+    // CalendarModule,
+    // WhatsappModule,
+  ],
   controllers: [OrchestratorController],
   providers: [OrchestratorService],
   exports: [OrchestratorService]
