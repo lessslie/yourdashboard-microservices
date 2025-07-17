@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { google, gmail_v1 } from 'googleapis';
-import { DatabaseService } from '../database/database.service';
 import {
   EmailListResponse,
   EmailStats,
@@ -15,7 +14,7 @@ import {
 
 @Injectable()
 export class EmailsService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor() {}
 
   /**
    * 📧 INBOX - Lista de emails con paginación

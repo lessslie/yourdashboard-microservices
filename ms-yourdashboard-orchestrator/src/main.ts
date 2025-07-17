@@ -14,7 +14,7 @@ async function bootstrap() {
     disableErrorMessages: false,
   }));
 
-  // ✅ CONFIGURACIÓN DE SWAGGER PARA MS-ORCHESTRATOR
+  // CONFIGURACIÓN DE SWAGGER PARA MS-ORCHESTRATOR
   const config = new DocumentBuilder()
     .setTitle('YourDashboard Orchestrator API')
     .setDescription('Backend For Frontend (BFF) - Coordina todos los microservicios de YourDashboard')
@@ -72,7 +72,7 @@ async function bootstrap() {
     ]
   });
 
-  // ✅ CONFIGURACIÓN DE CORS
+  // CONFIGURACIÓN DE CORS
   app.enableCors({
     origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'], 
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -82,7 +82,7 @@ async function bootstrap() {
   
   await app.listen(process.env.PORT ?? 3003);
   
-  // ✅ LOGS INFORMATIVOS
+  // LOGS INFORMATIVOS
   console.log(`🎭 MS-ORCHESTRATOR running on: ${await app.getUrl()}`);
   console.log(`📚 Swagger API: http://localhost:3003/api`);
   console.log(`🔗 Main endpoint: http://localhost:3003/emails/inbox?userId=X`);
