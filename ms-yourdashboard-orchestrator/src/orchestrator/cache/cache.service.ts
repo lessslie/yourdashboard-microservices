@@ -1,5 +1,5 @@
 // =============================================
-// CACHE SERVICE - CON REDIS REAL 
+// CACHE SERVICE - AUTO-DETECCIÓN SILENCIOSA
 // =============================================
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -16,6 +16,7 @@ interface CacheData<T> {
 interface CacheStats {
   totalKeys: number;
   memoryUsage: string;
+  mode: 'redis' | 'memory';
   redisInfo?: string;
 }
 
@@ -25,66 +26,100 @@ export class CacheService implements OnModuleDestroy {
   private redisClient: RedisClientType | Map<string, string> | null = null;
   private readonly defaultTTL = 300; // 5 minutos por defecto
   private isRedisMode = false;
+  private connectionAttempted = false; // 🎯 Para evitar intentos repetitivos
 
   constructor(private readonly configService: ConfigService) {
-    void this.initializeRedis();
+    // Inicializar cache de forma lazy (cuando se use por primera vez)
+    // Evita operaciones async en constructor
   }
 
   /**
-   * 🔧 Inicializar conexión a Redis o fallback a Map
+   * 🔧 Inicializar cache - AUTO-DETECCIÓN SILENCIOSA
    */
-  private async initializeRedis(): Promise<void> {
+  private async initializeCache(): Promise<void> {
+    if (this.connectionAttempted) return;
+    this.connectionAttempted = true;
+
     try {
       const redisUrl = this.configService.get<string>('REDIS_URL');
       
-      if (redisUrl && redisUrl !== 'memory') {
-        // 🚀 MODO REDIS REAL
-        this.logger.log('🔵 Iniciando Redis client...');
-        
-        this.redisClient = createClient({
-          url: redisUrl,
-          socket: {
-            connectTimeout: 5000,
-            reconnectStrategy: (retries) => Math.min(retries * 50, 500)
-          }
-        }) as RedisClientType;
-
-        // Event listeners para Redis
-        this.redisClient.on('error', (err) => {
-          this.logger.error('❌ Redis Client Error:', err);
-          this.fallbackToMemory();
-        });
-
-        this.redisClient.on('connect', () => {
-          this.logger.log('🔗 Redis Client conectado');
-        });
-
-        this.redisClient.on('ready', () => {
-          this.logger.log('✅ Redis Client listo para usar');
-          this.isRedisMode = true;
-        });
-
-        // Conectar
-        await this.redisClient.connect();
-        
-      } else {
-        // 🧠 MODO MEMORIA (Desarrollo)
-        this.fallbackToMemory();
+      // 🎯 AUTO-DETECCIÓN: Si no hay REDIS_URL o es 'memory' → usar memoria
+      if (!redisUrl || redisUrl === 'memory' || redisUrl.includes('memory')) {
+        this.initializeMemoryMode();
+        return;
       }
+
+      // 🎯 INTENTAR REDIS UNA SOLA VEZ (sin spam de errores)
+      await this.tryRedisConnection(redisUrl);
       
     } catch (error) {
-      this.logger.error('❌ Error inicializando Redis:', error);
-      this.fallbackToMemory();
+      // 🎯 SILENCIOSO: cualquier error → memoria automáticamente
+      this.logger.error('Redis no disponible, usando memoria', error);
+      this.initializeMemoryMode();
     }
   }
 
   /**
-   * 🧠 Fallback a memoria si Redis falla
+   * 🧠 Inicializar modo memoria (silencioso)
    */
-  private fallbackToMemory(): void {
+  private initializeMemoryMode(): void {
     this.redisClient = new Map<string, string>();
     this.isRedisMode = false;
-    this.logger.warn('⚠️ Usando cache en memoria (fallback mode)');
+    this.logger.log('🧠 Cache: Modo memoria activado');
+  }
+
+  /**
+   * 🚀 Intentar conexión Redis (UNA sola vez)
+   */
+  private async tryRedisConnection(redisUrl: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let connectionResolved = false;
+
+      const client = createClient({
+        url: redisUrl,
+        socket: {
+          connectTimeout: 3000, // 3 segundos máximo
+          reconnectStrategy: false // 🎯 NO reconectar automáticamente
+        }
+      }) as RedisClientType;
+
+      // 🎯 SUCCESS → Redis mode
+      client.on('ready', () => {
+        if (!connectionResolved) {
+          connectionResolved = true;
+          this.redisClient = client;
+          this.isRedisMode = true;
+          this.logger.log('🚀 Cache: Redis conectado exitosamente');
+          resolve();
+        }
+      });
+
+      // 🎯 ERROR → Memory mode (sin logs molestos)
+      client.on('error', () => {
+        if (!connectionResolved) {
+          connectionResolved = true;
+          void client.quit().catch(() => {}); // Usar quit() en lugar de disconnect()
+          reject(new Error('Redis no disponible'));
+        }
+      });
+
+      // 🎯 TIMEOUT → Memory mode
+      setTimeout(() => {
+        if (!connectionResolved) {
+          connectionResolved = true;
+          void client.quit().catch(() => {});
+          reject(new Error('Redis timeout'));
+        }
+      }, 3000);
+
+      // Iniciar conexión
+      client.connect().catch(() => {
+        if (!connectionResolved) {
+          connectionResolved = true;
+          reject(new Error('Redis connection failed'));
+        }
+      });
+    });
   }
 
   /**
@@ -92,6 +127,18 @@ export class CacheService implements OnModuleDestroy {
    */
   async set(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
     try {
+      // 🎯 VERIFICAR QUE EL CACHE ESTÉ INICIALIZADO
+      if (!this.redisClient) {
+        this.logger.debug(`⚠️ Cache no inicializado, inicializando ahora...`);
+        await this.initializeCache();
+      }
+
+      // 🎯 SI AÚN ES NULL, SALIR SILENCIOSAMENTE
+      if (!this.redisClient) {
+        this.logger.debug(`⚠️ Cache no disponible para key: ${key}`);
+        return;
+      }
+
       const ttl = ttlSeconds || this.defaultTTL;
       
       if (this.isRedisMode && this.redisClient) {
@@ -108,7 +155,7 @@ export class CacheService implements OnModuleDestroy {
         (this.redisClient as Map<string, string>).set(key, JSON.stringify(cacheData));
       }
       
-      this.logger.debug(`✅ Cache SET: ${key} (TTL: ${ttl}s) [${this.isRedisMode ? 'Redis' : 'Memory'}]`);
+      this.logger.debug(`✅ Cache SET: ${key} [${this.isRedisMode ? 'Redis' : 'Memory'}]`);
     } catch (error) {
       this.logger.error(`❌ Error setting cache for key ${key}:`, error);
     }
@@ -119,19 +166,31 @@ export class CacheService implements OnModuleDestroy {
    */
   async get<T>(key: string): Promise<T | null> {
     try {
+      // 🎯 VERIFICAR QUE EL CACHE ESTÉ INICIALIZADO
+      if (!this.redisClient) {
+        this.logger.debug(`⚠️ Cache no inicializado para GET, inicializando...`);
+        await this.initializeCache();
+      }
+
+      // 🎯 SI AÚN ES NULL, RETORNAR NULL SILENCIOSAMENTE
+      if (!this.redisClient) {
+        this.logger.debug(`📭 Cache MISS: ${key} (no disponible)`);
+        return null;
+      }
+
       let cachedValue: string | null = null;
       
       if (this.isRedisMode && this.redisClient) {
         // Redis real
         cachedValue = await (this.redisClient as RedisClientType).get(key);
         if (cachedValue) {
-          this.logger.debug(`✅ Cache HIT: ${key} [Redis]`);
+          this.logger.debug(`⚡ Cache HIT: ${key} [Redis]`);
           return JSON.parse(cachedValue) as T;
         }
       } else {
         // Memoria con verificación TTL
         const mapClient = this.redisClient as Map<string, string>;
-        const rawValue = mapClient.get(key);
+        const rawValue = mapClient?.get(key);
         
         if (rawValue) {
           const parsed = JSON.parse(rawValue) as CacheData<T>;
@@ -139,7 +198,7 @@ export class CacheService implements OnModuleDestroy {
           const expiresAt = parsed.timestamp + (parsed.ttl * 1000);
 
           if (now <= expiresAt) {
-            this.logger.debug(`✅ Cache HIT: ${key} [Memory]`);
+            this.logger.debug(`⚡ Cache HIT: ${key} [Memory]`);
             return parsed.data;
           } else {
             // Expirado
@@ -150,7 +209,7 @@ export class CacheService implements OnModuleDestroy {
         }
       }
 
-      this.logger.debug(`❌ Cache MISS: ${key}`);
+      this.logger.debug(`📭 Cache MISS: ${key}`);
       return null;
       
     } catch (error) {
@@ -167,7 +226,7 @@ export class CacheService implements OnModuleDestroy {
       if (this.isRedisMode && this.redisClient) {
         await (this.redisClient as RedisClientType).del(key);
       } else {
-        (this.redisClient as Map<string, string>).delete(key);
+        (this.redisClient as Map<string, string>)?.delete(key);
       }
       
       this.logger.debug(`🗑️ Cache DELETE: ${key} [${this.isRedisMode ? 'Redis' : 'Memory'}]`);
@@ -191,15 +250,17 @@ export class CacheService implements OnModuleDestroy {
       } else {
         // Memoria
         const mapClient = this.redisClient as Map<string, string>;
-        const keysToDelete = Array.from(mapClient.keys()).filter((key: string) => 
-          key.includes(pattern)
-        );
-        
-        keysToDelete.forEach((key: string) => {
-          mapClient.delete(key);
-        });
-        
-        this.logger.debug(`🧹 Cache DELETE PATTERN: ${pattern} (${keysToDelete.length} keys) [Memory]`);
+        if (mapClient) {
+          const keysToDelete = Array.from(mapClient.keys()).filter((key: string) => 
+            key.includes(pattern)
+          );
+          
+          keysToDelete.forEach((key: string) => {
+            mapClient.delete(key);
+          });
+          
+          this.logger.debug(`🧹 Cache DELETE PATTERN: ${pattern} (${keysToDelete.length} keys) [Memory]`);
+        }
       }
     } catch (error) {
       this.logger.error(`❌ Error deleting cache pattern ${pattern}:`, error);
@@ -218,7 +279,7 @@ export class CacheService implements OnModuleDestroy {
 
     // Crear hash de parámetros para key única
     const paramString = Object.keys(params)
-      .sort()
+      .sort((a, b) => a.localeCompare(b)) // Ordenamiento confiable
       .map(key => `${key}:${String(params[key])}`)
       .join('|');
     
@@ -238,6 +299,7 @@ export class CacheService implements OnModuleDestroy {
         return {
           totalKeys: dbSize,
           memoryUsage: 'Redis server',
+          mode: 'redis',
           redisInfo: info
         };
       } else {
@@ -245,14 +307,16 @@ export class CacheService implements OnModuleDestroy {
         const mapClient = this.redisClient as Map<string, string>;
         return {
           totalKeys: mapClient?.size || 0,
-          memoryUsage: 'In-memory Map (development mode)'
+          memoryUsage: 'In-memory Map (desarrollo)',
+          mode: 'memory'
         };
       }
     } catch (error) {
       this.logger.error('❌ Error getting cache stats:', error);
       return {
         totalKeys: 0,
-        memoryUsage: 'Error retrieving stats'
+        memoryUsage: 'Error retrieving stats',
+        mode: 'memory'
       };
     }
   }
@@ -273,15 +337,23 @@ export class CacheService implements OnModuleDestroy {
   }
 
   /**
+   * 🎯 Obtener modo actual (para debugging)
+   */
+  getMode(): 'redis' | 'memory' {
+    return this.isRedisMode ? 'redis' : 'memory';
+  }
+
+  /**
    * 🧹 Cleanup al destruir el módulo
    */
   async onModuleDestroy(): Promise<void> {
     if (this.isRedisMode && this.redisClient) {
       try {
-        await (this.redisClient as RedisClientType).disconnect();
+        await (this.redisClient as RedisClientType).quit(); // Usar quit() en lugar de disconnect()
         this.logger.log('🔌 Redis client desconectado');
-      } catch (error) {
-        this.logger.error('❌ Error desconectando Redis:', error);
+      } catch {
+        // Silencioso en cleanup
+        this.logger.debug('Error desconectando Redis (ignorado)');
       }
     }
   }
