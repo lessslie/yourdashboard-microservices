@@ -1,7 +1,6 @@
+// src/auth/dto/logout-response.dto.ts
 import { ApiProperty } from "@nestjs/swagger";
 
-
-// src/auth/dto/logout-response.dto.ts
 export class LogoutResponseDto {
   @ApiProperty({
     description: 'Indica si el logout fue exitoso',
@@ -14,4 +13,10 @@ export class LogoutResponseDto {
     example: 'Sesión cerrada exitosamente'
   })
   message: string;
+
+  @ApiProperty({
+    description: 'ID de la sesión cerrada',
+    example: 1
+  })
+  sesion_cerrada_id: number;
 }
