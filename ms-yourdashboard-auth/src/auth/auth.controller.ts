@@ -41,7 +41,6 @@ import {
   HealthResponseDto
 } from './dto';
 import { 
-  ReqUsuarioAutenticado, 
   ReqCallbackGoogle,
   UsuarioAutenticado
 } from './interfaces/auth.interfaces';
@@ -251,54 +250,76 @@ export class AuthController {
   }
 
   // ================================
-  // ENDPOINTS OAUTH
+  // ENDPOINTS OAUTH - ARREGLADOS
   // ================================
 
   @Get('google')
-  @UseGuards(AuthGuard('google'))
+  @UseGuards(JwtAuthGuard) // 🎯 AHORA REQUIERE AUTENTICACIÓN
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
     summary: 'Iniciar OAuth con Google',
-    description: 'Redirige al usuario a Google para autenticación OAuth.' 
+    description: 'Inicia el proceso OAuth con Google para conectar una cuenta Gmail al usuario autenticado.' 
   })
   @ApiResponse({ 
     status: 302, 
-    description: 'Redirección a Google OAuth' 
+    description: 'Redirección a Google OAuth con estado del usuario' 
   })
-  @ApiExcludeEndpoint()
-  googleAuth(): void {
-    console.log('Redirigiendo a Google OAuth...');
+  @ApiUnauthorizedResponse({
+    description: 'Usuario no autenticado - JWT requerido',
+    type: ErrorResponseDto
+  })
+  googleAuth(@Req() req: { user: UsuarioAutenticado }, @Res() res: Response): void {
+    console.log(`🔵 Usuario ${req.user.id} iniciando OAuth Google...`);
+    
+    // 🎯 GENERAR URL OAUTH CON EL USER ID EN STATE
+    const authUrl = this.authService.generarUrlOAuth(req.user.id);
+    
+    console.log(`🔗 Redirigiendo a: ${authUrl}`);
+    res.redirect(authUrl);
   }
 
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   @ApiOperation({ 
     summary: 'Callback de Google OAuth',
-    description: 'Endpoint interno usado por Google OAuth.' 
+    description: 'Endpoint interno usado por Google OAuth para completar la autenticación.' 
   })
   @ApiResponse({ 
     status: 302, 
-    description: 'Redirección al frontend con JWT token' 
+    description: 'Redirección al frontend con resultado' 
   })
   @ApiExcludeEndpoint()
   async googleAuthRedirect(
-    @Req() req: ReqCallbackGoogle,
+    @Req() req: ReqCallbackGoogle & { query: { state?: string } },
     @Res() res: Response
   ): Promise<void> {
     try {
-      console.log('Callback recibido de Google');
+      console.log('🔵 Callback recibido de Google');
+      console.log('🔍 Estado recibido:', req.query.state);
       
-      const result = await this.authService.manejarCallbackGoogle(req.user);
+      // 🎯 EXTRAER USER ID DEL STATE
+      const userIdFromState = req.query.state ? parseInt(req.query.state, 10) : null;
       
-      console.log('Callback procesado exitosamente');
+      if (!userIdFromState || isNaN(userIdFromState)) {
+        throw new Error('Estado inválido - Usuario no identificado');
+      }
+
+      console.log(`🎯 Conectando cuenta Gmail para usuario ${userIdFromState}`);
+      
+      // 🎯 PASAR EL USER ID AL SERVICE
+      await this.authService.manejarCallbackGoogle(req.user, userIdFromState);
+      
+      console.log('✅ Callback procesado exitosamente');
       
       const redirectUrl = new URL(process.env.FRONTEND_URL || 'http://localhost:3000');
       redirectUrl.searchParams.set('auth', 'success');
-      redirectUrl.searchParams.set('message', 'Gmail conectado exitosamente');
+      redirectUrl.searchParams.set('message', `Gmail ${req.user.email} conectado exitosamente`);
+      redirectUrl.searchParams.set('gmail', req.user.email);
       
       res.redirect(redirectUrl.toString());
       
     } catch (error) {
-      console.error('Error en callback de OAuth:', error);
+      console.error('❌ Error en callback de OAuth:', error);
       
       const errorUrl = new URL(process.env.FRONTEND_URL || 'http://localhost:3000');
       errorUrl.searchParams.set('auth', 'error');
@@ -328,9 +349,7 @@ export class AuthController {
   })
   async listarCuentasGmail(@Req() request: { user: UsuarioAutenticado }) {
     try {
-      const usuario = request.user;
-      
-      const cuentas = await this.authService.listarCuentasGmailUsuario(usuario.id);
+      const cuentas = await this.authService.listarCuentasGmailUsuario(request.user.id);
 
       return {
         success: true,
@@ -363,14 +382,12 @@ export class AuthController {
     description: 'Cuenta Gmail no encontrada',
     type: ErrorResponseDto
   })
-  async obtenerCuentaGmail(
+  obtenerCuentaGmail(
     @Req() request: { user: UsuarioAutenticado },
     @Param('id') cuentaId: string
   ) {
     try {
-      const usuario = request.user;
-
-      // TODO: Implementar lógica real para obtener cuenta específica
+      // Lógica simulada para obtener cuenta específica
       const cuentaSimulada = {
         id: parseInt(cuentaId),
         email_gmail: 'cuenta' + cuentaId + '@gmail.com',
@@ -417,9 +434,7 @@ export class AuthController {
     @Param('id') cuentaId: string
   ) {
     try {
-      const usuario = request.user;
-
-      const resultado = await this.authService.desconectarCuentaGmail(usuario.id, parseInt(cuentaId));
+      const resultado = await this.authService.desconectarCuentaGmail(request.user.id, parseInt(cuentaId));
 
       return {
         success: true,
@@ -465,19 +480,17 @@ export class AuthController {
     description: 'Alias inválido o faltante',
     type: ErrorResponseDto
   })
-  async actualizarAliasCuenta(
+  actualizarAliasCuenta(
     @Req() request: { user: UsuarioAutenticado },
     @Param('id') cuentaId: string,
     @Body() body: { alias_personalizado: string }
   ) {
     try {
-      const usuario = request.user;
-
       if (!body.alias_personalizado || body.alias_personalizado.trim() === '') {
         throw new BadRequestException('alias_personalizado es requerido');
       }
 
-      // TODO: Implementar lógica real para actualizar alias
+      // Lógica simulada para actualizar alias
       console.log('Actualizando alias de cuenta ' + cuentaId + ' a: ' + body.alias_personalizado);
 
       return {
@@ -554,7 +567,7 @@ export class AuthController {
           logout: 'POST /auth/logout'
         },
         oauth: {
-          google: 'GET /auth/google',
+          google: 'GET /auth/google (Requiere JWT)',
           callback: 'GET /auth/google/callback'
         },
         gmail_accounts: {

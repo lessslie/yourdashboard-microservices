@@ -245,14 +245,52 @@ export class AuthService {
   }
 
   // ================================
-  // 🔐 MANEJAR CALLBACK DE GOOGLE OAUTH
+  // 🔐 GENERAR URL OAUTH CON STATE
   // ================================
 
-  async manejarCallbackGoogle(googleUser: GoogleOAuthUser, usuarioActualId?: number): Promise<RespuestaConexionGmail> {
+  generarUrlOAuth(userId: number): string {
+    try {
+      console.log(`🔵 Generando URL OAuth para usuario ${userId}`);
+      
+      const baseUrl = 'https://accounts.google.com/o/oauth2/v2/auth';
+      const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+      const redirectUri = this.configService.get<string>('GOOGLE_REDIRECT_URI') || 'http://localhost:3001/auth/google/callback';
+      
+      const params = new URLSearchParams({
+        client_id: clientId || '',
+        redirect_uri: redirectUri,
+        response_type: 'code',
+        scope: [
+          'email',
+          'profile', 
+          'https://www.googleapis.com/auth/gmail.readonly'
+        ].join(' '),
+        access_type: 'offline',
+        prompt: 'consent',
+        state: userId.toString() // 🎯 PASAR USER ID EN STATE
+      });
+
+      const authUrl = `${baseUrl}?${params.toString()}`;
+      console.log(`✅ URL OAuth generada para usuario ${userId}`);
+      
+      return authUrl;
+      
+    } catch (error) {
+      this.logger.error(`❌ Error generando URL OAuth:`, error);
+      throw new Error('Error generando URL de autenticación Google');
+    }
+  }
+
+  // ================================
+  // 🔐 MANEJAR CALLBACK DE GOOGLE OAUTH - ARREGLADO
+  // ================================
+
+  async manejarCallbackGoogle(googleUser: GoogleOAuthUser, usuarioActualId: number): Promise<RespuestaConexionGmail> {
     try {
       this.logger.log(`🔵 Procesando callback Google para: ${googleUser.email}`);
+      this.logger.log(`🎯 Usuario principal ID: ${usuarioActualId}`);
 
-      // Si no hay usuario actual, es un error (debería estar autenticado)
+      // ✅ AHORA SÍ TENEMOS EL USER ID
       if (!usuarioActualId) {
         throw new UnauthorizedException({
           codigo: CodigosErrorAuth.PERMISOS_INSUFICIENTES,
@@ -269,7 +307,7 @@ export class AuthService {
         });
       }
 
-      // Conectar cuenta Gmail
+      // ✅ CONECTAR CUENTA GMAIL AL USUARIO PRINCIPAL
       const cuentaGmail = await this.databaseService.conectarCuentaGmail({
         usuario_principal_id: usuarioActualId,
         google_id: googleUser.googleId,
@@ -279,7 +317,7 @@ export class AuthService {
         refresh_token: googleUser.refreshToken
       });
 
-      //  Aquí se podría triggear sincronización inicial de emails
+      // 🎯 AQUÍ SE PODRÍA TRIGGEAR SINCRONIZACIÓN INICIAL DE EMAILS
 
       this.logger.log(`✅ Cuenta Gmail conectada: ${googleUser.email} para usuario ${usuarioActualId}`);
 
@@ -296,7 +334,7 @@ export class AuthService {
           esta_activa: cuentaGmail.esta_activa,
           emails_count: 0 // Se calculará en sincronización
         },
-        emails_sincronizados: 0 //  Retornar count real después de sincronización
+        emails_sincronizados: 0 // Retornar count real después de sincronización
       };
 
     } catch (error) {
@@ -317,61 +355,66 @@ export class AuthService {
   // 🚪 LOGOUT
   // ================================
 
-a
-async logout(token: string) {
-  await this.databaseService.invalidarSesion(token);
-  return {
-    success: true,
-    mensaje: 'Sesión cerrada exitosamente',
-    sesion_cerrada_id: token
-  };
-}
-async desconectarCuentaGmail(usuarioId: number, cuentaId: number) {
-  // PRIMERO obtener datos de la cuenta
-  const cuenta = await this.databaseService.obtenerCuentaGmailPorId(cuentaId, usuarioId);
-
-  // Verificar si la cuenta existe
-  if (!cuenta) {
-    throw new NotFoundException({
-      codigo: CodigosErrorAuth.USUARIO_NO_ENCONTRADO,
-      mensaje: 'Cuenta Gmail no encontrada'
-    });
+  async logout(token: string) {
+    await this.databaseService.invalidarSesion(token);
+    return {
+      success: true,
+      mensaje: 'Sesión cerrada exitosamente',
+      sesion_cerrada_id: token
+    };
   }
-  
-  // DESPUÉS desconectarla
-  await this.databaseService.desconectarCuentaGmail(cuentaId, usuarioId);
-  
-  // RETORNAR los datos que obtuviste
-  return {
-    success: true,
-    cuenta_desconectada: {
-      id: cuenta.id,
-      email_gmail: cuenta.email_gmail
-    }
-  };
-}
-// ================================
-// LISTAR CUENTAS GMAIL DE USUARIO  
-// ===============================
 
-async listarCuentasGmailUsuario(usuarioId: number): Promise<Array<{
-  id: number;
-  email_gmail: string;
-  nombre_cuenta: string;
-  alias_personalizado?: string;
-  fecha_conexion: string;
-  esta_activa: boolean;
-  emails_count: number;
-}>> {
-  const cuentas = await this.databaseService.obtenerCuentasGmailUsuario(usuarioId);
-  
-  // 🔧 CONVERTIR Date → string
-  return cuentas.map(cuenta => ({
-    ...cuenta,
-    fecha_conexion: cuenta.fecha_conexion.toISOString(), // Date → string
-    ultima_sincronizacion: cuenta.ultima_sincronizacion?.toISOString() // Si existe
-  }));
-}
+  // ================================
+  // 📧 DESCONECTAR CUENTA GMAIL
+  // ================================
+
+  async desconectarCuentaGmail(usuarioId: number, cuentaId: number) {
+    // PRIMERO obtener datos de la cuenta
+    const cuenta = await this.databaseService.obtenerCuentaGmailPorId(cuentaId, usuarioId);
+
+    // Verificar si la cuenta existe
+    if (!cuenta) {
+      throw new NotFoundException({
+        codigo: CodigosErrorAuth.USUARIO_NO_ENCONTRADO,
+        mensaje: 'Cuenta Gmail no encontrada'
+      });
+    }
+    
+    // DESPUÉS desconectarla
+    await this.databaseService.desconectarCuentaGmail(cuentaId, usuarioId);
+    
+    // RETORNAR los datos que obtuviste
+    return {
+      success: true,
+      cuenta_desconectada: {
+        id: cuenta.id,
+        email_gmail: cuenta.email_gmail
+      }
+    };
+  }
+
+  // ================================
+  // 📧 LISTAR CUENTAS GMAIL DE USUARIO  
+  // ================================
+
+  async listarCuentasGmailUsuario(usuarioId: number): Promise<Array<{
+    id: number;
+    email_gmail: string;
+    nombre_cuenta: string;
+    alias_personalizado?: string;
+    fecha_conexion: string;
+    esta_activa: boolean;
+    emails_count: number;
+  }>> {
+    const cuentas = await this.databaseService.obtenerCuentasGmailUsuario(usuarioId);
+    
+    // 🔧 CONVERTIR Date → string
+    return cuentas.map(cuenta => ({
+      ...cuenta,
+      fecha_conexion: cuenta.fecha_conexion.toISOString(), // Date → string
+      ultima_sincronizacion: cuenta.ultima_sincronizacion?.toISOString() // Si existe
+    }));
+  }
 
   // ================================
   // 🔧 MÉTODOS AUXILIARES PRIVADOS
@@ -387,10 +430,10 @@ async listarCuentasGmailUsuario(usuarioId: number): Promise<Array<{
     }
 
     const payload: JwtPayload = {
-  sub: usuario.id,
-  email: usuario.email,
-  nombre: usuario.nombre,
-};
+      sub: usuario.id,
+      email: usuario.email,
+      nombre: usuario.nombre,
+    };
 
     return sign(payload, secret, { expiresIn });
   }
@@ -430,8 +473,7 @@ async listarCuentasGmailUsuario(usuarioId: number): Promise<Array<{
     }
   }
 
-
   async obtenerEstadisticasServicio() {
-  return await this.databaseService.obtenerEstadisticasGenerales();
-}
+    return await this.databaseService.obtenerEstadisticasGenerales();
+  }
 }
