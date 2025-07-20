@@ -2,13 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { google } from 'googleapis';
 import { ConfigService } from '@nestjs/config';
-import { 
-  ValidTokenResponse, 
-  TokenStats, 
-  UsersListResponse, 
-  UserWithToken, 
-  TokenData 
-} from '../auth/interfaces/auth.interfaces';
+import { TokenData, TokenStats, UsersListResponse, UserWithToken, ValidTokenResponse } from 'src/auth/interfaces/auth.interfaces';
+
 
 @Injectable()
 export class TokensService {

@@ -1,162 +1,437 @@
-import { Injectable } from '@nestjs/common';
-import { DatabaseService } from '../database/database.service';
+import { Injectable, ConflictException, UnauthorizedException, NotFoundException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DatabaseService } from '../database/database.service';
+import * as bcrypt from 'bcrypt';
 import { sign } from 'jsonwebtoken';
-
 import {
-  GoogleCallbackUser,
-  GoogleCallbackResult,
-  AccountRow,
-  JWTPayload,
-  DbUser,
+  UsuarioPrincipal,
+  RespuestaLogin,
+  RespuestaRegistro,
+  RespuestaPerfil,
+  RespuestaConexionGmail,
+  GoogleOAuthUser,
+  JwtPayload,
+  CodigosErrorAuth,
 } from './interfaces/auth.interfaces';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly configService: ConfigService
   ) {}
 
-  async handleGoogleCallback(userData: GoogleCallbackUser): Promise<GoogleCallbackResult> {
-    try {
-      console.log('🔵 MS-AUTH - Procesando callback de Google para:', userData.email);
+  // ================================
+  // 📝 REGISTRO DE USUARIO PRINCIPAL
+  // ================================
 
-      // Validar datos de entrada
-      if (!userData.googleId || !userData.email || !userData.name) {
-        throw new Error('Datos de usuario incompletos de Google');
+  async registrarUsuario(email: string, password: string, nombre: string): Promise<RespuestaRegistro>  {
+    try {
+      this.logger.log(`🔵 Registrando usuario: ${email}`);
+
+      // 1️⃣ Verificar si el email ya existe
+      const usuarioExistente = await this.databaseService.buscarUsuarioPorEmail(email);
+      if (usuarioExistente) {
+        this.logger.warn(`🚫 Email ya registrado: ${email}`);
+        throw new ConflictException({
+          codigo: CodigosErrorAuth.EMAIL_YA_EXISTE,
+          mensaje: 'El email ya está registrado'
+        });
       }
 
-      // 1. Guardar usuario OAuth en base de datos
-      const user = await this.databaseService.upsertUser({
-        googleId: userData.googleId,
-        email: userData.email,
-        name: userData.name,
-        accessToken: userData.accessToken,
-        refreshToken: userData.refreshToken,
+      // 2️⃣ Hashear password
+      const saltRounds = parseInt(this.configService.get<string>('BCRYPT_ROUNDS') || '10');
+      const passwordHash = await bcrypt.hash(password, saltRounds);
+
+      // 3️⃣ Crear usuario principal en BD
+      const nuevoUsuario = await this.databaseService.crearUsuarioPrincipal({
+        email: email,
+        nombre: nombre,
+        password: password, // No se usa, solo para interface
+        password_hash: passwordHash
       });
 
-      console.log('✅ MS-AUTH - Usuario OAuth guardado:', user.email);
+      // 4️⃣ Generar JWT
+      const token = this.generarJWT(nuevoUsuario);
 
-      // 2. Guardar tokens OAuth en base de datos
-      await this.databaseService.saveUserTokens(user.id, {
-        access_token: userData.accessToken,
-        refresh_token: userData.refreshToken,
-        expiry_date: Date.now() + 86400000 // 24 horas
+      // 5️⃣ Crear sesión JWT
+      const sesion = await this.databaseService.crearSesion({
+        usuario_principal_id: nuevoUsuario.id,
+        jwt_token: token
       });
 
-      console.log('✅ MS-AUTH - Tokens OAuth guardados para usuario ID:', user.id);
-
-      // 3: Crear o actualizar cuenta vinculada
-      const accountId = await this.ensureAccountExists(user);
-
-      //  4: Generar JWT para el usuario OAuth
-      const jwt = this.generateJWTForOAuthUser(accountId, user);
-
-      //  5: Guardar sesión JWT
-      await this.saveJWTSession(accountId, jwt);
-
-      console.log('✅ MS-AUTH - JWT generado y sesión guardada para:', user.email);
+      this.logger.log(`✅ Usuario registrado exitosamente: ${nuevoUsuario.email}`);
 
       return {
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          google_id: user.google_id
+        success: true,
+        message: 'Usuario registrado exitosamente',
+        usuario: {
+          id: nuevoUsuario.id,
+          email: nuevoUsuario.email,
+          nombre: nuevoUsuario.nombre,
+          fecha_registro: nuevoUsuario.fecha_registro,
+          estado: nuevoUsuario.estado,
+          email_verificado: nuevoUsuario.email_verificado
         },
-        jwt: jwt,
-        accountId: accountId,
-        status: 'success',
+        token,
+        sesion_id: sesion.id
       };
+
     } catch (error) {
-      console.error('❌ MS-AUTH - Error handling Google callback:', error);
-      throw error;
+      this.logger.error(`❌ Error registrando usuario:`, error);
+      
+      if (error instanceof ConflictException) {
+        throw error;
+      }
+      
+      throw new ConflictException({
+        codigo: CodigosErrorAuth.EMAIL_YA_EXISTE,
+        mensaje: 'Error interno al registrar usuario'
+      });
     }
   }
 
-  //  Asegurar que existe cuenta vinculada
-  private async ensureAccountExists(user: DbUser): Promise<number> {
-    try {
-      // Buscar si ya existe una cuenta con este email
-      const existingAccountQuery = `
-        SELECT id FROM accounts WHERE email = $1
-      `;
-      const existingResult = await this.databaseService.query<AccountRow>(existingAccountQuery, [user.email]);
+  // ================================
+  // 🔑 LOGIN DE USUARIO PRINCIPAL
+  // ================================
 
-      if (existingResult.rows.length > 0) {
-        const accountId = existingResult.rows[0].id;
-        console.log(`✅ MS-AUTH - Cuenta existente encontrada: ${accountId} para ${user.email}`);
-        return accountId;
+  async loginUsuario(email: string, password: string): Promise<RespuestaLogin>{
+    try {
+      this.logger.log(`🔵 Intento de login: ${email}`);
+
+      // 1️⃣ Buscar usuario por email
+      const usuario = await this.databaseService.buscarUsuarioPorEmail(email);
+      if (!usuario) {
+        this.logger.warn(`🚫 Usuario no encontrado: ${email}`);
+        throw new UnauthorizedException({
+          codigo: CodigosErrorAuth.CREDENCIALES_INVALIDAS,
+          mensaje: 'Credenciales inválidas'
+        });
       }
 
-      // Si no existe, crear nueva cuenta vinculada
-      const createAccountQuery = `
-        INSERT INTO accounts (email, password_hash, name, is_email_verified, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, NOW(), NOW())
-        RETURNING id
-      `;
+      // 2️⃣ Verificar estado del usuario
+      if (usuario.estado !== 'activo') {
+        this.logger.warn(`🚫 Usuario inactivo: ${email} - Estado: ${usuario.estado}`);
+        throw new UnauthorizedException({
+          codigo: CodigosErrorAuth.USUARIO_NO_ENCONTRADO,
+          mensaje: 'Usuario inactivo'
+        });
+      }
 
-      // Para cuentas OAuth, no hay password (usamos hash dummy)
-      const dummyHash = '$2b$10$dummyHashForOAuthAccounts';
-      
-      const createResult = await this.databaseService.query<AccountRow>(createAccountQuery, [
-        user.email,
-        dummyHash,
-        user.name,
-        true // Email verificado por Google
-      ]);
+      // 3️⃣ Verificar password
+      if (!usuario.password_hash) {
+        this.logger.warn(`🚫 Usuario sin password hash: ${email}`);
+        throw new UnauthorizedException({
+          codigo: CodigosErrorAuth.CREDENCIALES_INVALIDAS,
+          mensaje: 'Credenciales inválidas'
+        });
+      }
 
-      const newAccountId = createResult.rows[0].id;
-      console.log(`✅ MS-AUTH - Nueva cuenta creada: ${newAccountId} para ${user.email}`);
-      
-      return newAccountId;
+      const passwordValido = await bcrypt.compare(password, usuario.password_hash);
+      if (!passwordValido) {
+        this.logger.warn(`🚫 Password inválido para: ${email}`);
+        throw new UnauthorizedException({
+          codigo: CodigosErrorAuth.CREDENCIALES_INVALIDAS,
+          mensaje: 'Credenciales inválidas'
+        });
+      }
+
+      // 4️⃣ Generar JWT
+      const token = this.generarJWT(usuario);
+
+      // 5️⃣ Crear nueva sesión
+      const sesion = await this.databaseService.crearSesion({
+        usuario_principal_id: usuario.id,
+        jwt_token: token
+      });
+
+      // 6️⃣ Actualizar última actividad
+      await this.databaseService.actualizarUltimaActividad(usuario.id);
+
+      this.logger.log(`✅ Login exitoso: ${usuario.email}`);
+
+      return {
+        success: true,
+        message: 'Login exitoso',
+        usuario: {
+          id: usuario.id,
+          email: usuario.email,
+          nombre: usuario.nombre,
+          fecha_registro: usuario.fecha_registro,
+          estado: usuario.estado,
+          email_verificado: usuario.email_verificado
+        },
+        token,
+        sesion_id: sesion.id
+      };
 
     } catch (error) {
-      console.error('❌ MS-AUTH - Error ensuring account exists:', error);
-      throw error;
+      this.logger.error(`❌ Error en login:`, error);
+      
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      
+      throw new UnauthorizedException({
+        codigo: CodigosErrorAuth.CREDENCIALES_INVALIDAS,
+        mensaje: 'Error interno en autenticación'
+      });
     }
   }
 
-  //  Generar JWT para usuario OAuth
-  private generateJWTForOAuthUser(accountId: number, user: DbUser): string {
+  // ================================
+  // 👤 OBTENER PERFIL COMPLETO
+  // ================================
+
+  async obtenerPerfil(usuarioId: number): Promise<RespuestaPerfil> {
+    try {
+      this.logger.log(`🔵 Obteniendo perfil para usuario ${usuarioId}`);
+
+      // 1️⃣ Obtener datos del usuario principal
+      const usuario = await this.databaseService.buscarUsuarioPorId(usuarioId);
+      if (!usuario) {
+        throw new NotFoundException({
+          codigo: CodigosErrorAuth.USUARIO_NO_ENCONTRADO,
+          mensaje: 'Usuario no encontrado'
+        });
+      }
+
+      // 2️⃣ Obtener cuentas Gmail asociadas
+      const cuentasGmail = await this.databaseService.obtenerCuentasGmailUsuario(usuarioId);
+
+      // 3️⃣ Obtener estadísticas del usuario
+      const estadisticas = await this.databaseService.obtenerEstadisticasUsuario(usuarioId);
+
+      // 4️⃣ Obtener sesiones activas (simplificado por ahora)
+      const sesionesActivas = []; // Implementar obtener sesiones activas
+
+      this.logger.log(`✅ Perfil obtenido para usuario ${usuarioId}`);
+
+      return {
+        success: true,
+        usuario: {
+          id: usuario.id,
+          email: usuario.email,
+          nombre: usuario.nombre,
+          fecha_registro: usuario.fecha_registro,
+          estado: usuario.estado,
+          email_verificado: usuario.email_verificado
+        },
+        cuentas_gmail: cuentasGmail.map(cuenta => ({
+          ...cuenta,
+          ultima_sincronizacion: cuenta.ultima_sincronizacion
+        })),
+        sesiones_activas: sesionesActivas,
+        estadisticas: {
+          ...estadisticas,
+          ultima_sincronizacion: estadisticas.ultima_sincronizacion
+        }
+      };
+
+    } catch (error) {
+      this.logger.error(`❌ Error obteniendo perfil:`, error);
+      
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      
+      throw new NotFoundException({
+        codigo: CodigosErrorAuth.USUARIO_NO_ENCONTRADO,
+        mensaje: 'Error obteniendo perfil de usuario'
+      });
+    }
+  }
+
+  // ================================
+  // 🔐 MANEJAR CALLBACK DE GOOGLE OAUTH
+  // ================================
+
+  async manejarCallbackGoogle(googleUser: GoogleOAuthUser, usuarioActualId?: number): Promise<RespuestaConexionGmail> {
+    try {
+      this.logger.log(`🔵 Procesando callback Google para: ${googleUser.email}`);
+
+      // Si no hay usuario actual, es un error (debería estar autenticado)
+      if (!usuarioActualId) {
+        throw new UnauthorizedException({
+          codigo: CodigosErrorAuth.PERMISOS_INSUFICIENTES,
+          mensaje: 'Usuario debe estar autenticado para conectar cuenta Gmail'
+        });
+      }
+
+      // Verificar que el usuario principal existe
+      const usuarioPrincipal = await this.databaseService.buscarUsuarioPorId(usuarioActualId);
+      if (!usuarioPrincipal) {
+        throw new NotFoundException({
+          codigo: CodigosErrorAuth.USUARIO_NO_ENCONTRADO,
+          mensaje: 'Usuario principal no encontrado'
+        });
+      }
+
+      // Conectar cuenta Gmail
+      const cuentaGmail = await this.databaseService.conectarCuentaGmail({
+        usuario_principal_id: usuarioActualId,
+        google_id: googleUser.googleId,
+        email: googleUser.email,
+        nombre: googleUser.name,
+        access_token: googleUser.accessToken,
+        refresh_token: googleUser.refreshToken
+      });
+
+      //  Aquí se podría triggear sincronización inicial de emails
+
+      this.logger.log(`✅ Cuenta Gmail conectada: ${googleUser.email} para usuario ${usuarioActualId}`);
+
+      return {
+        success: true,
+        message: 'Cuenta Gmail conectada exitosamente',
+        cuenta_gmail: {
+          id: cuentaGmail.id,
+          email_gmail: cuentaGmail.email_gmail,
+          nombre_cuenta: cuentaGmail.nombre_cuenta,
+          alias_personalizado: cuentaGmail.alias_personalizado,
+          fecha_conexion: cuentaGmail.fecha_conexion,
+          ultima_sincronizacion: cuentaGmail.ultima_sincronizacion,
+          esta_activa: cuentaGmail.esta_activa,
+          emails_count: 0 // Se calculará en sincronización
+        },
+        emails_sincronizados: 0 //  Retornar count real después de sincronización
+      };
+
+    } catch (error) {
+      this.logger.error(`❌ Error en callback Google:`, error);
+      
+      if (error instanceof UnauthorizedException || error instanceof NotFoundException) {
+        throw error;
+      }
+      
+      throw new UnauthorizedException({
+        codigo: CodigosErrorAuth.GOOGLE_OAUTH_ERROR,
+        mensaje: 'Error conectando cuenta de Google'
+      });
+    }
+  }
+
+  // ================================
+  // 🚪 LOGOUT
+  // ================================
+
+a
+async logout(token: string) {
+  await this.databaseService.invalidarSesion(token);
+  return {
+    success: true,
+    mensaje: 'Sesión cerrada exitosamente',
+    sesion_cerrada_id: token
+  };
+}
+async desconectarCuentaGmail(usuarioId: number, cuentaId: number) {
+  // PRIMERO obtener datos de la cuenta
+  const cuenta = await this.databaseService.obtenerCuentaGmailPorId(cuentaId, usuarioId);
+
+  // Verificar si la cuenta existe
+  if (!cuenta) {
+    throw new NotFoundException({
+      codigo: CodigosErrorAuth.USUARIO_NO_ENCONTRADO,
+      mensaje: 'Cuenta Gmail no encontrada'
+    });
+  }
+  
+  // DESPUÉS desconectarla
+  await this.databaseService.desconectarCuentaGmail(cuentaId, usuarioId);
+  
+  // RETORNAR los datos que obtuviste
+  return {
+    success: true,
+    cuenta_desconectada: {
+      id: cuenta.id,
+      email_gmail: cuenta.email_gmail
+    }
+  };
+}
+// ================================
+// LISTAR CUENTAS GMAIL DE USUARIO  
+// ===============================
+
+async listarCuentasGmailUsuario(usuarioId: number): Promise<Array<{
+  id: number;
+  email_gmail: string;
+  nombre_cuenta: string;
+  alias_personalizado?: string;
+  fecha_conexion: string;
+  esta_activa: boolean;
+  emails_count: number;
+}>> {
+  const cuentas = await this.databaseService.obtenerCuentasGmailUsuario(usuarioId);
+  
+  // 🔧 CONVERTIR Date → string
+  return cuentas.map(cuenta => ({
+    ...cuenta,
+    fecha_conexion: cuenta.fecha_conexion.toISOString(), // Date → string
+    ultima_sincronizacion: cuenta.ultima_sincronizacion?.toISOString() // Si existe
+  }));
+}
+
+  // ================================
+  // 🔧 MÉTODOS AUXILIARES PRIVADOS
+  // ================================
+
+  private generarJWT(usuario: UsuarioPrincipal): string {
     const secret = this.configService.get<string>('JWT_SECRET');
     const expiresIn = this.configService.get<string>('JWT_EXPIRATION') || '24h';
 
     if (!secret) {
+      this.logger.error('❌ JWT_SECRET no configurado');
       throw new Error('JWT_SECRET no está configurado en las variables de entorno');
     }
 
-    const payload: JWTPayload = {
-      userId: accountId, //  Usar accountId, no user.id
-      email: user.email,
-      name: user.name
-    };
+    const payload: JwtPayload = {
+  sub: usuario.id,
+  email: usuario.email,
+  nombre: usuario.nombre,
+};
 
-    console.log(`🔑 MS-AUTH - Generando JWT para accountId: ${accountId}`);
-    
     return sign(payload, secret, { expiresIn });
   }
 
-  // Guardar sesión JWT
-  private async saveJWTSession(accountId: number, jwt: string): Promise<void> {
+  // ================================
+  // 🔧 HEALTH CHECK
+  // ================================
+
+  async healthCheck() {
     try {
-      // JWT expira en 24h por defecto
-      const expiresAt = new Date();
-      expiresAt.setHours(expiresAt.getHours() + 24);
+      const dbHealth = await this.databaseService.healthCheck();
+      const estadisticasGenerales = await this.databaseService.obtenerEstadisticasGenerales();
 
-      const query = `
-        INSERT INTO sessions (account_id, jwt_token, expires_at, is_active, created_at)
-        VALUES ($1, $2, $3, TRUE, NOW())
-      `;
-
-      await this.databaseService.query(query, [accountId, jwt, expiresAt]);
-      
-      console.log(`✅ MS-AUTH - Sesión JWT guardada para accountId: ${accountId}`);
+      return {
+        service: 'ms-yourdashboard-auth',
+        status: dbHealth.connected ? 'OK' : 'ERROR',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        database: dbHealth,
+        estadisticas: estadisticasGenerales
+      };
 
     } catch (error) {
-      console.error('❌ MS-AUTH - Error saving JWT session:', error);
-      throw error;
+      this.logger.error('❌ Error en health check:', error);
+      return {
+        service: 'ms-yourdashboard-auth',
+        status: 'ERROR',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        database: { connected: false, query_time_ms: 0 },
+        estadisticas: {
+          usuarios_activos: 0,
+          cuentas_gmail_conectadas: 0,
+          sesiones_activas: 0
+        }
+      };
     }
   }
+
+
+  async obtenerEstadisticasServicio() {
+  return await this.databaseService.obtenerEstadisticasGenerales();
+}
 }

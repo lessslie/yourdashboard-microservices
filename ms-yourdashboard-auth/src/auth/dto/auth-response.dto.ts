@@ -1,6 +1,45 @@
 // src/auth/dto/auth-response.dto.ts
 import { ApiProperty } from "@nestjs/swagger";
 
+export class UserDto {
+  @ApiProperty({
+    description: 'ID único del usuario',
+    example: 1
+  })
+  id: number;
+
+  @ApiProperty({
+    description: 'Email del usuario',
+    example: 'usuario@example.com'
+  })
+  email: string;
+
+  @ApiProperty({
+    description: 'Nombre completo del usuario',
+    example: 'Juan Pérez'
+  })
+  name: string;
+
+  @ApiProperty({
+    description: 'Si el email está verificado',
+    example: true
+  })
+  isEmailVerified: boolean;
+
+  @ApiProperty({
+    description: 'Fecha de registro',
+    example: '2024-01-15T10:30:00Z'
+  })
+  createdAt: string;
+
+  @ApiProperty({
+    description: 'URL de foto de perfil',
+    example: null,
+    nullable: true
+  })
+  profilePicture: string | null;
+}
+
 export class UsuarioPrincipalResponseDto {
   @ApiProperty({
     description: 'ID único del usuario principal',
@@ -10,13 +49,13 @@ export class UsuarioPrincipalResponseDto {
 
   @ApiProperty({
     description: 'Email del usuario principal',
-    example: 'alonso@example.com'
+    example: 'usuario@example.com'
   })
   email: string;
 
   @ApiProperty({
     description: 'Nombre completo del usuario',
-    example: 'Alonso González'
+    example: 'Juan Pérez'
   })
   nombre: string;
 
@@ -54,20 +93,14 @@ export class AuthResponseDto {
   message: string;
 
   @ApiProperty({
-    description: 'Datos del usuario autenticado',
-    type: UsuarioPrincipalResponseDto
+    description: 'Datos del usuario autenticado (formato frontend)',
+    type: UserDto
   })
-  usuario: UsuarioPrincipalResponseDto;
+  user: UserDto;
 
   @ApiProperty({
     description: 'Token JWT para autenticación',
     example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
   })
   token: string;
-
-  @ApiProperty({
-    description: 'ID de la sesión creada',
-    example: 1
-  })
-  sesion_id: number;
 }

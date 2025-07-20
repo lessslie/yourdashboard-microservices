@@ -1,27 +1,9 @@
+// ms-yourdashboard-auth/src/auth/google.strategy.ts
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
-import { Strategy, VerifyCallback, Profile } from 'passport-google-oauth20';
-
-interface GoogleProfile extends Profile {
-  id: string;
-  name: {
-    familyName: string;
-    givenName: string;
-  };
-  emails: Array<{
-    value: string;
-    verified: boolean;
-  }>;
-}
-
-interface GoogleUser {
-  googleId: string;
-  email: string;
-  name: string;
-  accessToken: string;
-  refreshToken: string;
-}
+import { Strategy, VerifyCallback } from 'passport-google-oauth20';
+import { GoogleOAuthUser, GoogleProfile } from './interfaces/auth.interfaces';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
@@ -44,34 +26,61 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     });
   }
 
-  validate(
+  /**
+   * 🔐 Validar usuario de Google OAuth
+   * Este método es llamado automáticamente por Passport
+   */validate(
   accessToken: string,
   refreshToken: string,
   profile: GoogleProfile,
   done: VerifyCallback,
 ): void {
   try {
+    console.log('🔐 Validando usuario de Google:', profile.emails?.[0]?.value);
+
     const { id, name, emails } = profile;
 
-    // Validar que tengamos la información necesaria
-    if (!id || !name || !emails || emails.length === 0) {
-      return done(new Error('Información incompleta del perfil de Google'), undefined);
+    // ✅ VALIDACIONES CON OPTIONAL CHAINING
+    if (!id) {
+      console.error('❌ Google Profile sin ID');
+      return done(new Error('Google Profile sin ID válido'), undefined);
     }
 
-    const user: GoogleUser = {
-      googleId: id,
-      email: emails[0].value,
-      name: `${name.givenName} ${name.familyName}`,
-      accessToken,
-      refreshToken,
-    };
+    if (!name?.givenName || !name?.familyName) {  // ✅ Más limpio
+      console.error('❌ Google Profile sin nombre completo');
+      return done(new Error('Google Profile sin nombre completo'), undefined);
+    }
 
-    console.log('✅ Usuario autenticado:', user.email);
-    done(null, user);
+    if (!emails?.length) {  // ✅ También más limpio
+      console.error('❌ Google Profile sin email');
+      return done(new Error('Google Profile sin email válido'), undefined);
+    }
 
-  } catch (error) {
-    console.error('❌ Error validando usuario de Google:', error);
-    done(error, undefined);
+    if (!emails[0]?.verified) {  // ✅ Más seguro
+      console.warn('⚠️ Email de Google no verificado');
+    }
+      // ✅ CREAR USUARIO USANDO INTERFACE CORRECTA
+      const googleUser: GoogleOAuthUser = {
+        googleId: id,
+        email: emails[0].value,
+        name: `${name.givenName} ${name.familyName}`.trim(),
+        accessToken,
+        refreshToken: refreshToken || '' // Asegurar que no sea null
+      };
+
+      // ✅ VALIDACIONES ADICIONALES
+      if (!googleUser.email.includes('@')) {
+        console.error('❌ Email inválido de Google');
+        return done(new Error('Email inválido de Google'), undefined);
+      }
+
+      console.log('✅ Usuario Google validado exitosamente:', googleUser.email);
+      done(null, googleUser);
+
+    } catch (error) {
+      console.error('❌ Error validando usuario de Google:', error);
+      done(error as Error, undefined);
+    }
   }
 }
-}
+
