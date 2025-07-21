@@ -60,10 +60,12 @@ CREATE TABLE emails_sincronizados (
   asunto TEXT,
   remitente_email VARCHAR(255),
   remitente_nombre VARCHAR(255),
+  destinatario_email VARCHAR(255),
   fecha_recibido TIMESTAMP WITHOUT TIME ZONE,
   esta_leido BOOLEAN DEFAULT FALSE,
   tiene_adjuntos BOOLEAN DEFAULT FALSE,
   etiquetas_gmail TEXT[], -- Array de labels de Gmail
+  tamano_bytes INTEGER, 
   fecha_sincronizado TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
   -- Constraint: Un mensaje de Gmail no se puede duplicar por cuenta
   UNIQUE(cuenta_gmail_id, gmail_message_id)
@@ -206,25 +208,9 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- =====================================
--- PASO 6: DATOS DE PRUEBA
--- =====================================
-
--- Usuario principal de prueba
--- Contraseña: "password123" (hasheada con bcrypt)
-INSERT INTO usuarios_principales (email, password_hash, nombre, email_verificado) VALUES 
-('alonso@example.com', '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Alonso González', TRUE),
-('admin@test.com', '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Admin Test', TRUE);
-
--- Cuentas Gmail asociadas de ejemplo (para usuario Alonso ID=1)
-INSERT INTO cuentas_gmail_asociadas (
-    usuario_principal_id, email_gmail, nombre_cuenta, google_id, alias_personalizado
-) VALUES 
-(1, 'alonso@gmail.com', 'Alonso González', 'google_123456', 'Gmail Personal'),
-(1, 'alonso.empresa@gmail.com', 'Alonso González Empresa', 'google_789012', 'Gmail Trabajo'),
-(1, 'alonsito@gmail.com', 'Alonsito González', 'google_345678', 'Gmail Secundario');
 
 -- =====================================
--- PASO 7: VERIFICACIÓN
+-- PASO 6: VERIFICACIÓN
 -- =====================================
 
 -- Mostrar todas las tablas
@@ -243,7 +229,7 @@ SELECT * FROM obtener_cuentas_gmail_usuario(1);
 \d sesiones_jwt
 
 -- =====================================
--- PASO 8: COMANDOS ÚTILES
+-- PASO 7: COMANDOS ÚTILES
 -- =====================================
 
 -- Limpiar sesiones expiradas
@@ -259,7 +245,118 @@ SELECT * FROM obtener_cuentas_gmail_usuario(1);
 -- JOIN information_schema.key_column_usage AS kcu ON tc.constraint_name = kcu.constraint_name
 -- JOIN information_schema.constraint_column_usage AS ccu ON ccu.constraint_name = tc.constraint_name
 -- WHERE constraint_type = 'FOREIGN KEY';
+-- =====================================
+-- OPTIMIZACIONES PARA METADATA DE EMAILS
+-- =====================================
 
+-- 🔍 Índices optimizados para búsqueda rápida
+
+-- Índice para búsqueda por texto (asunto, remitente, destinatario)
+CREATE INDEX idx_emails_search_text 
+ON emails_sincronizados 
+USING gin(to_tsvector('spanish', 
+  COALESCE(asunto, '') || ' ' || 
+  COALESCE(remitente_email, '') || ' ' || 
+  COALESCE(remitente_nombre, '') || ' ' || 
+  COALESCE(destinatario_email, '')
+));
+
+-- Índice compuesto para filtros comunes
+CREATE INDEX idx_emails_filters 
+ON emails_sincronizados(cuenta_gmail_id, esta_leido, tiene_adjuntos, fecha_recibido DESC);
+
+-- Índice para búsqueda por remitente específico
+CREATE INDEX idx_emails_remitente_specific 
+ON emails_sincronizados(cuenta_gmail_id, remitente_email) 
+WHERE remitente_email IS NOT NULL;
+
+-- Índice para emails no leídos (consulta frecuente)
+CREATE INDEX idx_emails_unread 
+ON emails_sincronizados(cuenta_gmail_id, fecha_recibido DESC) 
+WHERE esta_leido = FALSE;
+
+-- =====================================
+-- 📊 FUNCIONES DE ESTADÍSTICAS Y BÚSQUEDA
+-- =====================================
+
+-- Función para estadísticas rápidas por cuenta
+CREATE OR REPLACE FUNCTION obtener_stats_emails_cuenta(p_cuenta_id INTEGER)
+RETURNS TABLE (
+    total_emails BIGINT,
+    emails_no_leidos BIGINT,
+    emails_leidos BIGINT,
+    emails_con_adjuntos BIGINT,
+    ultimo_email_fecha TIMESTAMP,
+    remitentes_frecuentes JSON
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        COUNT(*) as total_emails,
+        COUNT(CASE WHEN esta_leido = FALSE THEN 1 END) as emails_no_leidos,
+        COUNT(CASE WHEN esta_leido = TRUE THEN 1 END) as emails_leidos,
+        COUNT(CASE WHEN tiene_adjuntos = TRUE THEN 1 END) as emails_con_adjuntos,
+        MAX(fecha_recibido) as ultimo_email_fecha,
+        (
+            SELECT json_agg(
+                json_build_object(
+                    'email', remitente_email,
+                    'nombre', remitente_nombre,
+                    'count', count
+                )
+            )
+            FROM (
+                SELECT 
+                    remitente_email,
+                    remitente_nombre,
+                    COUNT(*) as count
+                FROM emails_sincronizados 
+                WHERE cuenta_gmail_id = p_cuenta_id 
+                AND remitente_email IS NOT NULL
+                GROUP BY remitente_email, remitente_nombre
+                ORDER BY count DESC
+                LIMIT 5
+            ) top_remitentes
+        ) as remitentes_frecuentes
+    FROM emails_sincronizados 
+    WHERE cuenta_gmail_id = p_cuenta_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Función para limpieza automática (GDPR compliance)
+CREATE OR REPLACE FUNCTION limpiar_emails_viejos(
+    p_dias_antiguedad INTEGER DEFAULT 90
+)
+RETURNS TABLE (
+    cuenta_gmail_id INTEGER,
+    emails_eliminados BIGINT
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH deleted AS (
+        DELETE FROM emails_sincronizados 
+        WHERE fecha_recibido < NOW() - INTERVAL '1 day' * p_dias_antiguedad
+        RETURNING cuenta_gmail_id
+    )
+    SELECT 
+        d.cuenta_gmail_id,
+        COUNT(*) as emails_eliminados
+    FROM deleted d
+    GROUP BY d.cuenta_gmail_id;
+    
+    RAISE NOTICE 'Limpieza completada para emails anteriores a % días', p_dias_antiguedad;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =====================================
+-- 📝 DOCUMENTACIÓN
+-- =====================================
+
+COMMENT ON TABLE emails_sincronizados IS 'Cache de metadata de emails - NO contiene contenido sensible';
+COMMENT ON COLUMN emails_sincronizados.destinatario_email IS 'Email del destinatario principal (primer TO)';
+COMMENT ON COLUMN emails_sincronizados.tamano_bytes IS 'Tamaño del email en bytes (incluye adjuntos)';
+COMMENT ON FUNCTION obtener_stats_emails_cuenta IS 'Estadísticas rápidas por cuenta Gmail';
+COMMENT ON FUNCTION limpiar_emails_viejos IS 'Limpieza automática de emails antiguos (GDPR compliance)';
 -- =====================================
 -- ✅ MENSAJE DE ÉXITO
 -- =====================================
