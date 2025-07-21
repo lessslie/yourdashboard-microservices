@@ -6,15 +6,19 @@ import ListEmails from "./ListEmails";
 import { useAuth } from "../Auth/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { MS_AUTH_URL } from "../Auth/lib/auth";
+import { handleConnectService } from "./lib/emails";
 
 const { Footer } = Layout;
 
 const ViewEmails = () => {
   const router = useRouter();
-  const { remuveToken } = useAuth();
+  const { remuveToken, token } = useAuth();
 
-  const conectEmail = () => {
-    window.location.href = `${MS_AUTH_URL}/auth/google`;
+  const conectEmail = async () => {
+    const response = await handleConnectService(token);
+    console.log("response", response);
+
+    //  window.location.href = `${MS_AUTH_URL}/auth/google`;
   };
   return (
     <Layout

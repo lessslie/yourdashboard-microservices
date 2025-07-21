@@ -57,29 +57,36 @@ const ListEmails = () => {
   console.log("list.emails", list.emails);
 
   useEffect(() => {
-    setInitLoading(true);
     const fetchEmails = async () => {
-      const emails = await getEmails(token, userData.id || "", page, limit);
-      const dataEmails = emails.data;
-      setList({
-        emails: dataEmails.emails.map(
-          (email: IEmailBack): IEmail => ({
-            id: email.id,
-            name: email.fromName,
-            from: email.fromEmail,
-            subject: email.subject,
-            date: email.receivedDate,
-            read: email.isRead,
-          })
-        ),
-        hasNextPage: dataEmails.hasNextPage,
-        hasPreviousPage: dataEmails.hasPreviousPage,
-        limit: dataEmails.limit,
-        page: dataEmails.page,
-        total: dataEmails.total,
-        totalPages: dataEmails.totalPages,
-      });
-      setInitLoading(false);
+      try {
+        setInitLoading(true);
+        const emails = await getEmails(token, userData.id || "", page, limit);
+        console.log("emails", userData.id);
+
+        const dataEmails = emails.data;
+        setList({
+          emails: dataEmails.emails.map(
+            (email: IEmailBack): IEmail => ({
+              id: email.id,
+              name: email.fromName,
+              from: email.fromEmail,
+              subject: email.subject,
+              date: email.receivedDate,
+              read: email.isRead,
+            })
+          ),
+          hasNextPage: dataEmails.hasNextPage,
+          hasPreviousPage: dataEmails.hasPreviousPage,
+          limit: dataEmails.limit,
+          page: dataEmails.page,
+          total: dataEmails.total,
+          totalPages: dataEmails.totalPages,
+        });
+      } catch (error) {
+        console.log(error);
+      } finally {
+        setInitLoading(false);
+      }
     };
     fetchEmails();
   }, [token, page, userData.id, limit]);
@@ -116,16 +123,18 @@ const ListEmails = () => {
             </List.Item>
           )}
         />
-        <Pagination
-          total={list.total}
-          showTotal={(total) => `Total ${total} emails`}
-          defaultCurrent={page}
-          pageSize={limit}
-          onChange={(page, limit) => {
-            setPage(page);
-            setLimit(limit);
-          }}
-        />
+        {list.totalPages > 1 && (
+          <Pagination
+            total={list.total}
+            showTotal={(total) => `Total ${total} emails`}
+            defaultCurrent={page}
+            pageSize={limit}
+            onChange={(page, limit) => {
+              setPage(page);
+              setLimit(limit);
+            }}
+          />
+        )}
       </div>
     </Content>
   );

@@ -39,7 +39,9 @@ export const useUserData = () => {
     if (token) {
       const getUser = async () => {
         const userData = await getUserData(token);
-        setUserData(userData.user);
+        console.log("userData", userData);
+
+        setUserData(userData.usuario);
       };
       getUser();
     }
