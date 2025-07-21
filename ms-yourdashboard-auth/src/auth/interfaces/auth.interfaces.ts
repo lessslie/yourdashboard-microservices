@@ -469,6 +469,7 @@ export interface ValidTokenResponse {
     id: string;
     email: string;
     name: string;
+    cuentaGmailId: string;
   };
   renewed: boolean;
 }

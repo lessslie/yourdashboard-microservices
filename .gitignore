@@ -24,3 +24,7 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+
+# Frontend (solo para testing local)
+fe-yourdashboard/

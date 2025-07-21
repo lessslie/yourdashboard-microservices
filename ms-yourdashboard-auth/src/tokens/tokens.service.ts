@@ -12,12 +12,12 @@ export class TokensService {
   ) {}
 
   /**
-   * 🔑 Obtener access token válido de un usuario
-   * NUEVA ARQUITECTURA: Busca en cuentas_gmail_asociadas
+   * 🔑 Obtener access token válido de un usuario PRINCIPAL
+   * LEGACY: Busca en cuentas_gmail_asociadas del usuario principal
    */
   async getValidToken(userId: string): Promise<ValidTokenResponse> {
     try {
-      console.log(`🔵 MS-AUTH - Solicitando token para usuario: ${userId}`);
+      console.log(`🔵 MS-AUTH - Solicitando token para usuario PRINCIPAL: ${userId}`);
 
       // Validar que userId sea un número
       const userIdNum = parseInt(userId, 10);
@@ -25,9 +25,10 @@ export class TokensService {
         throw new NotFoundException(`ID de usuario inválido: ${userId}`);
       }
 
-      // 🎯 NUEVA QUERY - Buscar en cuentas_gmail_asociadas
+      // 🎯 BUSCAR PRIMERA CUENTA GMAIL ACTIVA DEL USUARIO PRINCIPAL
       const query = `
         SELECT 
+          cga.id as cuenta_gmail_id,
           cga.access_token, 
           cga.refresh_token, 
           cga.token_expira_en as expires_at, 
@@ -44,6 +45,7 @@ export class TokensService {
       `;
 
       const result = await this.databaseService.query<{
+        cuenta_gmail_id: number;
         access_token: string;
         refresh_token: string;
         expires_at: Date;
@@ -57,7 +59,7 @@ export class TokensService {
         throw new NotFoundException(`Usuario ${userId} no tiene cuentas Gmail conectadas`);
       }
 
-      const { access_token, refresh_token, expires_at, email, name } = result.rows[0];
+      const { cuenta_gmail_id, access_token, refresh_token, expires_at, email, name } = result.rows[0];
 
       // Verificar si el token expiró
       if (expires_at && new Date() >= new Date(expires_at)) {
@@ -73,22 +75,125 @@ export class TokensService {
         return {
           success: true,
           accessToken: newAccessToken,
-          user: { id: userId, email, name },
+          user: { 
+            id: userId, 
+            email, 
+            name,
+            cuentaGmailId: cuenta_gmail_id.toString() // 🎯 AGREGAMOS CUENTA GMAIL ID
+          },
           renewed: true
         };
       }
 
-      console.log(`✅ MS-AUTH - Token válido para ${email} (usuario ${userId})`);
+      console.log(`✅ MS-AUTH - Token válido para ${email} (usuario ${userId}, cuenta Gmail ${cuenta_gmail_id})`);
       
       return {
         success: true,
         accessToken: access_token,
-        user: { id: userId, email, name },
+        user: { 
+          id: userId, 
+          email, 
+          name,
+          cuentaGmailId: cuenta_gmail_id.toString() // 🎯 AGREGAMOS CUENTA GMAIL ID
+        },
         renewed: false
       };
 
     } catch (error) {
       console.error(`❌ MS-AUTH - Error obteniendo token para usuario ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 🔑 🎯 NUEVO: Obtener access token por CUENTA GMAIL específica
+   */
+  async getValidTokenByGmailAccount(cuentaGmailId: string): Promise<ValidTokenResponse> {
+    try {
+      console.log(`🔵 MS-AUTH - Solicitando token para cuenta Gmail: ${cuentaGmailId}`);
+
+      // Validar que cuentaGmailId sea un número
+      const cuentaIdNum = parseInt(cuentaGmailId, 10);
+      if (isNaN(cuentaIdNum)) {
+        throw new NotFoundException(`ID de cuenta Gmail inválido: ${cuentaGmailId}`);
+      }
+
+      // 🎯 BUSCAR CUENTA GMAIL ESPECÍFICA
+      const query = `
+        SELECT 
+          cga.id as cuenta_gmail_id,
+          cga.access_token, 
+          cga.refresh_token, 
+          cga.token_expira_en as expires_at, 
+          cga.email_gmail as email, 
+          cga.nombre_cuenta as name,
+          cga.usuario_principal_id,
+          up.email as usuario_principal_email,
+          up.nombre as usuario_principal_nombre
+        FROM cuentas_gmail_asociadas cga
+        JOIN usuarios_principales up ON cga.usuario_principal_id = up.id
+        WHERE cga.id = $1 
+        AND cga.esta_activa = TRUE
+      `;
+
+      const result = await this.databaseService.query<{
+        cuenta_gmail_id: number;
+        access_token: string;
+        refresh_token: string;
+        expires_at: Date;
+        email: string;
+        name: string;
+        usuario_principal_id: number;
+        usuario_principal_email: string;
+        usuario_principal_nombre: string;
+      }>(query, [cuentaIdNum]);
+      
+      if (result.rows.length === 0) {
+        throw new NotFoundException(`Cuenta Gmail ${cuentaGmailId} no encontrada o inactiva`);
+      }
+
+      const { cuenta_gmail_id, access_token, refresh_token, expires_at, email, name, usuario_principal_id } = result.rows[0];
+
+      // Verificar si el token expiró
+      if (expires_at && new Date() >= new Date(expires_at)) {
+        console.log(`🔄 MS-AUTH - Token expirado para cuenta Gmail ${email}, renovando...`);
+        
+        if (!refresh_token) {
+          throw new NotFoundException(`Token expirado y no hay refresh_token para cuenta Gmail ${cuentaGmailId}`);
+        }
+
+        // Renovar token usando la cuenta Gmail específica
+        const newAccessToken = await this.refreshAccessToken(email, refresh_token);
+        
+        return {
+          success: true,
+          accessToken: newAccessToken,
+          user: { 
+            id: usuario_principal_id.toString(), // Usuario principal que posee la cuenta
+            email, 
+            name,
+            cuentaGmailId: cuenta_gmail_id.toString()
+          },
+          renewed: true
+        };
+      }
+
+      console.log(`✅ MS-AUTH - Token válido para cuenta Gmail ${email} (ID: ${cuenta_gmail_id})`);
+      
+      return {
+        success: true,
+        accessToken: access_token,
+        user: { 
+          id: usuario_principal_id.toString(),
+          email, 
+          name,
+          cuentaGmailId: cuenta_gmail_id.toString()
+        },
+        renewed: false
+      };
+
+    } catch (error) {
+      console.error(`❌ MS-AUTH - Error obteniendo token para cuenta Gmail ${cuentaGmailId}:`, error);
       throw error;
     }
   }
