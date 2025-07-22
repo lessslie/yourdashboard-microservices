@@ -1,5 +1,3 @@
-//src/components/Emails/lib/emails.ts
-import { MS_AUTH_URL } from "@/components/Auth/lib/auth";
 import axios from "axios";
 
 const MS_EMAILS_URL =
@@ -11,13 +9,14 @@ export const handleConnectService = async (token: string) => {
     console.log("🔵 Iniciando conexión OAuth con Google...");
     
     // 🎯 OPCIÓN ALTERNATIVA: Usar MS-AUTH con token en query
-    const authUrl = `${MS_AUTH_URL}/auth/google?token=${encodeURIComponent(token)}`;
+    const authUrl = `${MS_EMAILS_URL}/auth/google?token=${encodeURIComponent(token)}`;
     console.log(`🔗 Redirigiendo a: ${authUrl}`);
     
     // 🎯 REDIRECCIÓN DIRECTA - El navegador manejará el OAuth
     window.location.href = authUrl;
     
   } catch (error) {
+    
     console.error("❌ Error iniciando OAuth:", error);
     alert("Error conectando con Google. Intenta nuevamente.");
   }

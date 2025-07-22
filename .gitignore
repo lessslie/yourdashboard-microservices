@@ -27,6 +27,6 @@ Thumbs.db
 
 
 # Frontend (solo para testing local)
-fe-yourdashboard/
-fe-yourdashboard-frontend/
-fe-yourdashboard
+# fe-yourdashboard/
+# fe-yourdashboard-frontend/
+# fe-yourdashboard
