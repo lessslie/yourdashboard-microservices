@@ -12,17 +12,13 @@ import {
   ApiQuery,
   ApiParam,
   ApiOkResponse,
-  ApiUnauthorizedResponse,
   ApiBadRequestResponse,
   ApiNotFoundResponse,
-  ApiInternalServerErrorResponse
 } from '@nestjs/swagger';
 import { EmailsOrchestratorService } from './emails.service';
 import {
   OrchestratorEmailListDto,
   OrchestratorStatsDto,
-  OrchestratorEmailQueryDto,
-  OrchestratorSearchQueryDto,
   OrchestratorErrorDto
 } from './dto';
 

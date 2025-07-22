@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { Button, Input, Layout, Card, List, Spin, message } from "antd";
 import Image from "next/image";
 import { useAuth, useUserData } from "../Auth/hooks/useAuth";
@@ -33,6 +33,27 @@ interface EmailListResponse {
   };
 }
 
+// 🎯 Tipos para cuenta Gmail (extendidos)
+interface CuentaGmail {
+  id: number;
+  email_gmail: string;
+  alias_personalizado?: string;
+  esta_activa: boolean;
+  fecha_conexion: string;
+  emails_count: number;
+}
+
+// 🎯 Tipo extendido para userData con cuentas Gmail
+interface ExtendedUserData {
+  id: number | null;
+  name: string;
+  email: string;
+  isEmailVerified: boolean;
+  profilePicture: string | null;
+  createdAt: string | null;
+  cuentas_gmail?: CuentaGmail[];
+}
+
 const ViewEmails = () => {
   const router = useRouter();
   const { remuveToken, token } = useAuth();
@@ -42,12 +63,14 @@ const ViewEmails = () => {
   const [emails, setEmails] = useState<EmailData[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [emailStats, setEmailStats] = useState<any>(null);
 
   // 🎯 Para la demo, usamos cuenta Gmail ID 4 (Agata)
   const CUENTA_GMAIL_ID = "4";
 
-  // 🎯 Función para conectar Gmail (OAuth)
+  // 🎯 Cast seguro del userData para incluir cuentas_gmail
+  const extendedUserData = userData as ExtendedUserData;
+
+  // 🎯 Función para conectar Gmail (OAuth) - ARREGLADA
   const conectEmail = async () => {
     if (!token) {
       message.error("Debes iniciar sesión primero");
@@ -55,9 +78,38 @@ const ViewEmails = () => {
     }
 
     console.log("🔵 Iniciando conexión OAuth...");
-    await handleConnectService(token);
+    await handleConnectService(token); // 🎯 PASAR EL TOKEN
     // La función redirige, así que no hay más código después
   };
+
+  // 🎯 Función para cargar emails (useCallback para evitar recreación)
+  const loadEmails = useCallback(async () => {
+    if (!token) {
+      console.log("⚠️ No hay token, saltando carga de emails");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      console.log("📧 Cargando emails...");
+      
+      const response: EmailListResponse = await getEmails(token, CUENTA_GMAIL_ID, 1, 10);
+      console.log("✅ Emails response:", response);
+      
+      if (response.success && response.data) {
+        setEmails(response.data.emails);
+        console.log(`📧 ${response.data.emails.length} emails cargados`);
+      } else {
+        console.warn("⚠️ Response no exitosa:", response);
+      }
+      
+    } catch (error) {
+      console.error("❌ Error cargando emails:", error);
+      message.error("Error cargando emails. Prueba sincronizar primero.");
+    } finally {
+      setLoading(false);
+    }
+  }, [token, CUENTA_GMAIL_ID]);
 
   // 🎯 Función para sincronizar emails
   const handleSync = async () => {
@@ -86,42 +138,13 @@ const ViewEmails = () => {
     }
   };
 
-  // 🎯 Función para cargar emails
-  const loadEmails = async () => {
-    if (!token) {
-      console.log("⚠️ No hay token, saltando carga de emails");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      console.log("📧 Cargando emails...");
-      
-      const response: EmailListResponse = await getEmails(token, CUENTA_GMAIL_ID, 1, 10);
-      console.log("✅ Emails response:", response);
-      
-      if (response.success && response.data) {
-        setEmails(response.data.emails);
-        console.log(`📧 ${response.data.emails.length} emails cargados`);
-      } else {
-        console.warn("⚠️ Response no exitosa:", response);
-      }
-      
-    } catch (error) {
-      console.error("❌ Error cargando emails:", error);
-      message.error("Error cargando emails. Prueba sincronizar primero.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // 🎯 Cargar emails al montar el componente
   useEffect(() => {
     if (token && userData.id) {
       console.log("🔄 Usuario autenticado, cargando emails...");
       loadEmails();
     }
-  }, [token, userData.id]);
+  }, [token, userData.id, loadEmails]); // ✅ Ahora incluye loadEmails
 
   return (
     <Layout
@@ -170,6 +193,20 @@ const ViewEmails = () => {
         <Card style={{ marginBottom: "24px" }}>
           <p><strong>Usuario:</strong> {userData.email}</p>
           <p><strong>Cuenta Gmail activa:</strong> agata.morales92@gmail.com (ID: {CUENTA_GMAIL_ID})</p>
+          {extendedUserData.cuentas_gmail && extendedUserData.cuentas_gmail.length > 0 && (
+            <div>
+              <p><strong>Cuentas Gmail conectadas:</strong></p>
+              <ul>
+                {extendedUserData.cuentas_gmail.map((cuenta: CuentaGmail, index: number) => (
+                  <li key={index}>
+                    {cuenta.email_gmail} ({cuenta.alias_personalizado || 'Sin alias'}) 
+                    - {cuenta.esta_activa ? '✅ Activa' : '❌ Inactiva'}
+                    - {cuenta.emails_count} emails
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </Card>
       )}
 

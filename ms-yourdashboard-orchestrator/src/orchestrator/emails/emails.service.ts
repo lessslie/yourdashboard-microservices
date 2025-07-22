@@ -1,6 +1,4 @@
-// ============================================
-// EMAILS SERVICE - CON CACHE REDIS INTEGRADO - ACTUALIZADO
-// ============================================
+
 import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosResponse, AxiosError } from 'axios';
@@ -26,6 +24,11 @@ export interface SyncResponse {
       tiempo_total_ms: number;
     };
   };
+}
+
+// 🎯 INTERFACE PARA ERROR RESPONSE
+interface ErrorResponse {
+  message: string;
 }
 
 @Injectable()
@@ -57,17 +60,12 @@ export class EmailsOrchestratorService {
     try {
       this.logger.debug(`🔑 Solicitando token para cuenta Gmail ${cuentaGmailId}`);
       
-      // 🎯 TODO: Aquí necesitamos mapear cuentaGmailId → usuarioId
-      // Por ahora, usamos una lógica simple para mapear
-      // En el futuro, podrías hacer una query a MS-Auth para obtener el usuario_principal_id
+      // 🎯 MAPEO DEFINITIVO: cuentaGmailId → usuarioId
+      // En una implementación real, esto sería una query a la BD:
+      // SELECT usuario_principal_id FROM cuentas_gmail_asociadas WHERE id = cuentaGmailId
+      // Por ahora, usamos mapeo hardcodeado para la demo
       
-      // MAPEO TEMPORAL: cuenta Gmail 4,5 → usuario principal 3
-      let usuarioId: string;
-      if (cuentaGmailId === '4' || cuentaGmailId === '5') {
-        usuarioId = '3'; // Usuario principal Agata
-      } else {
-        usuarioId = cuentaGmailId; // Fallback
-      }
+      const usuarioId = this.mapearCuentaGmailAUsuario(cuentaGmailId);
       
       const response: AxiosResponse<TokenResponse> = await axios.get(`${this.msAuthUrl}/tokens/${usuarioId}`);
       
@@ -79,7 +77,7 @@ export class EmailsOrchestratorService {
       return response.data.accessToken;
 
     } catch (error) {
-      const apiError = error as AxiosError<{ message: string }>;
+      const apiError = error as AxiosError<ErrorResponse>;
       this.logger.error(`❌ Error obteniendo token:`, apiError.message);
       throw new HttpException(
         `Error obteniendo token para cuenta Gmail: ${apiError.message}`,
@@ -89,7 +87,22 @@ export class EmailsOrchestratorService {
   }
 
   /**
-   * 🔄 Sincronizar emails manualmente - NUEVO
+   * 🗂️ Mapear cuenta Gmail ID a usuario principal ID
+   * En producción, esto sería una query a la base de datos
+   */
+  private mapearCuentaGmailAUsuario(cuentaGmailId: string): string {
+    // Mapeo hardcodeado para la demo
+    // En producción: SELECT usuario_principal_id FROM cuentas_gmail_asociadas WHERE id = ?
+    const mapeoDemo: Record<string, string> = {
+      '4': '3', // cuenta Gmail 4 → usuario principal 3 (Agata)
+      '5': '3', // cuenta Gmail 5 → usuario principal 3 (Agata)
+    };
+
+    return mapeoDemo[cuentaGmailId] || cuentaGmailId; // Fallback
+  }
+
+  /**
+   * 🔄 Sincronizar emails manualmente
    */
   async syncEmails(cuentaGmailId: string, maxEmails: number = 100): Promise<SyncResponse> {
     try {
@@ -99,12 +112,16 @@ export class EmailsOrchestratorService {
       const accessToken = await this.getValidTokenForGmailAccount(cuentaGmailId);
       
       // 2️⃣ LLAMAR MS-EMAIL
-      const response = await axios.post(`${this.msEmailUrl}/emails/sync`, null, {
-        params: { cuentaGmailId, maxEmails },
-        headers: {
-          'Authorization': `Bearer ${accessToken}`
+      const response: AxiosResponse<{ success: boolean; message: string; stats: any }> = await axios.post(
+        `${this.msEmailUrl}/emails/sync`, 
+        null, 
+        {
+          params: { cuentaGmailId, maxEmails },
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          }
         }
-      });
+      );
 
       // 3️⃣ LIMPIAR CACHE DESPUÉS DEL SYNC
       await this.clearGmailAccountCache(cuentaGmailId);
@@ -118,7 +135,7 @@ export class EmailsOrchestratorService {
       };
 
     } catch (error) {
-      const apiError = error as AxiosError<{ message: string }>;
+      const apiError = error as AxiosError<ErrorResponse>;
       this.logger.error(`❌ Error en sync manual:`, apiError.message);
       throw new HttpException(
         `Error sincronizando emails: ${apiError.response?.data?.message || apiError.message}`,
@@ -128,7 +145,7 @@ export class EmailsOrchestratorService {
   }
 
   /**
-   * 🔄 Sincronización incremental - NUEVO
+   * 🔄 Sincronización incremental
    */
   async syncIncremental(cuentaGmailId: string, maxEmails: number = 30): Promise<SyncResponse> {
     try {
@@ -138,12 +155,16 @@ export class EmailsOrchestratorService {
       const accessToken = await this.getValidTokenForGmailAccount(cuentaGmailId);
       
       // 2️⃣ LLAMAR MS-EMAIL
-      const response = await axios.post(`${this.msEmailUrl}/emails/sync/incremental`, null, {
-        params: { cuentaGmailId, maxEmails },
-        headers: {
-          'Authorization': `Bearer ${accessToken}`
+      const response: AxiosResponse<{ success: boolean; message: string; stats: any }> = await axios.post(
+        `${this.msEmailUrl}/emails/sync/incremental`, 
+        null, 
+        {
+          params: { cuentaGmailId, maxEmails },
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          }
         }
-      });
+      );
 
       // 3️⃣ LIMPIAR CACHE DESPUÉS DEL SYNC
       await this.clearGmailAccountCache(cuentaGmailId);
@@ -157,7 +178,7 @@ export class EmailsOrchestratorService {
       };
 
     } catch (error) {
-      const apiError = error as AxiosError<{ message: string }>;
+      const apiError = error as AxiosError<ErrorResponse>;
       this.logger.error(`❌ Error en sync incremental:`, apiError.message);
       throw new HttpException(
         `Error en sincronización incremental: ${apiError.response?.data?.message || apiError.message}`,
@@ -167,7 +188,7 @@ export class EmailsOrchestratorService {
   }
 
   /**
-   * 📧 Obtener inbox del usuario - ⚡ CON CACHE - ACTUALIZADO
+   * 📧 Obtener inbox del usuario - ⚡ CON CACHE
    */
   async getInbox(cuentaGmailId: string, page: number = 1, limit: number = 10) {
     try {
@@ -210,7 +231,7 @@ export class EmailsOrchestratorService {
       };
 
     } catch (error) {
-      const apiError = error as AxiosError<{ message: string }>;
+      const apiError = error as AxiosError<ErrorResponse>;
       this.logger.error(`❌ Error obteniendo inbox:`, apiError.message);
       throw new HttpException(
         `Error obteniendo inbox: ${apiError.response?.data?.message || apiError.message}`,
@@ -220,7 +241,7 @@ export class EmailsOrchestratorService {
   }
 
   /**
-   * 🔍 Buscar emails del usuario - ⚡ CON CACHE - ACTUALIZADO
+   * 🔍 Buscar emails del usuario - ⚡ CON CACHE
    */
   async searchEmails(
     cuentaGmailId: string, 
@@ -275,7 +296,7 @@ export class EmailsOrchestratorService {
       };
 
     } catch (error) {
-      const apiError = error as AxiosError<{ message: string }>;
+      const apiError = error as AxiosError<ErrorResponse>;
       this.logger.error(`❌ Error buscando emails:`, apiError.message);
       throw new HttpException(
         `Error buscando emails: ${apiError.response?.data?.message || apiError.message}`,
@@ -285,7 +306,7 @@ export class EmailsOrchestratorService {
   }
 
   /**
-   * 📊 Obtener estadísticas de emails - ⚡ CON CACHE - ACTUALIZADO
+   * 📊 Obtener estadísticas de emails - ⚡ CON CACHE
    */
   async getEmailStats(cuentaGmailId: string) {
     try {
@@ -328,7 +349,7 @@ export class EmailsOrchestratorService {
       };
 
     } catch (error) {
-      const apiError = error as AxiosError<{ message: string }>;
+      const apiError = error as AxiosError<ErrorResponse>;
       this.logger.error(`❌ Error obteniendo estadísticas:`, apiError.message);
       throw new HttpException(
         `Error obteniendo estadísticas: ${apiError.response?.data?.message || apiError.message}`,
@@ -338,7 +359,7 @@ export class EmailsOrchestratorService {
   }
 
   /**
-   * 📧 Obtener email específico - ⚡ CON CACHE - ACTUALIZADO
+   * 📧 Obtener email específico - ⚡ CON CACHE
    */
   async getEmailById(cuentaGmailId: string, emailId: string) {
     try {
@@ -381,7 +402,7 @@ export class EmailsOrchestratorService {
       };
 
     } catch (error) {
-      const apiError = error as AxiosError<{ message: string }>;
+      const apiError = error as AxiosError<ErrorResponse>;
       this.logger.error(`❌ Error obteniendo email:`, apiError.message);
       throw new HttpException(
         `Error obteniendo email: ${apiError.response?.data?.message || apiError.message}`,

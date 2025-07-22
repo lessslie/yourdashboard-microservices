@@ -476,4 +476,27 @@ export class AuthService {
   async obtenerEstadisticasServicio() {
     return await this.databaseService.obtenerEstadisticasGenerales();
   }
+
+  /**
+   * 🔍 BUSCAR USUARIO POR ID
+   */
+  async buscarUsuarioPorId(usuarioId: number): Promise<UsuarioPrincipal | null> {
+    try {
+      this.logger.log(`🔍 Buscando usuario por ID: ${usuarioId}`);
+
+      const usuario = await this.databaseService.buscarUsuarioPorId(usuarioId);
+      
+      if (usuario) {
+        this.logger.log(`✅ Usuario encontrado: ${usuario.email}`);
+      } else {
+        this.logger.warn(`⚠️ Usuario no encontrado: ${usuarioId}`);
+      }
+
+      return usuario;
+
+    } catch (error) {
+      this.logger.error(`❌ Error buscando usuario por ID ${usuarioId}:`, error);
+      return null;
+    }
+  }
 }

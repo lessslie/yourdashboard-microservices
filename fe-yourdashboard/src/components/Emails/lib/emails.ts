@@ -5,23 +5,33 @@ import axios from "axios";
 const MS_EMAILS_URL =
   process.env.NEXT_PUBLIC_MS_ORCHESTRATOR_URL || "http://localhost:3003";
 
-// 🎯 ARREGLADO: OAuth debe redirigir, no hacer axios
+// 🎯 SOLUCIÓN SIMPLE: Usar orchestrator con token en query parameter
 export const handleConnectService = async (token: string) => {
   try {
     console.log("🔵 Iniciando conexión OAuth con Google...");
     
-    // 🎯 OAuth correcto: REDIRECCIÓN del navegador
-    const authUrl = `${MS_AUTH_URL}/auth/google`;
+    // 🎯 OPCIÓN ALTERNATIVA: Usar MS-AUTH con token en query
+    const authUrl = `${MS_AUTH_URL}/auth/google?token=${encodeURIComponent(token)}`;
     console.log(`🔗 Redirigiendo a: ${authUrl}`);
     
-    // 🎯 REDIRECCIÓN en lugar de axios
+    // 🎯 REDIRECCIÓN DIRECTA - El navegador manejará el OAuth
     window.location.href = authUrl;
     
-    // No retorna nada porque redirige
   } catch (error) {
     console.error("❌ Error iniciando OAuth:", error);
-    alert("Error conectando con Google");
+    alert("Error conectando con Google. Intenta nuevamente.");
   }
+};
+
+// 🎯 FUNCIÓN PARA RECUPERAR TOKEN DESPUÉS DEL OAUTH (no se usa por ahora)
+export const restoreTokenAfterOAuth = () => {
+  const tempToken = localStorage.getItem('oauth_temp_token');
+  if (tempToken) {
+    localStorage.removeItem('oauth_temp_token');
+    localStorage.setItem('token', tempToken);
+    return tempToken;
+  }
+  return null;
 };
 
 // ✅ Estas funciones están bien - usan orchestrator

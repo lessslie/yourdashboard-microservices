@@ -9,6 +9,7 @@ import {
   Res, 
   Body, 
   Param,
+  Query,
   UnauthorizedException,
   NotFoundException,
   BadRequestException
@@ -26,10 +27,13 @@ import {
   ApiOkResponse,
   ApiBearerAuth,
   ApiExcludeEndpoint,
-  ApiNotFoundResponse
+  ApiNotFoundResponse,
+  ApiQuery
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
-import { Response } from 'express';
+import { Response, Request } from 'express';
+import { ConfigService } from '@nestjs/config';
+import { verify } from 'jsonwebtoken';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { 
@@ -42,18 +46,20 @@ import {
 } from './dto';
 import { 
   ReqCallbackGoogle,
-  UsuarioAutenticado
+  UsuarioAutenticado,
+  JwtPayload
 } from './interfaces/auth.interfaces';
 
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
   constructor(
-    private readonly authService: AuthService
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService // 🎯 AGREGADO ConfigService
   ) {}
 
   // ================================
-  // ENDPOINTS TRADICIONALES
+  // ENDPOINTS TRADICIONALES (sin cambios)
   // ================================
 
   @Post('register')
@@ -250,32 +256,156 @@ export class AuthController {
   }
 
   // ================================
-  // ENDPOINTS OAUTH - ARREGLADOS
+  // 🎯 OAUTH GOOGLE 
   // ================================
 
   @Get('google')
-  @UseGuards(JwtAuthGuard) // 🎯 AHORA REQUIERE AUTENTICACIÓN
-  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
     summary: 'Iniciar OAuth con Google',
-    description: 'Inicia el proceso OAuth con Google para conectar una cuenta Gmail al usuario autenticado.' 
+    description: 'Inicia proceso OAuth. Acepta JWT token en header Authorization o query parameter token.' 
+  })
+  @ApiQuery({
+    name: 'token',
+    description: 'JWT token como query parameter (alternativa a Authorization header)',
+    required: false,
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
   })
   @ApiResponse({ 
     status: 302, 
     description: 'Redirección a Google OAuth con estado del usuario' 
   })
   @ApiUnauthorizedResponse({
-    description: 'Usuario no autenticado - JWT requerido',
+    description: 'JWT token requerido (header o query)',
     type: ErrorResponseDto
   })
-  googleAuth(@Req() req: { user: UsuarioAutenticado }, @Res() res: Response): void {
-    console.log(`🔵 Usuario ${req.user.id} iniciando OAuth Google...`);
+  async googleAuth(
+    @Req() req: Request, 
+    @Res() res: Response,
+    @Query('token') tokenQuery?: string
+  ): Promise<void> {
+    try {
+      console.log('🔵 OAuth Google iniciado');
+      
+      // 1️⃣ EXTRAER Y VALIDAR TOKEN
+      const token = this.extractTokenFromRequest(req, tokenQuery);
+      
+      // 2️⃣ VALIDAR JWT Y OBTENER DATOS DEL USUARIO
+      const userPayload = await this.validateJwtAndGetUser(token);
+      
+      // 3️⃣ GENERAR Y REDIRIGIR A URL OAUTH
+      await this.redirectToGoogleOAuth(res, userPayload.sub);
+      
+    } catch (error) {
+      console.error('❌ Error en OAuth Google:', error);
+      this.handleOAuthError(res, error);
+    }
+  }
+
+  /**
+   * 🔧 Extraer token de request (header o query)
+   */
+  private extractTokenFromRequest(req: Request, tokenQuery?: string): string {
+    // Intentar desde Authorization header
+    const authHeader = req.headers.authorization;
+    if (authHeader && typeof authHeader === 'string') {
+      const headerToken = authHeader.replace('Bearer ', '');
+      if (headerToken !== authHeader) {
+        return headerToken;
+      }
+    }
     
-    // 🎯 GENERAR URL OAUTH CON EL USER ID EN STATE
-    const authUrl = this.authService.generarUrlOAuth(req.user.id);
+    // Si no hay header válido, usar query parameter
+    if (tokenQuery) {
+      return tokenQuery;
+    }
     
+    console.log('❌ No JWT token provided');
+    throw new UnauthorizedException('JWT token requerido en Authorization header o query parameter token');
+  }
+
+  /**
+   * 🔧 Validar JWT y obtener datos del usuario
+   */
+  private async validateJwtAndGetUser(token: string): Promise<JwtPayload> {
+    // Validar JWT
+    const decoded = this.validateJwtToken(token);
+    
+    // Verificar que el usuario existe y está activo
+    const usuario = await this.authService.buscarUsuarioPorId(decoded.sub);
+    if (!usuario) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+
+    if (usuario.estado !== 'activo') {
+      throw new UnauthorizedException('Usuario inactivo');
+    }
+
+    console.log(`🔵 Usuario ${decoded.sub} validado para OAuth`);
+    return decoded;
+  }
+
+  /**
+   * 🔧 Validar token JWT y extraer payload
+   */
+  private validateJwtToken(token: string): JwtPayload {
+    const jwtSecret = this.configService.get<string>('JWT_SECRET');
+    if (!jwtSecret) {
+      throw new UnauthorizedException('JWT_SECRET no configurado');
+    }
+
+    try {
+      const verifyResult = verify(token, jwtSecret);
+      
+      if (typeof verifyResult === 'string') {
+        throw new UnauthorizedException('Token JWT inválido');
+      }
+      
+      if (!verifyResult.sub || typeof verifyResult.sub !== 'number') {
+        throw new UnauthorizedException('Token JWT inválido - sub requerido');
+      }
+      
+      const customData = verifyResult as unknown as Record<string, unknown>;
+      if (!customData.email || !customData.nombre) {
+        throw new UnauthorizedException('Token JWT inválido - datos incompletos');
+      }
+      
+      return {
+        sub: verifyResult.sub as number,
+        email: customData.email as string,
+        nombre: customData.nombre as string,
+        iat: verifyResult.iat,
+        exp: verifyResult.exp
+      };
+    } catch (jwtError) {
+      console.log('❌ JWT validation failed:', jwtError);
+      throw new UnauthorizedException('Token JWT inválido o expirado');
+    }
+  }
+
+  /**
+   * 🔧 Redirigir a Google OAuth
+   */
+  private async redirectToGoogleOAuth(res: Response, userId: number): Promise<void> {
+    const authUrl = this.authService.generarUrlOAuth(userId);
     console.log(`🔗 Redirigiendo a: ${authUrl}`);
     res.redirect(authUrl);
+  }
+
+  /**
+   * 🔧 Manejar errores de OAuth
+   */
+  private handleOAuthError(res: Response, error: unknown): void {
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    const errorUrl = new URL(frontendUrl);
+    errorUrl.searchParams.set('auth', 'error');
+    
+    if (error instanceof UnauthorizedException) {
+      errorUrl.searchParams.set('message', encodeURIComponent(error.message));
+    } else {
+      errorUrl.searchParams.set('message', encodeURIComponent('Error interno de autenticación'));
+    }
+    
+    res.redirect(errorUrl.toString());
   }
 
   @Get('google/callback')
@@ -311,7 +441,7 @@ export class AuthController {
       
       console.log('✅ Callback procesado exitosamente');
       
-      const redirectUrl = new URL(process.env.FRONTEND_URL || 'http://localhost:3000');
+      const redirectUrl = new URL(this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000');
       redirectUrl.searchParams.set('auth', 'success');
       redirectUrl.searchParams.set('message', `Gmail ${req.user.email} conectado exitosamente`);
       redirectUrl.searchParams.set('gmail', req.user.email);
@@ -321,7 +451,7 @@ export class AuthController {
     } catch (error) {
       console.error('❌ Error en callback de OAuth:', error);
       
-      const errorUrl = new URL(process.env.FRONTEND_URL || 'http://localhost:3000');
+      const errorUrl = new URL(this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000');
       errorUrl.searchParams.set('auth', 'error');
       errorUrl.searchParams.set('message', encodeURIComponent(error instanceof Error ? error.message : 'Error desconocido'));
       
@@ -330,7 +460,7 @@ export class AuthController {
   }
 
   // ================================
-  // GESTIÓN DE CUENTAS GMAIL
+  // GESTIÓN DE CUENTAS GMAIL (sin cambios)
   // ================================
 
   @Get('cuentas-gmail')
@@ -387,7 +517,6 @@ export class AuthController {
     @Param('id') cuentaId: string
   ) {
     try {
-      // Lógica simulada para obtener cuenta específica
       const cuentaSimulada = {
         id: parseInt(cuentaId),
         email_gmail: 'cuenta' + cuentaId + '@gmail.com',
@@ -490,7 +619,6 @@ export class AuthController {
         throw new BadRequestException('alias_personalizado es requerido');
       }
 
-      // Lógica simulada para actualizar alias
       console.log('Actualizando alias de cuenta ' + cuentaId + ' a: ' + body.alias_personalizado);
 
       return {
@@ -515,7 +643,7 @@ export class AuthController {
   }
 
   // ================================
-  // ENDPOINTS DE INFORMACIÓN
+  // ENDPOINTS DE INFORMACIÓN (sin cambios)
   // ================================
 
   @Get('health')
@@ -567,7 +695,7 @@ export class AuthController {
           logout: 'POST /auth/logout'
         },
         oauth: {
-          google: 'GET /auth/google (Requiere JWT)',
+          google: 'GET /auth/google (Requiere JWT en header o query)',
           callback: 'GET /auth/google/callback'
         },
         gmail_accounts: {
