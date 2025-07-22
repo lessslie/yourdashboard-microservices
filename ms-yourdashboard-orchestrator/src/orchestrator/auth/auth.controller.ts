@@ -61,7 +61,6 @@ export class AuthOrchestratorController {
     description: 'Error en redirección',
     type: AuthErrorResponseDto 
   })
-  @ApiExcludeEndpoint() // No mostrar en Swagger ya que es redirección
   redirectToGoogleAuth(@Res() res: Response): void {
     console.log(`🔵 ORCHESTRATOR-AUTH - Endpoint /auth/google llamado`);
     

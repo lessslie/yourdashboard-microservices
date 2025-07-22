@@ -73,6 +73,7 @@ export class EmailsOrchestratorService {
       return response.data.accessToken;
 
     } catch (error) {
+       console.log(error);
       const apiError = error as AxiosError<ErrorResponse>;
       this.logger.error(`❌ Error obteniendo token:`, apiError.message);
       throw new HttpException(
@@ -116,6 +117,7 @@ export class EmailsOrchestratorService {
       };
 
     } catch (error) {
+       console.log(error);
       const apiError = error as AxiosError<ErrorResponse>;
       this.logger.error(`❌ Error en sync manual:`, apiError.message);
       throw new HttpException(
@@ -159,6 +161,7 @@ export class EmailsOrchestratorService {
       };
 
     } catch (error) {
+       console.log(error);
       const apiError = error as AxiosError<ErrorResponse>;
       this.logger.error(`❌ Error en sync incremental:`, apiError.message);
       throw new HttpException(
@@ -213,6 +216,7 @@ export class EmailsOrchestratorService {
       };
 
     } catch (error) {
+      console.log(error);
       const apiError = error as AxiosError<ErrorResponse>;
       this.logger.error(`❌ Error obteniendo inbox:`, apiError.message);
       throw new HttpException(
@@ -278,6 +282,7 @@ export class EmailsOrchestratorService {
       };
 
     } catch (error) {
+      console.log(error);
       const apiError = error as AxiosError<ErrorResponse>;
       this.logger.error(`❌ Error buscando emails:`, apiError.message);
       throw new HttpException(
@@ -331,6 +336,7 @@ export class EmailsOrchestratorService {
       };
 
     } catch (error) {
+      console.log(error);
       const apiError = error as AxiosError<ErrorResponse>;
       this.logger.error(`❌ Error obteniendo estadísticas:`, apiError.message);
       throw new HttpException(
@@ -384,6 +390,7 @@ export class EmailsOrchestratorService {
       };
 
     } catch (error) {
+      console.log(error);
       const apiError = error as AxiosError<ErrorResponse>;
       this.logger.error(`❌ Error obteniendo email:`, apiError.message);
       throw new HttpException(
@@ -409,6 +416,7 @@ export class EmailsOrchestratorService {
       
       this.logger.log(`✅ Cache limpiado para cuenta Gmail ${cuentaGmailId}`);
     } catch (error) {
+      console.error(error);
       this.logger.error(`❌ Error limpiando cache:`, error);
     }
   }

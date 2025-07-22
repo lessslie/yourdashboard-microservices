@@ -80,6 +80,7 @@ export class AuthService {
       };
 
     } catch (error) {
+      console.log(error);
       this.logger.error(`❌ Error registrando usuario:`, error);
       
       if (error instanceof ConflictException) {
@@ -168,6 +169,7 @@ export class AuthService {
       };
 
     } catch (error) {
+      console.log(error);
       this.logger.error(`❌ Error en login:`, error);
       
       if (error instanceof UnauthorizedException) {
@@ -231,6 +233,7 @@ export class AuthService {
       };
 
     } catch (error) {
+      console.log(error);
       this.logger.error(`❌ Error obteniendo perfil:`, error);
       
       if (error instanceof NotFoundException) {
@@ -274,8 +277,11 @@ export class AuthService {
       console.log(`✅ URL OAuth generada para usuario ${userId}`);
       
       return authUrl;
+
       
     } catch (error) {
+        
+      console.log(error);
       this.logger.error(`❌ Error generando URL OAuth:`, error);
       throw new Error('Error generando URL de autenticación Google');
     }
@@ -338,6 +344,8 @@ export class AuthService {
       };
 
     } catch (error) {
+      
+      console.log(error);
       this.logger.error(`❌ Error en callback Google:`, error);
       
       if (error instanceof UnauthorizedException || error instanceof NotFoundException) {
@@ -457,6 +465,8 @@ export class AuthService {
       };
 
     } catch (error) {
+      
+      console.log(error);
       this.logger.error('❌ Error en health check:', error);
       return {
         service: 'ms-yourdashboard-auth',
@@ -495,6 +505,7 @@ export class AuthService {
       return usuario;
 
     } catch (error) {
+      console.log(error);
       this.logger.error(`❌ Error buscando usuario por ID ${usuarioId}:`, error);
       return null;
     }
