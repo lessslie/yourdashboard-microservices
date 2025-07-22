@@ -24,9 +24,6 @@ import {
   EmailStatsDto,
   EmailDetailDto,
   EmailInboxQueryDto,
-  EmailSearchQueryDto,
-  EmailStatsQueryDto,
-  EmailDetailQueryDto,
   EmailErrorResponseDto,
   EmailHealthResponseDto
 } from './dto';
@@ -36,6 +33,30 @@ import {
 export class EmailsController {
   constructor(private readonly emailsService: EmailsService) {}
 
+
+
+    /**
+   * 🔧 GET /emails/health - Health check
+   */
+  @Get('health')
+  @ApiTags('Health')
+  @ApiOperation({ 
+    summary: 'Estado del servicio',
+    description: 'Verifica que el microservicio de emails esté funcionando correctamente.'
+  })
+  @ApiOkResponse({ 
+    description: 'Servicio funcionando correctamente',
+    type: EmailHealthResponseDto 
+  })
+  getHealth(): EmailHealthResponseDto {
+    return {
+      service: 'ms-yourdashboard-email',
+      status: 'OK',
+      timestamp: new Date().toISOString(),
+      port: process.env.PORT || 3002,
+      mode: 'microservices'
+    };
+  }
   // ================================
   // 🔄 ENDPOINTS DE SINCRONIZACIÓN
   // ================================
@@ -318,6 +339,55 @@ export class EmailsController {
     };
   }
 
+  // ================================
+  // 🔄 ENDPOINTS LEGACY (mantener compatibilidad)
+  // ================================
+
+  /**
+   * 📧 GET /emails/inbox (LEGACY con userId)
+   */
+  @Get('inbox-legacy')
+  @ApiBearerAuth('Gmail-Token')
+  @ApiOperation({ 
+    summary: '[LEGACY] Obtener inbox por userId',
+    description: 'Endpoint legacy que usa userId. Recomendado: usar /emails/inbox con cuentaGmailId'
+  })
+  async getInboxLegacy(
+    @Headers('authorization') authHeader: string,
+    @Query() query: EmailInboxQueryDto
+  ): Promise<EmailListResponseDto> {
+    if (!query.userId) {
+      throw new UnauthorizedException('User ID is required');
+    }
+
+    if (!authHeader) {
+      throw new UnauthorizedException('Authorization header is required');
+    }
+    
+    const accessToken = authHeader.replace('Bearer ', '');
+    
+    if (!accessToken) {
+      throw new UnauthorizedException('Valid Bearer token is required');
+    }
+    
+    const result = await this.emailsService.getInboxWithToken(
+      accessToken, 
+      query.userId, 
+      query.page || 1, 
+      query.limit || 10
+    );
+
+    return {
+      ...result,
+      emails: result.emails.map(email => ({
+        ...email,
+        receivedDate: email.receivedDate.toISOString()
+      }))
+    };
+  }
+
+
+
   /**
    * 📧 GET /emails/:id - Obtener email específico
    */
@@ -375,76 +445,6 @@ export class EmailsController {
     return {
       ...result,
       receivedDate: result.receivedDate.toISOString() // Date → string
-    };
-  }
-
-  // ================================
-  // 🔄 ENDPOINTS LEGACY (mantener compatibilidad)
-  // ================================
-
-  /**
-   * 📧 GET /emails/inbox (LEGACY con userId)
-   */
-  @Get('inbox-legacy')
-  @ApiBearerAuth('Gmail-Token')
-  @ApiOperation({ 
-    summary: '[LEGACY] Obtener inbox por userId',
-    description: 'Endpoint legacy que usa userId. Recomendado: usar /emails/inbox con cuentaGmailId'
-  })
-  async getInboxLegacy(
-    @Headers('authorization') authHeader: string,
-    @Query() query: EmailInboxQueryDto
-  ): Promise<EmailListResponseDto> {
-    if (!query.userId) {
-      throw new UnauthorizedException('User ID is required');
-    }
-
-    if (!authHeader) {
-      throw new UnauthorizedException('Authorization header is required');
-    }
-    
-    const accessToken = authHeader.replace('Bearer ', '');
-    
-    if (!accessToken) {
-      throw new UnauthorizedException('Valid Bearer token is required');
-    }
-    
-    const result = await this.emailsService.getInboxWithToken(
-      accessToken, 
-      query.userId, 
-      query.page || 1, 
-      query.limit || 10
-    );
-
-    return {
-      ...result,
-      emails: result.emails.map(email => ({
-        ...email,
-        receivedDate: email.receivedDate.toISOString()
-      }))
-    };
-  }
-
-  /**
-   * 🔧 GET /emails/health - Health check
-   */
-  @Get('health')
-  @ApiTags('Health')
-  @ApiOperation({ 
-    summary: 'Estado del servicio',
-    description: 'Verifica que el microservicio de emails esté funcionando correctamente.'
-  })
-  @ApiOkResponse({ 
-    description: 'Servicio funcionando correctamente',
-    type: EmailHealthResponseDto 
-  })
-  getHealth(): EmailHealthResponseDto {
-    return {
-      service: 'ms-yourdashboard-email',
-      status: 'OK',
-      timestamp: new Date().toISOString(),
-      port: process.env.PORT || 3002,
-      mode: 'microservices'
     };
   }
 }

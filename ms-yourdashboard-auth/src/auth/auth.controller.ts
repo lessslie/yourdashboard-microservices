@@ -293,7 +293,7 @@ export class AuthController {
       const userPayload = await this.validateJwtAndGetUser(token);
       
       // 3️⃣ GENERAR Y REDIRIGIR A URL OAUTH
-      await this.redirectToGoogleOAuth(res, userPayload.sub);
+    this.redirectToGoogleOAuth(res, userPayload.sub);
       
     } catch (error) {
       console.error('❌ Error en OAuth Google:', error);
@@ -385,7 +385,7 @@ export class AuthController {
   /**
    * 🔧 Redirigir a Google OAuth
    */
-  private async redirectToGoogleOAuth(res: Response, userId: number): Promise<void> {
+  private redirectToGoogleOAuth(res: Response, userId: number): void {
     const authUrl = this.authService.generarUrlOAuth(userId);
     console.log(`🔗 Redirigiendo a: ${authUrl}`);
     res.redirect(authUrl);

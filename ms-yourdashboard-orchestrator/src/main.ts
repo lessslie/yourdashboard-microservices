@@ -8,10 +8,10 @@ async function bootstrap() {
 
   // ✅ VALIDACIÓN GLOBAL CON CLASS-VALIDATOR
   app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-    disableErrorMessages: false,
+    whitelist: true,//elimina propiedades no definidas en DTOs
+    forbidNonWhitelisted: true,//lanza error si se envían propiedades no definidas
+    transform: true,//transforma automáticamente los tipos de datos
+    disableErrorMessages: false,//muestra mensajes de error detallados
   }));
 
   // CONFIGURACIÓN DE SWAGGER PARA MS-ORCHESTRATOR
@@ -74,10 +74,10 @@ async function bootstrap() {
 
   // CONFIGURACIÓN DE CORS
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'], 
+    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'],// Permite solicitudes desde estos orígenes para hacer peticiones a este microservicio
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,// Permite el uso de cookies y credenciales
+    allowedHeaders: ['Content-Type', 'Authorization'],// Permite estos encabezados en las solicitudes
   });
   
   await app.listen(process.env.PORT ?? 3003);

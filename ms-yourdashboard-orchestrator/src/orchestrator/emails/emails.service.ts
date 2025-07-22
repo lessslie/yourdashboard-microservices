@@ -1,4 +1,3 @@
-
 import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosResponse, AxiosError } from 'axios';
@@ -55,25 +54,22 @@ export class EmailsOrchestratorService {
 
   /**
    * 🔑 Obtener token válido del ms-auth usando cuentaGmailId (SIN CACHE - siempre fresco)
+   * 🎯 ARREGLADO: Usa el endpoint correcto para cuentaGmailId
    */
   private async getValidTokenForGmailAccount(cuentaGmailId: string): Promise<string> {
     try {
       this.logger.debug(`🔑 Solicitando token para cuenta Gmail ${cuentaGmailId}`);
       
-      // 🎯 MAPEO DEFINITIVO: cuentaGmailId → usuarioId
-      // En una implementación real, esto sería una query a la BD:
-      // SELECT usuario_principal_id FROM cuentas_gmail_asociadas WHERE id = cuentaGmailId
-      // Por ahora, usamos mapeo hardcodeado para la demo
-      
-      const usuarioId = this.mapearCuentaGmailAUsuario(cuentaGmailId);
-      
-      const response: AxiosResponse<TokenResponse> = await axios.get(`${this.msAuthUrl}/tokens/${usuarioId}`);
+      // 🎯 USAR EL ENDPOINT CORRECTO: /tokens/gmail/:cuentaGmailId
+      const response: AxiosResponse<TokenResponse> = await axios.get(
+        `${this.msAuthUrl}/tokens/gmail/${cuentaGmailId}`
+      );
       
       if (!response.data.success) {
         throw new Error('No se pudo obtener token válido');
       }
 
-      this.logger.debug(`✅ Token obtenido para cuenta Gmail ${cuentaGmailId} (usuario ${usuarioId})`);
+      this.logger.debug(`✅ Token obtenido para cuenta Gmail ${cuentaGmailId}`);
       return response.data.accessToken;
 
     } catch (error) {
@@ -84,21 +80,6 @@ export class EmailsOrchestratorService {
         HttpStatus.UNAUTHORIZED
       );
     }
-  }
-
-  /**
-   * 🗂️ Mapear cuenta Gmail ID a usuario principal ID
-   * En producción, esto sería una query a la base de datos
-   */
-  private mapearCuentaGmailAUsuario(cuentaGmailId: string): string {
-    // Mapeo hardcodeado para la demo
-    // En producción: SELECT usuario_principal_id FROM cuentas_gmail_asociadas WHERE id = ?
-    const mapeoDemo: Record<string, string> = {
-      '4': '3', // cuenta Gmail 4 → usuario principal 3 (Agata)
-      '5': '3', // cuenta Gmail 5 → usuario principal 3 (Agata)
-    };
-
-    return mapeoDemo[cuentaGmailId] || cuentaGmailId; // Fallback
   }
 
   /**
