@@ -192,7 +192,8 @@ export class EmailsOrchestratorService {
       this.logger.log(`📡 CACHE MISS - Obteniendo inbox desde API para cuenta Gmail ${cuentaGmailId}`);
       
       const accessToken = await this.getValidTokenForGmailAccount(cuentaGmailId);
-      
+      // y aca el orchetator llama al service real de emails: GET http://localhost:3002/emails/inbox?cuentaGmailId=4&page=1&limit=10
+      // Llamar al microservicio de emails para obtener la bandeja de entrada
       const response: AxiosResponse<EmailListResponse> = await axios.get(`${this.msEmailUrl}/emails/inbox`, {
         params: { cuentaGmailId, page, limit },
         headers: {

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useAuth, useUserData } from "../Auth/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { handleConnectService, getEmails, syncEmails } from "./lib/emails";
+import GmailAccountSelector from "./GmailAccountSelector";
 
 const { Footer } = Layout;
 
@@ -33,7 +34,7 @@ interface EmailListResponse {
   };
 }
 
-// 🎯 Tipos para cuenta Gmail (extendidos)
+// 🎯 Tipos para cuenta Gmail
 interface CuentaGmail {
   id: number;
   email_gmail: string;
@@ -63,14 +64,52 @@ const ViewEmails = () => {
   const [emails, setEmails] = useState<EmailData[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [selectedCuentaGmailId, setSelectedCuentaGmailId] = useState<string | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [userProfile, setUserProfile] = useState<ExtendedUserData | null>(null);
 
-  // 🎯 Para la demo, usamos cuenta Gmail ID 4 (Agata)
-  const CUENTA_GMAIL_ID = "4";
+  // 🎯 Función para cargar perfil completo del usuario
+  const loadUserProfile = useCallback(async () => {
+    if (!token) return;
 
-  // 🎯 Cast seguro del userData para incluir cuentas_gmail
-  const extendedUserData = userData as ExtendedUserData;
+    try {
+      setLoadingProfile(true);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_MS_AUTH_URL || 'http://localhost:3001'}/auth/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
 
-  // 🎯 Función para conectar Gmail (OAuth) - ARREGLADA
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Transformar los datos al formato que esperamos
+        const profileData: ExtendedUserData = {
+          id: data.usuario.id,
+          name: data.usuario.nombre,
+          email: data.usuario.email,
+          isEmailVerified: data.usuario.email_verificado,
+          profilePicture: null,
+          createdAt: data.usuario.fecha_registro,
+          cuentas_gmail: data.cuentas_gmail || []
+        };
+
+        setUserProfile(profileData);
+
+        // Si hay cuentas Gmail y no hay una seleccionada, seleccionar la primera
+        if (data.cuentas_gmail && data.cuentas_gmail.length > 0 && !selectedCuentaGmailId) {
+          setSelectedCuentaGmailId(data.cuentas_gmail[0].id.toString());
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error cargando perfil:", error);
+      message.error("Error cargando información del usuario");
+    } finally {
+      setLoadingProfile(false);
+    }
+  }, [token, selectedCuentaGmailId]);
+
+  // 🎯 Función para conectar Gmail (OAuth)
   const conectEmail = async () => {
     if (!token) {
       message.error("Debes iniciar sesión primero");
@@ -78,22 +117,21 @@ const ViewEmails = () => {
     }
 
     console.log("🔵 Iniciando conexión OAuth...");
-    await handleConnectService(token); // 🎯 PASAR EL TOKEN
-    // La función redirige, así que no hay más código después
+    await handleConnectService(token);
   };
 
-  // 🎯 Función para cargar emails (useCallback para evitar recreación)
+  // 🎯 Función para cargar emails de la cuenta seleccionada
   const loadEmails = useCallback(async () => {
-    if (!token) {
-      console.log("⚠️ No hay token, saltando carga de emails");
+    if (!token || !selectedCuentaGmailId) {
+      console.log("⚠️ No hay token o cuenta seleccionada");
       return;
     }
 
     try {
       setLoading(true);
-      console.log("📧 Cargando emails...");
+      console.log(`📧 Cargando emails para cuenta Gmail ${selectedCuentaGmailId}...`);
       
-      const response: EmailListResponse = await getEmails(token, CUENTA_GMAIL_ID, 1, 10);
+      const response: EmailListResponse = await getEmails(token, selectedCuentaGmailId, 1, 10);
       console.log("✅ Emails response:", response);
       
       if (response.success && response.data) {
@@ -109,26 +147,29 @@ const ViewEmails = () => {
     } finally {
       setLoading(false);
     }
-  }, [token, CUENTA_GMAIL_ID]);
+  }, [token, selectedCuentaGmailId]);
 
   // 🎯 Función para sincronizar emails
   const handleSync = async () => {
-    if (!token) {
-      message.error("Debes iniciar sesión primero");
+    if (!token || !selectedCuentaGmailId) {
+      message.error("Selecciona una cuenta Gmail primero");
       return;
     }
 
     try {
       setSyncing(true);
-      console.log("🔄 Sincronizando emails...");
+      console.log(`🔄 Sincronizando emails para cuenta ${selectedCuentaGmailId}...`);
       
-      const syncResult = await syncEmails(token, CUENTA_GMAIL_ID, 20);
+      const syncResult = await syncEmails(token, selectedCuentaGmailId, 20);
       console.log("✅ Sync result:", syncResult);
       
       message.success("Emails sincronizados exitosamente");
       
       // Recargar emails después del sync
       await loadEmails();
+      
+      // Recargar perfil para actualizar contadores
+      await loadUserProfile();
       
     } catch (error) {
       console.error("❌ Error sincronizando:", error);
@@ -138,13 +179,38 @@ const ViewEmails = () => {
     }
   };
 
-  // 🎯 Cargar emails al montar el componente
+  // 🎯 Manejar cambio de cuenta Gmail
+  const handleAccountChange = (cuentaGmailId: string) => {
+    console.log(`🔄 Cambiando a cuenta Gmail ${cuentaGmailId}`);
+    setSelectedCuentaGmailId(cuentaGmailId);
+    setEmails([]); // Limpiar emails anteriores
+  };
+
+  // 🎯 Cargar perfil al montar el componente
   useEffect(() => {
     if (token && userData.id) {
-      console.log("🔄 Usuario autenticado, cargando emails...");
+      console.log("🔄 Usuario autenticado, cargando perfil completo...");
+      loadUserProfile();
+    }
+  }, [token, userData.id, loadUserProfile]);
+
+  // 🎯 Cargar emails cuando cambia la cuenta seleccionada
+  useEffect(() => {
+    if (token && selectedCuentaGmailId) {
+      console.log(`🔄 Cuenta Gmail seleccionada: ${selectedCuentaGmailId}, cargando emails...`);
       loadEmails();
     }
-  }, [token, userData.id, loadEmails]); // ✅ Ahora incluye loadEmails
+  }, [token, selectedCuentaGmailId, loadEmails]);
+
+  // Mostrar loading mientras carga el perfil
+  if (loadingProfile) {
+    return (
+      <Layout style={{ width: "100%", minHeight: "100vh", display: "flex", justifyContent: "center", alignItems: "center" }}>
+        <Spin size="large" />
+        <p style={{ marginTop: "16px" }}>Cargando información del usuario...</p>
+      </Layout>
+    );
+  }
 
   return (
     <Layout
@@ -173,6 +239,7 @@ const ViewEmails = () => {
           type="default" 
           onClick={handleSync}
           loading={syncing}
+          disabled={!selectedCuentaGmailId}
         >
           {syncing ? "Sincronizando..." : "Sincronizar emails"}
         </Button>
@@ -188,37 +255,47 @@ const ViewEmails = () => {
         </Button>
       </div>
 
-      {/* 🎯 Información del usuario */}
-      {userData.email && (
+      {/* 🎯 Información del usuario y selector de cuenta */}
+      {userProfile && (
         <Card style={{ marginBottom: "24px" }}>
-          <p><strong>Usuario:</strong> {userData.email}</p>
-          <p><strong>Cuenta Gmail activa:</strong> agata.morales92@gmail.com (ID: {CUENTA_GMAIL_ID})</p>
-          {extendedUserData.cuentas_gmail && extendedUserData.cuentas_gmail.length > 0 && (
-            <div>
-              <p><strong>Cuentas Gmail conectadas:</strong></p>
-              <ul>
-                {extendedUserData.cuentas_gmail.map((cuenta: CuentaGmail, index: number) => (
-                  <li key={index}>
-                    {cuenta.email_gmail} ({cuenta.alias_personalizado || 'Sin alias'}) 
-                    - {cuenta.esta_activa ? '✅ Activa' : '❌ Inactiva'}
-                    - {cuenta.emails_count} emails
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <p><strong>Usuario:</strong> {userProfile.email}</p>
+          
+          {/* 🎯 SELECTOR DE CUENTA GMAIL */}
+          <GmailAccountSelector
+            cuentasGmail={userProfile.cuentas_gmail || []}
+            selectedAccountId={selectedCuentaGmailId}
+            onAccountChange={handleAccountChange}
+            loading={loading}
+          />
         </Card>
       )}
 
       {/* 🎯 Buscador */}
       <div style={{ display: "flex", gap: "50px", padding: "16px 0" }}>
-        <Input.Search placeholder="Buscar emails..." enterButton />
-        <Input placeholder="Filtrar por..." />
+        <Input.Search 
+          placeholder="Buscar emails..." 
+          enterButton 
+          disabled={!selectedCuentaGmailId}
+        />
+        <Input 
+          placeholder="Filtrar por..." 
+          disabled={!selectedCuentaGmailId}
+        />
       </div>
 
       {/* 🎯 Lista de emails */}
-      <Card title={`📧 Emails (${emails.length})`} style={{ flex: 1 }}>
-        {loading ? (
+      <Card 
+        title={`📧 Emails ${selectedCuentaGmailId ? `(${emails.length})` : ''}`} 
+        style={{ flex: 1 }}
+      >
+        {!selectedCuentaGmailId ? (
+          <div style={{ textAlign: "center", padding: "50px" }}>
+            <p>Conecta una cuenta Gmail para ver tus emails</p>
+            <Button type="primary" onClick={conectEmail}>
+              Conectar cuenta Gmail
+            </Button>
+          </div>
+        ) : loading ? (
           <div style={{ textAlign: "center", padding: "50px" }}>
             <Spin size="large" />
             <p style={{ marginTop: "16px" }}>Cargando emails...</p>

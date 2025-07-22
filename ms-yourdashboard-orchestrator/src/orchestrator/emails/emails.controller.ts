@@ -149,6 +149,8 @@ export class EmailsOrchestratorController {
     description: 'cuentaGmailId es requerido',
     type: OrchestratorErrorDto 
   })
+
+//peticion de frontend :GET http://localhost:3003/emails/inbox?cuentaGmailId=4&page=1&limit=10
   async getInbox(
     @Query('cuentaGmailId') cuentaGmailId: string,
     @Query('page') page?: string,
