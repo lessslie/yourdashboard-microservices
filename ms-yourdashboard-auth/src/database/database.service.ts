@@ -172,42 +172,80 @@ export class DatabaseService implements OnModuleDestroy {
   // 📧 CUENTAS GMAIL ASOCIADAS
   // ================================
 
-  async conectarCuentaGmail(oauthData: GoogleOAuthData & { usuario_principal_id: number, alias_personalizado?: string }): Promise<CuentaGmailAsociada> {
-    const expiresAt = oauthData.token_expira_en 
-      ? new Date(oauthData.token_expira_en) 
-      : new Date(Date.now() + 3600000); // 1 hora por defecto
+ async conectarCuentaGmail(oauthData: GoogleOAuthData & { usuario_principal_id: number, alias_personalizado?: string }): Promise<CuentaGmailAsociada> {
+    try {
+      // 🎯 PRIMERO: Verificar si esta cuenta Gmail ya está conectada a OTRO usuario
+      const checkQuery = `
+        SELECT usuario_principal_id, email_gmail 
+        FROM cuentas_gmail_asociadas 
+        WHERE google_id = $1 AND usuario_principal_id != $2 AND esta_activa = TRUE
+      `;
+      
+      const existingAccount = await this.query<{ usuario_principal_id: number; email_gmail: string }>(
+        checkQuery, 
+        [oauthData.google_id, oauthData.usuario_principal_id]
+      );
 
-    const query = `
-      INSERT INTO cuentas_gmail_asociadas (
-        usuario_principal_id, email_gmail, nombre_cuenta, google_id,
-        access_token, refresh_token, token_expira_en, alias_personalizado
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      ON CONFLICT (usuario_principal_id, email_gmail)
-      DO UPDATE SET
-        nombre_cuenta = $3,
-        access_token = $5,
-        refresh_token = $6,
-        token_expira_en = $7,
-        alias_personalizado = $8,
-        esta_activa = TRUE,
-        ultima_sincronizacion = NOW()
-      RETURNING *
-    `;
+      if (existingAccount.rows.length > 0) {
+        this.logger.warn(`⚠️ Intento de conectar Gmail ${oauthData.email} que ya pertenece a otro usuario`);
+        throw new Error(`GMAIL_YA_CONECTADA: La cuenta ${oauthData.email} ya está conectada a otro usuario`);
+      }
 
-    const result = await this.query<CuentaGmailAsociada>(query, [
-      oauthData.usuario_principal_id,
-      oauthData.email,
-      oauthData.nombre,
-      oauthData.google_id,
-      oauthData.access_token,
-      oauthData.refresh_token || null,
-      expiresAt,
-      oauthData.alias_personalizado || null
-    ]);
+      const expiresAt = oauthData.token_expira_en 
+        ? new Date(oauthData.token_expira_en) 
+        : new Date(Date.now() + 3600000); // 1 hora por defecto
 
-    this.logger.log(`📧 Cuenta Gmail conectada: ${oauthData.email} para usuario ${oauthData.usuario_principal_id}`);
-    return result.rows[0];
+      const query = `
+        INSERT INTO cuentas_gmail_asociadas (
+          usuario_principal_id, email_gmail, nombre_cuenta, google_id,
+          access_token, refresh_token, token_expira_en, alias_personalizado
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (usuario_principal_id, email_gmail)
+        DO UPDATE SET
+          nombre_cuenta = $3,
+          access_token = $5,
+          refresh_token = $6,
+          token_expira_en = $7,
+          alias_personalizado = $8,
+          esta_activa = TRUE,
+          ultima_sincronizacion = NOW()
+        RETURNING *
+      `;
+
+      const result = await this.query<CuentaGmailAsociada>(query, [
+        oauthData.usuario_principal_id,
+        oauthData.email,
+        oauthData.nombre,
+        oauthData.google_id,
+        oauthData.access_token,
+        oauthData.refresh_token || null,
+        expiresAt,
+        oauthData.alias_personalizado || null
+      ]);
+
+      this.logger.log(`📧 Cuenta Gmail conectada: ${oauthData.email} para usuario ${oauthData.usuario_principal_id}`);
+      return result.rows[0];
+
+    } catch (error) {
+      // 🎯 Manejar error de constraint UNIQUE de PostgreSQL
+      if (error instanceof Error) {
+        // Si es nuestro error personalizado
+        if (error.message.includes('GMAIL_YA_CONECTADA')) {
+          throw error;
+        }
+        
+        // Si es error de PostgreSQL por violación de UNIQUE constraint
+        const pgError = error as any;
+        if (pgError.code === '23505' && pgError.constraint === 'cuentas_gmail_asociadas_google_id_key') {
+          this.logger.error(`❌ Violación de constraint: Gmail ${oauthData.email} ya existe para otro usuario`);
+          throw new Error(`GMAIL_YA_CONECTADA: La cuenta ${oauthData.email} ya está conectada a otro usuario`);
+        }
+      }
+      
+      this.logger.error(`❌ Error conectando cuenta Gmail:`, error);
+      throw error;
+    }
   }
 
   async obtenerCuentasGmailUsuario(usuarioId: number): Promise<CuentaGmailResponse[]> {

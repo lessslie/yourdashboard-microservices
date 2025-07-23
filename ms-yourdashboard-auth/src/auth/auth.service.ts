@@ -291,7 +291,7 @@ export class AuthService {
   // 🔐 MANEJAR CALLBACK DE GOOGLE OAUTH - ARREGLADO
   // ================================
 
-  async manejarCallbackGoogle(googleUser: GoogleOAuthUser, usuarioActualId: number): Promise<RespuestaConexionGmail> {
+ async manejarCallbackGoogle(googleUser: GoogleOAuthUser, usuarioActualId: number): Promise<RespuestaConexionGmail> {
     try {
       this.logger.log(`🔵 Procesando callback Google para: ${googleUser.email}`);
       this.logger.log(`🎯 Usuario principal ID: ${usuarioActualId}`);
@@ -344,9 +344,19 @@ export class AuthService {
       };
 
     } catch (error) {
-      
       console.log(error);
       this.logger.error(`❌ Error en callback Google:`, error);
+      
+      // 🎯 MANEJAR ERROR ESPECÍFICO DE GMAIL YA CONECTADA
+      if (error instanceof Error && error.message.includes('GMAIL_YA_CONECTADA')) {
+        const emailMatch = error.message.match(/La cuenta (.+) ya está conectada/);
+        const email = emailMatch ? emailMatch[1] : 'de Gmail';
+        
+        throw new UnauthorizedException({
+          codigo: CodigosErrorAuth.CUENTA_GMAIL_YA_CONECTADA,
+          mensaje: `La cuenta ${email} ya está conectada a otro usuario. Cada cuenta de Gmail solo puede estar asociada a un usuario.`
+        });
+      }
       
       if (error instanceof UnauthorizedException || error instanceof NotFoundException) {
         throw error;

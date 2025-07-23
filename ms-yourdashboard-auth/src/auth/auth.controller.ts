@@ -408,7 +408,7 @@ export class AuthController {
     res.redirect(errorUrl.toString());
   }
 
-  @Get('google/callback')
+@Get('google/callback')
   @UseGuards(AuthGuard('google'))
   @ApiOperation({ 
     summary: 'Callback de Google OAuth',
@@ -453,7 +453,27 @@ export class AuthController {
       
       const errorUrl = new URL(this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000');
       errorUrl.searchParams.set('auth', 'error');
-      errorUrl.searchParams.set('message', encodeURIComponent(error instanceof Error ? error.message : 'Error desconocido'));
+      
+      // 🎯 MANEJAR MENSAJE DE ERROR ESPECÍFICO
+      let errorMessage = 'Error desconocido';
+      
+      if (error instanceof UnauthorizedException) {
+        const errorData = error.getResponse();
+        if (typeof errorData === 'object' && 'mensaje' in errorData) {
+          errorMessage = (errorData as any).mensaje;
+        } else {
+          errorMessage = error.message;
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      // 🎯 Si es error de cuenta ya conectada, asegurar mensaje claro
+      if (errorMessage.includes('ya está conectada')) {
+        // Ya tiene el mensaje correcto
+      }
+      
+      errorUrl.searchParams.set('message', encodeURIComponent(errorMessage));
       
       res.redirect(errorUrl.toString());
     }
