@@ -1,6 +1,5 @@
+import { MS_ORCHES_URL } from "@/components/Emails/lib/email";
 import axios from "axios";
-export const MS_AUTH_URL =
-  process.env.NEXT_PUBLIC_MS_AUTH_URL || "http://localhost:3001";
 
 export const register = async (
   name: string,
@@ -8,7 +7,7 @@ export const register = async (
   password: string
 ) => {
   try {
-    const response = await axios.post(`${MS_AUTH_URL}/auth/register`, {
+    const response = await axios.post(`${MS_ORCHES_URL}/auth/register`, {
       email,
       password,
       name,
@@ -21,7 +20,7 @@ export const register = async (
 
 export const login = async (email: string, password: string) => {
   try {
-    const response = await axios.post(`${MS_AUTH_URL}/auth/login`, {
+    const response = await axios.post(`${MS_ORCHES_URL}/auth/login`, {
       email,
       password,
     });
@@ -33,7 +32,20 @@ export const login = async (email: string, password: string) => {
 
 export const getUserData = async (token: string) => {
   try {
-    const response = await axios.get(`${MS_AUTH_URL}/auth/me`, {
+    const response = await axios.get(`${MS_ORCHES_URL}/auth/me`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+export const getGmailCuentas = async (token: string) => {
+  try {
+    const response = await axios.get(`${MS_ORCHES_URL}/auth/cuentas-gmail`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -46,7 +58,7 @@ export const getUserData = async (token: string) => {
 
 export const logOut = async () => {
   try {
-    const response = await axios.get(`${MS_AUTH_URL}/auth/logout`);
+    const response = await axios.get(`${MS_ORCHES_URL}/auth/logout`);
     return response.data;
   } catch (error) {
     alert(error);

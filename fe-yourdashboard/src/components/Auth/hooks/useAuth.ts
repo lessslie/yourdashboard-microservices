@@ -1,5 +1,45 @@
 import { useEffect, useState } from "react";
-import { getUserData } from "../lib/auth";
+import { getGmailCuentas, getUserData } from "../lib/auth";
+
+export interface IUserBack {
+  id: number;
+  email: string;
+  nombre: string;
+  fecha_registro: string;
+  estado: string;
+  email_verificado: boolean;
+}
+
+export interface IUser {
+  id: number;
+  name: string;
+  email: string;
+  state: string;
+  isEmailVerified: boolean;
+  createdAt: string;
+}
+
+export interface ICuentaGmailBack {
+  id: number;
+  email_gmail: string;
+  nombre_cuenta: string;
+  alias_personalizado: string;
+  fecha_conexion: string;
+  ultima_sincronizacion: string;
+  esta_activa: boolean;
+  emails_count: string;
+}
+
+export interface ICuentaGmail {
+  id: string;
+  emailGmail: string;
+  nameGmail: string;
+  alias: string;
+  createdAt: string;
+  lastSync: string;
+  isActive: boolean;
+  emailsCount: number;
+}
 
 export const useAuth = () => {
   const [token, setToken] = useState("");
@@ -25,27 +65,60 @@ export const useAuth = () => {
 };
 
 export const useUserData = () => {
-  const [userData, setUserData] = useState({
-    id: null,
-    name: "",
-    email: "",
-    isEmailVerified: false,
-    profilePicture: null,
-    createdAt: null,
-  });
+  const [userData, setUserData] = useState<IUser>({} as IUser);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
       const getUser = async () => {
-        const userData = await getUserData(token);
-        console.log("userData", userData);
+        const userResponse = await getUserData(token);
+        const userData = userResponse.usuario as IUserBack;
 
-        setUserData(userData.usuario);
+        const user: IUser = {
+          id: userData.id,
+          name: userData.nombre,
+          email: userData.email,
+          state: userData.estado,
+          isEmailVerified: userData.email_verificado,
+          createdAt: userData.fecha_registro,
+        };
+
+        setUserData(user);
       };
       getUser();
     }
   }, []);
 
   return { userData };
+};
+
+export const useCuentasGmail = () => {
+  const [cuentasGmail, setCuentasGmail] = useState<ICuentaGmail[]>([]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      const getCuentasGmail = async () => {
+        const gmailResponse = await getGmailCuentas(token);
+        const cuentas = gmailResponse.cuentas as ICuentaGmailBack[];
+        const cuentasGmail: ICuentaGmail[] = cuentas.map((cuenta) => ({
+          id: cuenta.id.toString(),
+          emailGmail: cuenta.email_gmail,
+          nameGmail: cuenta.nombre_cuenta,
+          alias: cuenta.alias_personalizado,
+          createdAt: cuenta.fecha_conexion,
+          lastSync: cuenta.ultima_sincronizacion,
+          isActive: cuenta.esta_activa,
+          emailsCount: parseInt(cuenta.emails_count),
+        }));
+        setCuentasGmail(cuentasGmail);
+        // console.log("📧 Cuentas Gmail:", gmailResponse.cuentas);
+      };
+      getCuentasGmail();
+    }
+  }, []);
+
+  return {
+    cuentasGmail,
+  };
 };
