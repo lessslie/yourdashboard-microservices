@@ -6,15 +6,13 @@ import {
   Put,
   Body,
   Param,
-  Headers,
   Req,
   Res,
   Query,
   UnauthorizedException,
   BadRequestException,
-
 } from '@nestjs/common';
-import { Response, Request } from 'express';
+import { Request, Response } from 'express';
 import { 
   ApiTags, 
   ApiOperation, 
@@ -123,7 +121,9 @@ export class AuthOrchestratorController {
     description: 'Token faltante o inválido',
     type: AuthErrorResponseDto
   })
-  async getProfile(@Headers('authorization') authHeader: string): Promise<ProfileResponseDto> {
+  async getProfile(@Req() req: Request): Promise<ProfileResponseDto> {
+    const authHeader = req.headers?.authorization;
+    
     if (!authHeader) {
       throw new UnauthorizedException('Token de autorización requerido');
     }
@@ -155,7 +155,9 @@ export class AuthOrchestratorController {
     description: 'Token faltante o inválido',
     type: AuthErrorResponseDto 
   })
-  async logout(@Headers('authorization') authHeader: string) {
+  async logout(@Req() req: Request) {
+    const authHeader = req.headers?.authorization;
+    
     if (!authHeader) {
       throw new UnauthorizedException('Token de autorización requerido');
     }
@@ -261,7 +263,9 @@ export class AuthOrchestratorController {
     description: 'Token faltante o inválido',
     type: AuthErrorResponseDto
   })
-  async listarCuentasGmail(@Headers('authorization') authHeader: string): Promise<CuentasGmailResponseDto> {
+  async listarCuentasGmail(@Req() req: Request): Promise<CuentasGmailResponseDto> {
+    const authHeader = req.headers?.authorization;
+    
     if (!authHeader) {
       throw new UnauthorizedException('Token de autorización requerido');
     }
@@ -293,9 +297,11 @@ export class AuthOrchestratorController {
     type: AuthErrorResponseDto
   })
   async obtenerCuentaGmail(
-    @Headers('authorization') authHeader: string,
+    @Req() req: Request,
     @Param('id') cuentaId: string
   ): Promise<CuentaGmailResponseDto> {
+    const authHeader = req.headers?.authorization;
+    
     if (!authHeader) {
       throw new UnauthorizedException('Token de autorización requerido');
     }
@@ -340,9 +346,11 @@ export class AuthOrchestratorController {
     type: AuthErrorResponseDto
   })
   async desconectarCuentaGmail(
-    @Headers('authorization') authHeader: string,
+    @Req() req: Request,
     @Param('id') cuentaId: string
   ) {
+    const authHeader = req.headers?.authorization;
+    
     if (!authHeader) {
       throw new UnauthorizedException('Token de autorización requerido');
     }
@@ -401,10 +409,12 @@ export class AuthOrchestratorController {
     type: AuthErrorResponseDto
   })
   async actualizarAliasCuenta(
-    @Headers('authorization') authHeader: string,
+    @Req() req: Request,
     @Param('id') cuentaId: string,
     @Body() body: { alias_personalizado: string }
   ) {
+    const authHeader = req.headers?.authorization;
+    
     if (!authHeader) {
       throw new UnauthorizedException('Token de autorización requerido');
     }

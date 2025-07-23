@@ -23,6 +23,17 @@ async function bootstrap() {
     .addTag('Dashboard', 'Endpoints de dashboard y resúmenes')
     .addTag('Authentication', 'Endpoints de autenticación')
     .addTag('Health', 'Estado del servicio')
+    .addBearerAuth(
+    {
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+      name: 'JWT',
+      description: 'Ingresa tu JWT token',
+      in: 'header',
+    },
+    'JWT-auth' 
+  )
     .addServer('http://localhost:3003', 'MS-Orchestrator Principal')
     .addServer('http://localhost:3000', 'Usado por Frontend')
     .build();
