@@ -1,27 +1,9 @@
+// ms-yourdashboard-auth/src/auth/google.strategy.ts
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
-import { Strategy, VerifyCallback, Profile } from 'passport-google-oauth20';
-
-interface GoogleProfile extends Profile {
-  id: string;
-  name: {
-    familyName: string;
-    givenName: string;
-  };
-  emails: Array<{
-    value: string;
-    verified: boolean;
-  }>;
-}
-
-interface GoogleUser {
-  googleId: string;
-  email: string;
-  name: string;
-  accessToken: string;
-  refreshToken: string;
-}
+import { Strategy, VerifyCallback } from 'passport-google-oauth20';
+import { GoogleOAuthUser, GoogleProfile } from './interfaces/auth.interfaces';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
@@ -41,37 +23,79 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
         'profile',
         'https://www.googleapis.com/auth/gmail.readonly'
       ],
+      // 🎯 PERMITIR PASAR EL STATE
+      passReqToCallback: false, // No necesitamos req en este caso
     });
   }
 
+  /**
+   * 🔐 Validar usuario de Google OAuth
+   * Este método es llamado automáticamente por Passport
+   */
   validate(
-  accessToken: string,
-  refreshToken: string,
-  profile: GoogleProfile,
-  done: VerifyCallback,
-): void {
-  try {
-    const { id, name, emails } = profile;
+    accessToken: string,
+    refreshToken: string,
+    profile: GoogleProfile,
+    done: VerifyCallback,
+  ): void {
+    try {
+      console.log('🔐 Validando usuario de Google:', profile.emails?.[0]?.value);
+      console.log('🔍 Profile ID:', profile.id);
+      console.log('🔍 Access Token recibido:', accessToken ? 'SÍ' : 'NO');
+      console.log('🔍 Refresh Token recibido:', refreshToken ? 'SÍ' : 'NO');
 
-    // Validar que tengamos la información necesaria
-    if (!id || !name || !emails || emails.length === 0) {
-      return done(new Error('Información incompleta del perfil de Google'), undefined);
+      const { id, name, emails } = profile;
+
+      // ✅ VALIDACIONES CON OPTIONAL CHAINING
+      if (!id) {
+        console.error('❌ Google Profile sin ID');
+        return done(new Error('Google Profile sin ID válido'), undefined);
+      }
+
+      if (!name?.givenName || !name?.familyName) {
+        console.error('❌ Google Profile sin nombre completo');
+        return done(new Error('Google Profile sin nombre completo'), undefined);
+      }
+
+      if (!emails?.length) {
+        console.error('❌ Google Profile sin email');
+        return done(new Error('Google Profile sin email válido'), undefined);
+      }
+
+      if (!emails[0]?.verified) {
+        console.warn('⚠️ Email de Google no verificado');
+      }
+
+      // ✅ VALIDAR QUE TENEMOS ACCESS TOKEN
+      if (!accessToken) {
+        console.error('❌ No se recibió access token de Google');
+        return done(new Error('Access token no recibido de Google'), undefined);
+      }
+
+      // ✅ CREAR USUARIO USANDO INTERFACE CORRECTA
+      const googleUser: GoogleOAuthUser = {
+        googleId: id,
+        email: emails[0].value,
+        name: `${name.givenName} ${name.familyName}`.trim(),
+        accessToken,
+        refreshToken: refreshToken || '' // Asegurar que no sea null
+      };
+
+      // ✅ VALIDACIONES ADICIONALES
+      if (!googleUser.email.includes('@')) {
+        console.error('❌ Email inválido de Google');
+        return done(new Error('Email inválido de Google'), undefined);
+      }
+
+      console.log('✅ Usuario Google validado exitosamente:', googleUser.email);
+      console.log('🎯 Google ID:', googleUser.googleId);
+      console.log('🎯 Tokens recibidos correctamente');
+      
+      done(null, googleUser);
+
+    } catch (error) {
+      console.error('❌ Error validando usuario de Google:', error);
+      done(error as Error, undefined);
     }
-
-    const user: GoogleUser = {
-      googleId: id,
-      email: emails[0].value,
-      name: `${name.givenName} ${name.familyName}`,
-      accessToken,
-      refreshToken,
-    };
-
-    console.log('✅ Usuario autenticado:', user.email);
-    done(null, user);
-
-  } catch (error) {
-    console.error('❌ Error validando usuario de Google:', error);
-    done(error, undefined);
   }
-}
 }

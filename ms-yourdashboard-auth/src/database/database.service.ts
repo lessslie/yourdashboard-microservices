@@ -1,15 +1,25 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { 
-  DatabaseQueryResult, 
-  UserData, 
-  UserTokens, 
-  DbUser 
+  UsuarioPrincipal,
+
+  CuentaGmailAsociada,
+  EmailSincronizado,
+  SesionJwt,
+  DatabaseQueryResult,
+  GoogleOAuthData,
+  RegistroUsuarioDto,
+  CrearSesionDto,
+  EstadisticasUsuario,
+  CuentaGmailResponse,
+  UserTokens,
+
 } from '../auth/interfaces/auth.interfaces';
 
 @Injectable()
 export class DatabaseService implements OnModuleDestroy {
+  private readonly logger = new Logger(DatabaseService.name);
   private readonly pool: Pool;
 
   constructor(private readonly configService: ConfigService) {
@@ -20,110 +30,520 @@ export class DatabaseService implements OnModuleDestroy {
       user: this.configService.get<string>('DB_USER'),
       password: this.configService.get<string>('DB_PASSWORD'),
     });
+
+    this.logger.log('🔌 DatabaseService inicializado con nueva arquitectura');
   }
 
   async onModuleDestroy(): Promise<void> {
     await this.pool.end();
+    this.logger.log('🔌 Pool de conexiones cerrado');
   }
 
-  // Ejecutar queries SQL genéricas
+  // ================================
+  // 🔧 MÉTODO GENÉRICO PARA QUERIES
+  // ================================
+
   async query<T extends QueryResultRow = any>(
     text: string, 
     params?: any[]
   ): Promise<DatabaseQueryResult<T>> {
     const client: PoolClient = await this.pool.connect();
     try {
+      const start = Date.now();
       const result: QueryResult<T> = await client.query<T>(text, params);
+      const duration = Date.now() - start;
+      
+      this.logger.debug(`🔍 Query ejecutado en ${duration}ms: ${text.substring(0, 50)}...`);
+      
       return {
         rows: result.rows,
         rowCount: result.rowCount || 0,
         command: result.command
       };
+    } catch (error) {
+      this.logger.error(`❌ Error en query: ${text}`, error);
+      throw error;
     } finally {
       client.release();
     }
   }
 
-  // Guardar o actualizar usuario
-  async upsertUser(userData: UserData): Promise<DbUser> {
+  // ================================
+  // 👤 USUARIOS PRINCIPALES
+  // ================================
+
+  async crearUsuarioPrincipal(userData: RegistroUsuarioDto & { password_hash: string }): Promise<UsuarioPrincipal> {
     const query = `
-      INSERT INTO users (google_id, email, name, access_token, refresh_token, token_expires_at, provider, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, 'google', NOW())
-      ON CONFLICT (google_id) 
-      DO UPDATE SET 
-        email = $2,
-        name = $3,
-        access_token = $4,
-        refresh_token = $5,
-        token_expires_at = $6,
-        updated_at = NOW()
+      INSERT INTO usuarios_principales (email, password_hash, nombre, email_verificado)
+      VALUES ($1, $2, $3, $4)
       RETURNING *
     `;
     
-    // Token expira en 24 hora
-    const expiresAt = new Date(Date.now() + 86400000);
-    
-    const values = [
-      userData.googleId,
+    const result = await this.query<UsuarioPrincipal>(query, [
       userData.email,
-      userData.name,
-      userData.accessToken,
-      userData.refreshToken || null,
-      expiresAt,
-    ];
+      userData.password_hash,
+      userData.nombre,
+      false // Email no verificado por defecto
+    ]);
 
-    const result = await this.query<DbUser>(query, values);
+    this.logger.log(`✅ Usuario principal creado: ${userData.email}`);
     return result.rows[0];
   }
 
-  // Guardar tokens en tabla separada
-  async saveUserTokens(userId: number, tokens: UserTokens): Promise<void> {
+  async buscarUsuarioPorEmail(email: string): Promise<UsuarioPrincipal | null> {
+    const query = `SELECT * FROM usuarios_principales WHERE email = $1 AND estado = 'activo'`;
+    const result = await this.query<UsuarioPrincipal>(query, [email]);
+    return result.rows[0] || null;
+  }
+
+  async buscarUsuarioPorId(id: number): Promise<UsuarioPrincipal | null> {
+    const query = `SELECT * FROM usuarios_principales WHERE id = $1 AND estado = 'activo'`;
+    const result = await this.query<UsuarioPrincipal>(query, [id]);
+    return result.rows[0] || null;
+  }
+
+  async actualizarUltimaActividad(userId: number): Promise<void> {
     const query = `
-      INSERT INTO user_tokens (user_id, access_token, refresh_token, expires_at, created_at)
-      VALUES ($1, $2, $3, $4, NOW())
-      ON CONFLICT (user_id) 
-      DO UPDATE SET 
-        access_token = $2,
-        refresh_token = $3,
-        expires_at = $4,
-        updated_at = NOW()
+      UPDATE usuarios_principales 
+      SET ultima_actualizacion = NOW() 
+      WHERE id = $1
+    `;
+    await this.query(query, [userId]);
+  }
+
+  // ================================
+  // 🔐 SESIONES JWT
+  // ================================
+
+  async crearSesion(sessionData: CrearSesionDto & { jwt_token: string }): Promise<SesionJwt> {
+    const horasVida = sessionData.duracion_horas || 24;
+    const query = `
+      INSERT INTO sesiones_jwt (
+        usuario_principal_id, jwt_token, expira_en, 
+        ip_origen, user_agent, esta_activa
+      )
+      VALUES ($1, $2, NOW() + INTERVAL '${horasVida} hours', $3, $4, TRUE)
+      RETURNING *
+    `;
+    
+    const result = await this.query<SesionJwt>(query, [
+      sessionData.usuario_principal_id,
+      sessionData.jwt_token,
+      sessionData.ip_origen || null,
+      sessionData.user_agent || null
+    ]);
+
+    this.logger.log(`🔐 Sesión JWT creada para usuario ${sessionData.usuario_principal_id}`);
+    return result.rows[0];
+  }
+
+  async validarSesion(jwtToken: string): Promise<SesionJwt | null> {
+    const query = `
+      SELECT * FROM sesiones_jwt 
+      WHERE jwt_token = $1 
+      AND esta_activa = TRUE 
+      AND expira_en > NOW()
+    `;
+    const result = await this.query<SesionJwt>(query, [jwtToken]);
+    return result.rows[0] || null;
+  }
+
+  async invalidarSesion(jwtToken: string): Promise<void> {
+    const query = `
+      UPDATE sesiones_jwt 
+      SET esta_activa = FALSE 
+      WHERE jwt_token = $1
+    `;
+    await this.query(query, [jwtToken]);
+    this.logger.log(`🚪 Sesión invalidada`);
+  }
+
+  async limpiarSesionesExpiradas(): Promise<number> {
+    const query = `
+      DELETE FROM sesiones_jwt 
+      WHERE expira_en < NOW() OR esta_activa = FALSE
+    `;
+    const result = await this.query(query);
+    this.logger.log(`🧹 ${result.rowCount} sesiones expiradas eliminadas`);
+    return result.rowCount;
+  }
+
+  // ================================
+  // 📧 CUENTAS GMAIL ASOCIADAS
+  // ================================
+
+ async conectarCuentaGmail(oauthData: GoogleOAuthData & { usuario_principal_id: number, alias_personalizado?: string }): Promise<CuentaGmailAsociada> {
+    try {
+      // 🎯 PRIMERO: Verificar si esta cuenta Gmail ya está conectada a OTRO usuario
+      const checkQuery = `
+        SELECT usuario_principal_id, email_gmail 
+        FROM cuentas_gmail_asociadas 
+        WHERE google_id = $1 AND usuario_principal_id != $2 AND esta_activa = TRUE
+      `;
+      
+      const existingAccount = await this.query<{ usuario_principal_id: number; email_gmail: string }>(
+        checkQuery, 
+        [oauthData.google_id, oauthData.usuario_principal_id]
+      );
+
+      if (existingAccount.rows.length > 0) {
+        this.logger.warn(`⚠️ Intento de conectar Gmail ${oauthData.email} que ya pertenece a otro usuario`);
+        throw new Error(`GMAIL_YA_CONECTADA: La cuenta ${oauthData.email} ya está conectada a otro usuario`);
+      }
+
+      const expiresAt = oauthData.token_expira_en 
+        ? new Date(oauthData.token_expira_en) 
+        : new Date(Date.now() + 3600000); // 1 hora por defecto
+
+      const query = `
+        INSERT INTO cuentas_gmail_asociadas (
+          usuario_principal_id, email_gmail, nombre_cuenta, google_id,
+          access_token, refresh_token, token_expira_en, alias_personalizado
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (usuario_principal_id, email_gmail)
+        DO UPDATE SET
+          nombre_cuenta = $3,
+          access_token = $5,
+          refresh_token = $6,
+          token_expira_en = $7,
+          alias_personalizado = $8,
+          esta_activa = TRUE,
+          ultima_sincronizacion = NOW()
+        RETURNING *
+      `;
+
+      const result = await this.query<CuentaGmailAsociada>(query, [
+        oauthData.usuario_principal_id,
+        oauthData.email,
+        oauthData.nombre,
+        oauthData.google_id,
+        oauthData.access_token,
+        oauthData.refresh_token || null,
+        expiresAt,
+        oauthData.alias_personalizado || null
+      ]);
+
+      this.logger.log(`📧 Cuenta Gmail conectada: ${oauthData.email} para usuario ${oauthData.usuario_principal_id}`);
+      return result.rows[0];
+
+    } catch (error) {
+      // 🎯 Manejar error de constraint UNIQUE de PostgreSQL
+      if (error instanceof Error) {
+        // Si es nuestro error personalizado
+        if (error.message.includes('GMAIL_YA_CONECTADA')) {
+          throw error;
+        }
+        
+        // Si es error de PostgreSQL por violación de UNIQUE constraint
+        const pgError = error as any;
+        if (pgError.code === '23505' && pgError.constraint === 'cuentas_gmail_asociadas_google_id_key') {
+          this.logger.error(`❌ Violación de constraint: Gmail ${oauthData.email} ya existe para otro usuario`);
+          throw new Error(`GMAIL_YA_CONECTADA: La cuenta ${oauthData.email} ya está conectada a otro usuario`);
+        }
+      }
+      
+      this.logger.error(`❌ Error conectando cuenta Gmail:`, error);
+      throw error;
+    }
+  }
+
+  async obtenerCuentasGmailUsuario(usuarioId: number): Promise<CuentaGmailResponse[]> {
+    const query = `
+      SELECT 
+        cga.id,
+        cga.email_gmail,
+        cga.nombre_cuenta,
+        cga.alias_personalizado,
+        cga.fecha_conexion,
+        cga.ultima_sincronizacion,
+        cga.esta_activa,
+        COALESCE(email_counts.count, 0) as emails_count
+      FROM cuentas_gmail_asociadas cga
+      LEFT JOIN (
+        SELECT cuenta_gmail_id, COUNT(*) as count 
+        FROM emails_sincronizados 
+        GROUP BY cuenta_gmail_id
+      ) email_counts ON cga.id = email_counts.cuenta_gmail_id
+      WHERE cga.usuario_principal_id = $1 
+      AND cga.esta_activa = TRUE
+      ORDER BY cga.fecha_conexion DESC
     `;
 
-    const expiresAt = tokens.expiry_date 
-      ? new Date(tokens.expiry_date) 
-      : new Date(Date.now() + 86400000); // 24 horas por defecto
+    const result = await this.query<CuentaGmailResponse>(query, [usuarioId]);
+    return result.rows;
+  }
 
-    await this.query(query, [
-      userId,
-      tokens.access_token,
-      tokens.refresh_token || null,
-      expiresAt
+  async obtenerCuentaGmailPorId(cuentaId: number, usuarioId: number): Promise<CuentaGmailAsociada | null> {
+    const query = `
+      SELECT * FROM cuentas_gmail_asociadas 
+      WHERE id = $1 AND usuario_principal_id = $2 AND esta_activa = TRUE
+    `;
+    const result = await this.query<CuentaGmailAsociada>(query, [cuentaId, usuarioId]);
+    return result.rows[0] || null;
+  }
+
+  async actualizarTokensGmail(cuentaId: number, accessToken: string, refreshToken?: string, expiresAt?: Date): Promise<void> {
+    const query = `
+      UPDATE cuentas_gmail_asociadas 
+      SET access_token = $2, refresh_token = $3, token_expira_en = $4, ultima_sincronizacion = NOW()
+      WHERE id = $1
+    `;
+    await this.query(query, [cuentaId, accessToken, refreshToken || null, expiresAt || null]);
+    this.logger.log(`🔄 Tokens actualizados para cuenta Gmail ID: ${cuentaId}`);
+  }
+
+  async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void> {
+    const query = `
+      UPDATE cuentas_gmail_asociadas 
+      SET esta_activa = FALSE 
+      WHERE id = $1 AND usuario_principal_id = $2
+    `;
+    await this.query(query, [cuentaId, usuarioId]);
+    this.logger.log(`📧 Cuenta Gmail desconectada: ID ${cuentaId}`);
+  }
+
+  // ================================
+  // 📨 EMAILS SINCRONIZADOS
+  // ================================
+
+  async sincronizarEmails(emails: Omit<EmailSincronizado, 'id' | 'fecha_sincronizado'>[]): Promise<number> {
+    if (emails.length === 0) return 0;
+
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      let emailsInsertados = 0;
+      
+      for (const email of emails) {
+        const query = `
+          INSERT INTO emails_sincronizados (
+            cuenta_gmail_id, gmail_message_id, asunto, 
+            remitente_email, remitente_nombre, fecha_recibido,
+            esta_leido, tiene_adjuntos, etiquetas_gmail
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          ON CONFLICT (cuenta_gmail_id, gmail_message_id) 
+          DO UPDATE SET
+            asunto = $3,
+            remitente_email = $4,
+            remitente_nombre = $5,
+            esta_leido = $7,
+            tiene_adjuntos = $8,
+            etiquetas_gmail = $9,
+            fecha_sincronizado = NOW()
+        `;
+
+        await client.query(query, [
+          email.cuenta_gmail_id,
+          email.gmail_message_id,
+          email.asunto || null,
+          email.remitente_email || null,
+          email.remitente_nombre || null,
+          email.fecha_recibido || null,
+          email.esta_leido,
+          email.tiene_adjuntos,
+          email.etiquetas_gmail || null
+        ]);
+        
+        emailsInsertados++;
+      }
+
+      await client.query('COMMIT');
+      this.logger.log(`📨 ${emailsInsertados} emails sincronizados`);
+      return emailsInsertados;
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      this.logger.error('❌ Error sincronizando emails:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async obtenerEmailsPaginados(
+    cuentaGmailId: number, 
+    page: number = 1, 
+    limit: number = 10,
+    soloNoLeidos: boolean = false
+  ): Promise<{ emails: EmailSincronizado[]; total: number }> {
+    const offset = (page - 1) * limit;
+    const filtroLeidos = soloNoLeidos ? 'AND esta_leido = FALSE' : '';
+
+    const queryEmails = `
+      SELECT * FROM emails_sincronizados 
+      WHERE cuenta_gmail_id = $1 ${filtroLeidos}
+      ORDER BY fecha_recibido DESC 
+      LIMIT $2 OFFSET $3
+    `;
+
+    const queryTotal = `
+      SELECT COUNT(*) as total FROM emails_sincronizados 
+      WHERE cuenta_gmail_id = $1 ${filtroLeidos}
+    `;
+
+    const [emailsResult, totalResult] = await Promise.all([
+      this.query<EmailSincronizado>(queryEmails, [cuentaGmailId, limit, offset]),
+      this.query<{ total: string }>(queryTotal, [cuentaGmailId])
     ]);
+
+    return {
+      emails: emailsResult.rows,
+      total: parseInt(totalResult.rows[0].total)
+    };
   }
 
-  // Obtener usuario por ID
-  async getUserById(userId: number): Promise<DbUser | null> {
-    const query = `SELECT * FROM users WHERE id = $1`;
-    const result = await this.query<DbUser>(query, [userId]);
-    return result.rows[0] || null;
+  async buscarEmails(cuentaGmailId: number, termino: string, page: number = 1, limit: number = 10): Promise<{ emails: EmailSincronizado[]; total: number }> {
+    const offset = (page - 1) * limit;
+    const terminoBusqueda = `%${termino.toLowerCase()}%`;
+
+    const queryEmails = `
+      SELECT * FROM emails_sincronizados 
+      WHERE cuenta_gmail_id = $1 
+      AND (
+        LOWER(asunto) LIKE $2 OR 
+        LOWER(remitente_email) LIKE $2 OR 
+        LOWER(remitente_nombre) LIKE $2
+      )
+      ORDER BY fecha_recibido DESC 
+      LIMIT $3 OFFSET $4
+    `;
+
+    const queryTotal = `
+      SELECT COUNT(*) as total FROM emails_sincronizados 
+      WHERE cuenta_gmail_id = $1 
+      AND (
+        LOWER(asunto) LIKE $2 OR 
+        LOWER(remitente_email) LIKE $2 OR 
+        LOWER(remitente_nombre) LIKE $2
+      )
+    `;
+
+    const [emailsResult, totalResult] = await Promise.all([
+      this.query<EmailSincronizado>(queryEmails, [cuentaGmailId, terminoBusqueda, limit, offset]),
+      this.query<{ total: string }>(queryTotal, [cuentaGmailId, terminoBusqueda])
+    ]);
+
+    return {
+      emails: emailsResult.rows,
+      total: parseInt(totalResult.rows[0].total)
+    };
   }
 
-  // Obtener usuario por Google ID
-  async getUserByGoogleId(googleId: string): Promise<DbUser | null> {
-    const query = `SELECT * FROM users WHERE google_id = $1`;
-    const result = await this.query<DbUser>(query, [googleId]);
-    return result.rows[0] || null;
-  }
+  // ================================
+  // 🔑 TOKENS DE USUARIO
+ // TokensService
+async saveUserTokens(userId: number, tokens: UserTokens ): Promise<void> {
+  const query = `
+    INSERT INTO user_tokens (user_id, access_token, refresh_token, expires_at, created_at)
+    VALUES ($1, $2, $3, $4, NOW())
+    ON CONFLICT (user_id) 
+    DO UPDATE SET 
+      access_token = $2,
+      refresh_token = $3,
+      expires_at = $4,
+      updated_at = NOW()
+  `;
 
-  // Verificar salud de la conexión
- async healthCheck(): Promise<boolean> {
-  try {
-    const result = await this.query<{ health: number }>('SELECT 1 as health');
-    const firstRow = result.rows[0];
-    return firstRow?.health === 1;
-  } catch (error) {
-    console.error('❌ Database health check failed:', error);
-    return false;
-  }
+  const expiresAt = (typeof tokens.expiry_date === 'string' || typeof tokens.expiry_date === 'number' || tokens.expiry_date instanceof Date)
+    ? new Date(tokens.expiry_date)
+    : new Date(Date.now() + 86400000); // 24 horas por defecto
+
+  await this.query(query, [
+    userId,
+    tokens.access_token,
+    tokens.refresh_token || null,
+    expiresAt
+  ]);
 }
+
+
+  // ================================
+  // 📊 ESTADÍSTICAS
+  // ================================
+
+  async obtenerEstadisticasUsuario(usuarioId: number): Promise<EstadisticasUsuario> {
+    const query = `
+      SELECT 
+        COUNT(DISTINCT cga.id) as total_cuentas_gmail,
+        COUNT(DISTINCT CASE WHEN cga.esta_activa THEN cga.id END) as cuentas_gmail_activas,
+        COUNT(es.id) as total_emails_sincronizados,
+        COUNT(CASE WHEN es.esta_leido = FALSE THEN 1 END) as emails_no_leidos,
+        MAX(cga.ultima_sincronizacion) as ultima_sincronizacion
+      FROM usuarios_principales up
+      LEFT JOIN cuentas_gmail_asociadas cga ON up.id = cga.usuario_principal_id
+      LEFT JOIN emails_sincronizados es ON cga.id = es.cuenta_gmail_id
+      WHERE up.id = $1
+      GROUP BY up.id
+    `;
+
+    const result = await this.query<{ total_cuentas_gmail: string; cuentas_gmail_activas: string; total_emails_sincronizados: string; emails_no_leidos: string; ultima_sincronizacion: string }>(query, [usuarioId]);
+    const stats = result.rows[0];
+
+    // Obtener cuenta más activa
+    const queryCuentaMasActiva = `
+      SELECT cga.email_gmail, COUNT(es.id) as emails_count
+      FROM cuentas_gmail_asociadas cga
+      LEFT JOIN emails_sincronizados es ON cga.id = es.cuenta_gmail_id
+      WHERE cga.usuario_principal_id = $1 AND cga.esta_activa = TRUE
+      GROUP BY cga.id, cga.email_gmail
+      ORDER BY emails_count DESC
+      LIMIT 1
+    `;
+
+    const cuentaActivaResult = await this.query<{ email_gmail: string; emails_count: string }>(queryCuentaMasActiva, [usuarioId]);
+
+    return {
+      total_cuentas_gmail: parseInt(stats?.total_cuentas_gmail || '0'),
+      cuentas_gmail_activas: parseInt(stats?.cuentas_gmail_activas || '0'),
+      total_emails_sincronizados: parseInt(stats?.total_emails_sincronizados || '0'),
+      emails_no_leidos: parseInt(stats?.emails_no_leidos || '0'),
+      ultima_sincronizacion: stats?.ultima_sincronizacion ? new Date(stats.ultima_sincronizacion) : new Date(0),
+      cuenta_mas_activa: {
+        email_gmail: cuentaActivaResult.rows[0]?.email_gmail || '',
+        emails_count: parseInt(cuentaActivaResult.rows[0]?.emails_count || '0')
+      }
+    };
+  }
+
+  // ================================
+  // 🔧 HEALTH CHECK
+  // ================================
+
+  async healthCheck(): Promise<{ connected: boolean; query_time_ms: number }> {
+    try {
+      const start = Date.now();
+      await this.query('SELECT 1 as health');
+      const query_time_ms = Date.now() - start;
+      
+      return { connected: true, query_time_ms };
+    } catch (error) {
+      this.logger.error('❌ Database health check failed:', error);
+      return { connected: false, query_time_ms: 0 };
+    }
+  }
+
+  async obtenerEstadisticasGenerales() {
+    const query = `
+      SELECT 
+        (SELECT COUNT(*) FROM usuarios_principales WHERE estado = 'activo') as usuarios_activos,
+        (SELECT COUNT(*) FROM cuentas_gmail_asociadas WHERE esta_activa = TRUE) as cuentas_gmail_conectadas,
+        (SELECT COUNT(*) FROM sesiones_jwt WHERE esta_activa = TRUE AND expira_en > NOW()) as sesiones_activas
+    `;
+
+    const result = await this.query<{
+      usuarios_activos: string;
+      cuentas_gmail_conectadas: string;
+      sesiones_activas: string;
+    }>(query);
+
+    const stats = result.rows[0];
+    return {
+      usuarios_activos: parseInt(stats.usuarios_activos),
+      cuentas_gmail_conectadas: parseInt(stats.cuentas_gmail_conectadas),
+      sesiones_activas: parseInt(stats.sesiones_activas)
+    };
+  }
 }

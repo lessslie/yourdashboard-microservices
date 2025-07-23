@@ -1,3 +1,4 @@
+
 // src/orchestrator/auth/dto/auth-response.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -58,3 +59,104 @@ export class AuthErrorResponseDto {
   })
   timestamp: string;
 }
+
+export class UserDto {
+  @ApiProperty({ example: 1 })
+  id: number;
+
+  @ApiProperty({ example: 'usuario@example.com' })
+  email: string;
+
+  @ApiProperty({ example: 'Juan Pérez' })
+  name: string;
+
+  @ApiProperty({ example: true })
+  isEmailVerified: boolean;
+
+  @ApiProperty({ example: '2024-01-15T10:30:00Z' })
+  createdAt: string;
+
+  @ApiProperty({ example: null, nullable: true })
+  profilePicture: string | null;
+}
+
+export class AuthResponseDto {
+  @ApiProperty({ example: true })
+  success: boolean;
+
+  @ApiProperty({ example: 'Usuario registrado exitosamente' })
+  message: string;
+
+  @ApiProperty({ type: UserDto })
+  user: UserDto;
+
+  @ApiProperty({ example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' })
+  token: string;
+}
+
+export class ProfileResponseDto {
+  @ApiProperty({ example: true })
+  success: boolean;
+
+  @ApiProperty()
+  usuario: {
+    id: number;
+    email: string;
+    nombre: string;
+    fecha_registro: string;
+    estado: string;
+    email_verificado: boolean;
+  };
+
+  @ApiProperty({ type: [Object] })
+  cuentas_gmail: any[];
+
+  @ApiProperty({ type: [Object] })
+  sesiones_activas: any[];
+
+  @ApiProperty()
+  estadisticas: any;
+}
+
+export class CuentaGmailDto {
+  @ApiProperty({ example: 4 })
+  id: number;
+
+  @ApiProperty({ example: 'usuario@gmail.com' })
+  email_gmail: string;
+
+  @ApiProperty({ example: 'Usuario Gmail' })
+  nombre_cuenta: string;
+
+  @ApiProperty({ example: 'Gmail Personal', required: false })
+  alias_personalizado?: string;
+
+  @ApiProperty({ example: '2024-01-15T10:30:00Z' })
+  fecha_conexion: string;
+
+  @ApiProperty({ example: true })
+  esta_activa: boolean;
+
+  @ApiProperty({ example: 150 })
+  emails_count: number;
+}
+
+export class CuentasGmailResponseDto {
+  @ApiProperty({ example: true })
+  success: boolean;
+
+  @ApiProperty({ type: [CuentaGmailDto] })
+  cuentas: CuentaGmailDto[];
+
+  @ApiProperty({ example: 2 })
+  total: number;
+}
+
+export class CuentaGmailResponseDto {
+  @ApiProperty({ example: true })
+  success: boolean;
+
+  @ApiProperty({ type: CuentaGmailDto })
+  cuenta: CuentaGmailDto;
+}
+

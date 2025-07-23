@@ -1,14 +1,11 @@
 
-// ============================================
-// emails/emails.module.ts
-// ============================================
 import { Module } from '@nestjs/common';
 import { EmailsOrchestratorController } from './emails.controller';
 import { EmailsOrchestratorService } from './emails.service';
 import { ConfigModule } from '@nestjs/config';
 
 @Module({
-  imports: [ConfigModule],
+  imports: [ConfigModule],//acceso a variables de entorno
   controllers: [EmailsOrchestratorController],
   providers: [EmailsOrchestratorService],
   exports: [EmailsOrchestratorService]

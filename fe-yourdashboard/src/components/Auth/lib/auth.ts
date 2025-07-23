@@ -31,23 +31,6 @@ export const login = async (email: string, password: string) => {
   }
 };
 
-export const handleConnectService = async () => {
-  try {
-    const response = await axios.get(`${MS_AUTH_URL}/auth/google`);
-    return response.data;
-  } catch (error) {
-    alert(error);
-  }
-  // if (service === "gmail") {
-  //   console.log("🔵 Conectando con Gmail...");
-  //   const authUrl = `${MS_AUTH_URL}/auth/google`;
-  //   window.location.href = authUrl;
-  // } else {
-  //   console.log(`🔵 ${service} aún no implementado`);
-  //   alert(`Conexión con ${service} próximamente disponible`);
-  // }
-};
-
 export const getUserData = async (token: string) => {
   try {
     const response = await axios.get(`${MS_AUTH_URL}/auth/me`, {
