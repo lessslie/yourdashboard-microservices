@@ -51,8 +51,13 @@ export const useEmails = (cuentasGmail: ICuentaGmail[]) => {
     string | null
   >(null);
 
+  useEffect(() => {
+    if (cuentasGmail.length > 0 && !selectedCuentaGmailId) {
+      setSelectedCuentaGmailId(cuentasGmail[0].id);
+    }
+  }, [cuentasGmail, selectedCuentaGmailId]);
+
   const handleAccountChange = (cuentaGmailId: string) => {
-    console.log(`🔄 Cambiando a cuenta Gmail ${cuentaGmailId}`);
     setSelectedCuentaGmailId(cuentaGmailId);
     setPage(1);
   };

@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Layout, Button, List, Skeleton, Pagination, Card, Input } from "antd";
 
-import { getEmails, handleConnectService } from "./lib/emails";
+import { handleConnectService } from "./lib/emails";
+import { DownOutlined, UpOutlined } from "@ant-design/icons";
 import { ICuentaGmail } from "../Auth/hooks/useAuth";
 import { useEmails } from "./hooks/useEmails";
-import GmailAccountSelector from "./GmailAccountSelector";
+import TabsTest from "./Tabs";
 
 const { Content } = Layout;
 
@@ -15,6 +16,7 @@ const ListEmails = ({
   token: string;
   cuentasGmail: ICuentaGmail[];
 }) => {
+  const [open, setOpen] = useState(true);
   const {
     initLoading,
     list,
@@ -30,18 +32,61 @@ const ListEmails = ({
   };
 
   return (
-    <div>
-      {cuentasGmail && (
-        <Card style={{ marginBottom: "24px" }}>
-          <GmailAccountSelector
-            cuentasGmail={cuentasGmail || []}
-            selectedAccountId={selectedCuentaGmailId}
-            onAccountChange={handleAccountChange}
-            loading={initLoading}
-          />
-          <Button type="primary" onClick={conectEmail}>
-            Conectar mas de una cuenta
-          </Button>
+    <div style={{ padding: "24px" }}>
+      {cuentasGmail.length !== 0 ? (
+        <Card
+          title={
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <h4>📧 Cuentas de Gmail conectadas</h4>
+
+              {open ? (
+                <UpOutlined onClick={() => setOpen(false)} />
+              ) : (
+                <DownOutlined onClick={() => setOpen(true)} />
+              )}
+            </div>
+          }
+          style={{ marginBottom: "24px", textAlign: "center" }}
+        >
+          {open && (
+            <div
+              style={{ gap: "16px", display: "flex", flexDirection: "column" }}
+            >
+              <TabsTest
+                data={cuentasGmail}
+                handleConnectService={handleAccountChange}
+              />
+              <Button type="primary" onClick={conectEmail}>
+                Conectar mas de una cuenta
+              </Button>
+            </div>
+          )}
+        </Card>
+      ) : (
+        <Card
+          title={
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <h4>📧 Cuentas de Gmail conectadas</h4>
+              <Button type="primary" onClick={conectEmail}>
+                Conectar cuenta Gmail
+              </Button>
+            </div>
+          }
+          style={{ textAlign: "center", marginBottom: "24px" }}
+        >
+          <p>No hay cuentas de Gmail conectadas</p>
         </Card>
       )}
       <Card
@@ -51,7 +96,12 @@ const ListEmails = ({
               marginBottom: "16px",
             }}
           >
-            <h4>📧 Emails</h4>
+            <h4>
+              📧 Emails:{" "}
+              {cuentasGmail.find((c) => selectedCuentaGmailId?.includes(c.id))
+                ?.emailGmail || ""}{" "}
+              ({list.total})
+            </h4>
             <div style={{ display: "flex", gap: "50px" }}>
               <Input.Search placeholder="Buscar..." enterButton />
               <Input placeholder="Filtrar por..." />
@@ -68,7 +118,9 @@ const ListEmails = ({
             </Button>
           </div>
         ) : (
-          <>
+          <div
+            style={{ gap: "56px", display: "flex", flexDirection: "column" }}
+          >
             <List
               className="demo-loadmore-list"
               loading={initLoading}
@@ -82,7 +134,7 @@ const ListEmails = ({
                       title={item.name}
                       description={item.subject}
                     />
-                    <Button type="primary">Ver mas</Button>
+                    <Button type="primary">Leer mail</Button>
                   </Skeleton>
                 </List.Item>
               )}
@@ -97,7 +149,7 @@ const ListEmails = ({
                 setLimit(limit);
               }}
             />
-          </>
+          </div>
         )}
       </Card>
     </div>

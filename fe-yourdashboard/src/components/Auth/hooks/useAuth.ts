@@ -25,7 +25,7 @@ export interface ICuentaGmailBack {
   nombre_cuenta: string;
   alias_personalizado: string;
   fecha_conexion: string;
-  ultima_sincronizacion: string;
+  ultima_sincronizacion: Date;
   esta_activa: boolean;
   emails_count: string;
 }
@@ -36,8 +36,8 @@ export interface ICuentaGmail {
   nameGmail: string;
   alias: string;
   createdAt: string;
-  lastSync: string;
-  isActive: boolean;
+  lastSync: Date;
+  isActive: "Activo" | "Inactivo";
   emailsCount: number;
 }
 
@@ -65,31 +65,38 @@ export const useAuth = () => {
 };
 
 export const useUserData = () => {
+  const [loadingProfile, setLoadingProfile] = useState(true);
   const [userData, setUserData] = useState<IUser>({} as IUser);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
       const getUser = async () => {
-        const userResponse = await getUserData(token);
-        const userData = userResponse.usuario as IUserBack;
+        try {
+          const userResponse = await getUserData(token);
+          const userData = userResponse.usuario as IUserBack;
 
-        const user: IUser = {
-          id: userData.id,
-          name: userData.nombre,
-          email: userData.email,
-          state: userData.estado,
-          isEmailVerified: userData.email_verificado,
-          createdAt: userData.fecha_registro,
-        };
+          const user: IUser = {
+            id: userData.id,
+            name: userData.nombre,
+            email: userData.email,
+            state: userData.estado,
+            isEmailVerified: userData.email_verificado,
+            createdAt: userData.fecha_registro,
+          };
 
-        setUserData(user);
+          setUserData(user);
+        } catch (error) {
+          console.log(error);
+        } finally {
+          setLoadingProfile(false);
+        }
       };
       getUser();
     }
   }, []);
 
-  return { userData };
+  return { userData, loadingProfile };
 };
 
 export const useCuentasGmail = () => {
@@ -105,10 +112,10 @@ export const useCuentasGmail = () => {
           id: cuenta.id.toString(),
           emailGmail: cuenta.email_gmail,
           nameGmail: cuenta.nombre_cuenta,
-          alias: cuenta.alias_personalizado,
+          alias: cuenta.alias_personalizado || "Sin alias",
           createdAt: cuenta.fecha_conexion,
-          lastSync: cuenta.ultima_sincronizacion,
-          isActive: cuenta.esta_activa,
+          lastSync: cuenta.ultima_sincronizacion || "Sin sincronizar",
+          isActive: cuenta.esta_activa ? "Activo" : "Inactivo",
           emailsCount: parseInt(cuenta.emails_count),
         }));
         setCuentasGmail(cuentasGmail);
