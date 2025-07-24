@@ -258,7 +258,7 @@ export class DatabaseService implements OnModuleDestroy {
         cga.fecha_conexion,
         cga.ultima_sincronizacion,
         cga.esta_activa,
-        COALESCE(email_counts.count, 0) as emails_count
+        0 as emails_count
       FROM cuentas_gmail_asociadas cga
       LEFT JOIN (
         SELECT cuenta_gmail_id, COUNT(*) as count 
