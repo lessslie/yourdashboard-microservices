@@ -75,7 +75,7 @@ export class SyncService {
       }
 
       // 4️⃣ Procesar emails en lotes (para no saturar)
-      const BATCH_SIZE = 10; // Procesar de a 10 emails
+      const BATCH_SIZE = 50; // Procesar de a 10 emails
       const emailsMetadata: EmailMetadataDB[] = [];
       let ultimaFechaEmail: Date | undefined;
 
@@ -302,7 +302,7 @@ export class SyncService {
   async syncIncrementalEmails(
     accessToken: string,
     cuentaGmailId: number,
-    maxEmails: number = 1000
+    maxEmails: number = 10000
   ): Promise<SyncStats> {
     try {
       this.logger.log(`🔄 ⚡ INICIANDO SYNC INCREMENTAL para cuenta ${cuentaGmailId}`);
