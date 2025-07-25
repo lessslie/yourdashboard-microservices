@@ -72,50 +72,22 @@ export class EmailsService {
     }
   }
 
-  /**
-   * 🔄 Auto-sync inteligente (ejecuta en background si es necesario) - ACTUALIZADO
-   */
-  private async autoSyncIfNeeded(accessToken: string, cuentaGmailId: number): Promise<void> {
-    try {
-      const syncStats = await this.syncService.getSyncStats(cuentaGmailId);
-      
-      // ⏰ Verificar si necesita sync: no hay emails O último sync fue hace más de 1 hora
-      const unaHoraAtras = new Date(Date.now() - 60 * 60 * 1000);
-      const necesitaSync = !syncStats.ultimo_sync || syncStats.ultimo_sync < unaHoraAtras;
-      
-      if (necesitaSync && syncStats.total_emails_bd < 200) { // Solo si no hay muchos emails ya
-        this.logger.log(`🔄 ⚡ AUTO-SYNC activado para cuenta Gmail ${cuentaGmailId}`);
-        
-        // 🎯 Sync incremental en background (no await para no bloquear)
-        this.syncService.syncIncrementalEmails(accessToken, cuentaGmailId, 30)
-          .then(result => {
-            this.logger.log(`✅ Auto-sync completado: ${result.emails_nuevos} nuevos`);
-          })
-          .catch(error => {
-            this.logger.error('❌ Error en auto-sync:', error);
-          });
-      }
-      
-    } catch  {
-      this.logger.debug('⚠️ Auto-sync check failed, continuando sin sincronizar');
-    }
-  }
-
   // ================================
-  // 📧 INBOX - MÉTODO HÍBRIDO INTELIGENTE - ACTUALIZADO
+  // 📧 INBOX - MÉTODO HÍBRIDO MEJORADO - GMAIL-LIKE
   // ================================
 
   /**
-   * 📧 INBOX HÍBRIDO - BD local primero, Gmail API como fallback - ACTUALIZADO
+   * 📧 INBOX HÍBRIDO MEJORADO - Gmail API primero, BD como fallback
+   * 🎯 CAMBIO PRINCIPAL: Siempre intenta Gmail API primero
    */
   async getInboxWithToken(
     accessToken: string, 
-    cuentaGmailId: string, // 🎯 Cambio: cuentaGmailId en lugar de userId
+    cuentaGmailId: string,
     page: number = 1,
     limit: number = 10
   ): Promise<EmailListResponse> {
     try {
-      this.logger.log(`📧 🎯 INBOX HÍBRIDO para cuenta Gmail ${cuentaGmailId} - Página ${page}`);
+      this.logger.log(`📧 🎯 INBOX GMAIL-LIKE para cuenta Gmail ${cuentaGmailId} - Página ${page}`);
 
       const cuentaGmailIdNum = parseInt(cuentaGmailId);
       
@@ -123,24 +95,33 @@ export class EmailsService {
         throw new Error('cuentaGmailId debe ser un número válido');
       }
 
-      // 1️⃣ INTENTAR DESDE BD LOCAL PRIMERO (súper rápido)
+      // 1️⃣ ESTRATEGIA GMAIL-LIKE: Siempre intentar Gmail API primero
       try {
+        this.logger.log(`📡 Consultando Gmail API directamente (estrategia Gmail-like)`);
+        const gmailResult = await this.getInboxFromGmailAPI(accessToken, cuentaGmailId, page, limit);
+        
+        // 2️⃣ Iniciar sync en background si es necesario (NO BLOQUEA)
+        this.checkAndStartBackgroundSync(accessToken, cuentaGmailIdNum).catch(err => {
+          this.logger.debug(`Background sync error (ignorado):`, err);
+        });
+        
+        this.logger.log(`✅ Inbox obtenido desde Gmail API: ${gmailResult.emails.length} emails`);
+        return gmailResult;
+        
+      } catch (gmailError) {
+        this.logger.warn(`⚠️ Gmail API no disponible, usando BD local como fallback`);
+        
+        // 3️⃣ FALLBACK: Si Gmail API falla, intentar BD local
         const dbResult = await this.databaseService.getEmailsPaginated(
           cuentaGmailIdNum, 
           page, 
           limit
         );
 
-        // ✅ Si tenemos emails en BD, usarlos
         if (dbResult.total > 0) {
-          this.logger.log(`⚡ 🎉 INBOX desde BD LOCAL: ${dbResult.emails.length} emails (total: ${dbResult.total})`);
+          this.logger.log(`💾 FALLBACK exitoso: ${dbResult.emails.length} emails desde BD local`);
           
-          // 🔄 Auto-sync en background si es necesario (no bloquea)
-          void this.autoSyncIfNeeded(accessToken, cuentaGmailIdNum);
-
-          // 🔄 Convertir formato BD → formato API
           const emails = dbResult.emails.map(this.convertDBToEmailMetadata);
-          
           const totalPages = Math.ceil(dbResult.total / limit);
           
           return {
@@ -153,42 +134,19 @@ export class EmailsService {
             hasPreviousPage: page > 1
           };
         } else {
-          this.logger.log(`📭 BD local vacía, intentando sync inicial...`);
+          this.logger.log(`📭 BD local vacía, retornando respuesta vacía`);
           
-          // 🔄 Si BD está vacía, hacer sync inicial (bloquea esta vez)
-          await this.syncService.syncIncrementalEmails(accessToken, cuentaGmailIdNum, 50);
-          
-          // 🔄 Intentar de nuevo desde BD
-          const dbResultAfterSync = await this.databaseService.getEmailsPaginated(
-            cuentaGmailIdNum, 
-            page, 
-            limit
-          );
-          
-          if (dbResultAfterSync.total > 0) {
-            this.logger.log(`🎉 Sync inicial exitoso: ${dbResultAfterSync.total} emails`);
-            
-            const emails = dbResultAfterSync.emails.map(this.convertDBToEmailMetadata);
-            const totalPages = Math.ceil(dbResultAfterSync.total / limit);
-            
-            return {
-              emails,
-              total: dbResultAfterSync.total,
-              page,
-              limit,
-              totalPages,
-              hasNextPage: page < totalPages,
-              hasPreviousPage: page > 1
-            };
-          }
+          return {
+            emails: [],
+            total: 0,
+            page,
+            limit,
+            totalPages: 0,
+            hasNextPage: false,
+            hasPreviousPage: false
+          };
         }
-      } catch (dbError) {
-        this.logger.warn(`⚠️ Error consultando BD, fallback a Gmail API:`, dbError);
       }
-
-      // 2️⃣ FALLBACK: GMAIL API (método original)
-      this.logger.log(`📡 INBOX desde Gmail API (fallback)`);
-      return await this.getInboxFromGmailAPI(accessToken, cuentaGmailId, page, limit);
 
     } catch (error) {
       this.logger.error('❌ Error obteniendo inbox:', error);
@@ -197,22 +155,92 @@ export class EmailsService {
     }
   }
 
+  /**
+   * 🔄 Verificar y comenzar sincronización en background
+   * NO BLOQUEA - Se ejecuta en background
+   */
+  private async checkAndStartBackgroundSync(accessToken: string, cuentaGmailId: number): Promise<void> {
+    try {
+      // Verificar si ya hay emails sincronizados
+      const lastSync = await this.databaseService.getLastSyncedEmail(cuentaGmailId);
+      
+      if (!lastSync) {
+        this.logger.log(`🔄 Cuenta nueva detectada, iniciando sync background para cuenta ${cuentaGmailId}`);
+        
+        // Sincronización progresiva en background
+        // NO usar await aquí para no bloquear
+        this.performProgressiveBackgroundSync(accessToken, cuentaGmailId);
+      } else {
+        // Verificar si necesita actualización (más de 1 hora desde último sync)
+        const unaHoraAtras = new Date(Date.now() - 60 * 60 * 1000);
+        
+        if (lastSync.fecha_sincronizado && lastSync.fecha_sincronizado < unaHoraAtras) {
+          this.logger.log(`🔄 Sync desactualizado, iniciando sync incremental background`);
+          
+          // Sync incremental en background
+          this.syncService.syncIncrementalEmails(accessToken, cuentaGmailId, 50)
+            .then(result => {
+              this.logger.log(`✅ Sync incremental completado: ${result.emails_nuevos} nuevos`);
+            })
+            .catch(err => {
+              this.logger.error(`❌ Error en sync incremental:`, err);
+            });
+        }
+      }
+    } catch (error) {
+      // No lanzar errores - es background
+      this.logger.debug(`Background sync check error (ignorado):`, error);
+    }
+  }
+
+  /**
+   * 🔄 Sincronización progresiva en background
+   * Se ejecuta en múltiples etapas para no saturar
+   */
+  private async performProgressiveBackgroundSync(accessToken: string, cuentaGmailId: number): Promise<void> {
+    try {
+      // Etapa 1: Primeros 100 emails más recientes
+      await this.syncService.syncIncrementalEmails(accessToken, cuentaGmailId, 100);
+      this.logger.log(`📧 Etapa 1 completada: 100 emails recientes sincronizados`);
+      
+      // Pausa de 5 segundos
+      await this.sleep(5000);
+      
+      // Etapa 2: Siguientes 200 emails
+      await this.syncService.syncIncrementalEmails(accessToken, cuentaGmailId, 200);
+      this.logger.log(`📧 Etapa 2 completada: 200 emails adicionales`);
+      
+      // Pausa de 10 segundos
+      await this.sleep(10000);
+      
+      // Etapa 3: Siguientes 500 emails (si el usuario sigue activo)
+      await this.syncService.syncIncrementalEmails(accessToken, cuentaGmailId, 500);
+      this.logger.log(`📧 Etapa 3 completada: 500 emails adicionales`);
+      
+      this.logger.log(`✅ Sincronización progresiva completada para cuenta ${cuentaGmailId}`);
+      
+    } catch (error) {
+      this.logger.error(`❌ Error en sync progresivo:`, error);
+      // No relanzar - es background
+    }
+  }
+
   // ================================
-  // 🔍 BÚSQUEDA - DESDE BD LOCAL (SÚPER RÁPIDA) - ACTUALIZADA
+  // 🔍 BÚSQUEDA - HÍBRIDA MEJORADA
   // ================================
 
   /**
-   * 🔍 BÚSQUEDA HÍBRIDA - BD local primero (súper rápida) - ACTUALIZADA
+   * 🔍 BÚSQUEDA HÍBRIDA MEJORADA - Gmail API primero
    */
   async searchEmailsWithToken(
     accessToken: string,
-    cuentaGmailId: string, // 🎯 Cambio: cuentaGmailId en lugar de userId
+    cuentaGmailId: string,
     searchTerm: string,
     page: number = 1,
     limit: number = 10
   ): Promise<EmailListResponse> {
     try {
-      this.logger.log(`🔍 🎯 BÚSQUEDA HÍBRIDA "${searchTerm}" para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`🔍 🎯 BÚSQUEDA GMAIL-LIKE "${searchTerm}" para cuenta Gmail ${cuentaGmailId}`);
 
       const cuentaGmailIdNum = parseInt(cuentaGmailId);
 
@@ -220,8 +248,15 @@ export class EmailsService {
         throw new Error('cuentaGmailId debe ser un número válido');
       }
 
-      // 1️⃣ BÚSQUEDA EN BD LOCAL (súper rápida con índices full-text)
+      // 1️⃣ ESTRATEGIA GMAIL-LIKE: Siempre intentar Gmail API primero
       try {
+        this.logger.log(`📡 Buscando en Gmail API directamente`);
+        return await this.searchEmailsFromGmailAPI(accessToken, cuentaGmailId, searchTerm, page, limit);
+        
+      } catch (gmailError) {
+        this.logger.warn(`⚠️ Gmail API no disponible para búsqueda, usando BD local`);
+        
+        // 2️⃣ FALLBACK: BD local
         const filters: EmailSearchFilters = {
           busqueda_texto: searchTerm.trim()
         };
@@ -233,9 +268,8 @@ export class EmailsService {
           limit
         );
 
-        this.logger.log(`⚡ 🎉 BÚSQUEDA desde BD: ${searchResult.emails.length} resultados (total: ${searchResult.total})`);
+        this.logger.log(`💾 FALLBACK búsqueda BD: ${searchResult.emails.length} resultados`);
 
-        // 🔄 Convertir formato BD → formato API
         const emails = searchResult.emails.map(this.convertDBToEmailMetadata);
         const totalPages = Math.ceil(searchResult.total / limit);
 
@@ -249,14 +283,7 @@ export class EmailsService {
           hasPreviousPage: page > 1,
           searchTerm
         };
-
-      } catch (dbError) {
-        this.logger.warn(`⚠️ Error en búsqueda BD, fallback a Gmail:`, dbError);
       }
-
-      // 2️⃣ FALLBACK: GMAIL API (método original)
-      this.logger.log(`📡 BÚSQUEDA desde Gmail API (fallback)`);
-      return await this.searchEmailsFromGmailAPI(accessToken, cuentaGmailId, searchTerm, page, limit);
 
     } catch (error) {
       this.logger.error('❌ Error en búsqueda:', error);
@@ -266,15 +293,15 @@ export class EmailsService {
   }
 
   // ================================
-  // 📊 ESTADÍSTICAS - DESDE BD LOCAL (SÚPER RÁPIDO) - ACTUALIZADA
+  // 📊 ESTADÍSTICAS - HÍBRIDAS MEJORADAS
   // ================================
 
   /**
-   * 📊 ESTADÍSTICAS HÍBRIDAS - BD local súper rápido - ACTUALIZADA
+   * 📊 ESTADÍSTICAS HÍBRIDAS MEJORADAS - Gmail API primero
    */
   async getInboxStatsWithToken(accessToken: string, cuentaGmailId: string): Promise<EmailStats> {
     try {
-      this.logger.log(`📊 🎯 ESTADÍSTICAS HÍBRIDAS para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`📊 🎯 ESTADÍSTICAS GMAIL-LIKE para cuenta Gmail ${cuentaGmailId}`);
       
       const cuentaGmailIdNum = parseInt(cuentaGmailId);
 
@@ -282,26 +309,34 @@ export class EmailsService {
         throw new Error('cuentaGmailId debe ser un número válido');
       }
 
-      // 1️⃣ INTENTAR DESDE BD LOCAL (súper rápido)
+      // 1️⃣ ESTRATEGIA GMAIL-LIKE: Gmail API primero
       try {
+        this.logger.log(`📡 Obteniendo stats desde Gmail API`);
+        return await this.getStatsFromGmailAPI(accessToken, cuentaGmailId);
+        
+      } catch (gmailError) {
+        this.logger.warn(`⚠️ Gmail API no disponible para stats, usando BD local`);
+        
+        // 2️⃣ FALLBACK: BD local
         const dbStats = await this.databaseService.getEmailStatsFromDB(cuentaGmailIdNum);
         
         if (dbStats.total_emails > 0) {
-          this.logger.log(`⚡ 🎉 STATS desde BD: ${dbStats.total_emails} emails total`);
+          this.logger.log(`💾 FALLBACK stats desde BD: ${dbStats.total_emails} emails total`);
           
           return {
             totalEmails: dbStats.total_emails,
             unreadEmails: dbStats.emails_no_leidos,
             readEmails: dbStats.emails_leidos
           };
+        } else {
+          // Si no hay datos, retornar ceros
+          return {
+            totalEmails: 0,
+            unreadEmails: 0,
+            readEmails: 0
+          };
         }
-      } catch (dbError) {
-        this.logger.warn(`⚠️ Error en stats BD, fallback a Gmail:`, dbError);
       }
-
-      // 2️⃣ FALLBACK: GMAIL API
-      this.logger.log(`📡 STATS desde Gmail API (fallback)`);
-      return await this.getStatsFromGmailAPI(accessToken, cuentaGmailId);
 
     } catch (error) {
       this.logger.error('❌ Error obteniendo estadísticas:', error);
@@ -310,15 +345,15 @@ export class EmailsService {
   }
 
   // ================================
-  // 📧 EMAIL ESPECÍFICO - SIEMPRE GMAIL API (para contenido completo) - ACTUALIZADO
+  // 📧 EMAIL ESPECÍFICO - SIEMPRE GMAIL API
   // ================================
 
   /**
-   * 📧 EMAIL ESPECÍFICO - Gmail API (necesitamos el contenido completo) - ACTUALIZADO
+   * 📧 EMAIL ESPECÍFICO - Gmail API (necesitamos el contenido completo)
    */
   async getEmailByIdWithToken(
     accessToken: string, 
-    cuentaGmailId: string, // 🎯 Cambio: cuentaGmailId en lugar de userId
+    cuentaGmailId: string,
     messageId: string
   ): Promise<EmailDetail> {
     this.logger.log(`📧 Obteniendo email específico ${messageId} desde Gmail API para cuenta ${cuentaGmailId}`);
@@ -348,11 +383,11 @@ export class EmailsService {
   }
 
   /**
-   * 📧 Método original de inbox (Gmail API) - CONSERVADO pero actualizado
+   * 📧 Método original de inbox (Gmail API)
    */
   private async getInboxFromGmailAPI(
     accessToken: string,
-    cuentaGmailId: string, // 🎯 Cambio: cuentaGmailId en lugar de userId
+    cuentaGmailId: string,
     page: number,
     limit: number
   ): Promise<EmailListResponse> {
@@ -376,11 +411,11 @@ export class EmailsService {
   }
 
   /**
-   * 🔍 Método original de búsqueda (Gmail API) - CONSERVADO pero actualizado
+   * 🔍 Método original de búsqueda (Gmail API)
    */
   private async searchEmailsFromGmailAPI(
     accessToken: string,
-    cuentaGmailId: string, // 🎯 Cambio: cuentaGmailId en lugar de userId
+    cuentaGmailId: string,
     searchTerm: string,
     page: number,
     limit: number
@@ -407,7 +442,7 @@ export class EmailsService {
   }
 
   /**
-   * 📊 Método original de stats (Gmail API) - CONSERVADO pero actualizado
+   * 📊 Método original de stats (Gmail API)
    */
   private async getStatsFromGmailAPI(accessToken: string, cuentaGmailId: string): Promise<EmailStats> {
     const oauth2Client = new google.auth.OAuth2();
@@ -430,7 +465,7 @@ export class EmailsService {
   }
 
   /**
-   * 📧 Obtener email específico desde Gmail API - CONSERVADO
+   * 📧 Obtener email específico desde Gmail API
    */
   private async getEmailFromGmailAPI(
     accessToken: string,
@@ -457,35 +492,63 @@ export class EmailsService {
   }
 
   // ================================
-  // 🔧 MÉTODOS AUXILIARES (CONSERVADOS) - SIN CAMBIOS
+  // 🔧 MÉTODOS AUXILIARES
   // ================================
 
   private async getRealEmailCount(gmail: gmail_v1.Gmail, query: string = 'in:inbox'): Promise<number> {
     try {
+      this.logger.log(`🔢 Iniciando conteo EXACTO de emails con query: "${query}"`);
+      
       let totalCount = 0;
       let nextPageToken: string | undefined = undefined;
       let pageNumber = 1;
 
+      // NO HAY LÍMITE - Contamos TODOS los emails
       do {
         const response = await gmail.users.messages.list({
           userId: 'me',
           q: query,
-          maxResults: 500,
-          pageToken: nextPageToken
+          maxResults: 500, // Máximo permitido por Gmail API
+          pageToken: nextPageToken,
+          fields: 'messages/id,nextPageToken' // Solo necesitamos IDs para contar
         });
 
         const messages = response.data.messages || [];
         totalCount += messages.length;
-        nextPageToken = response.data.nextPageToken || undefined;
         
+        // Log de progreso cada 5 páginas
+        if (pageNumber % 5 === 0) {
+          this.logger.log(`📊 Conteo en progreso: ${totalCount} emails encontrados...`);
+        }
+        
+        nextPageToken = response.data.nextPageToken || undefined;
         pageNumber++;
-        if (pageNumber > 10) break; // Límite de seguridad
 
-      } while (nextPageToken);
+        // Si no hay más mensajes, terminar
+        if (messages.length === 0) {
+          break;
+        }
 
+      } while (nextPageToken); // Continuar mientras haya más páginas
+
+      this.logger.log(`✅ Conteo EXACTO completado: ${totalCount} emails totales`);
       return totalCount;
-    } catch {
-      return 0;
+      
+    } catch (error) {
+      this.logger.error('❌ Error obteniendo conteo exacto de emails:', error);
+      // En caso de error, intentar al menos con resultSizeEstimate
+      try {
+        const fallbackResponse = await gmail.users.messages.list({
+          userId: 'me',
+          q: query,
+          maxResults: 1
+        });
+        const estimate = fallbackResponse.data.resultSizeEstimate || 0;
+        this.logger.warn(`⚠️ Usando estimado como fallback: ${estimate} emails`);
+        return estimate;
+      } catch {
+        return 0;
+      }
     }
   }
 
@@ -646,5 +709,12 @@ export class EmailsService {
       );
     }
     return false;
+  }
+
+  /**
+   * 💤 Helper para pausas en sync progresivo
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }

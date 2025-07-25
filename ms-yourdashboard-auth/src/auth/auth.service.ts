@@ -288,7 +288,7 @@ export class AuthService {
   }
 
   // ================================
-  // 🔐 MANEJAR CALLBACK DE GOOGLE OAUTH - ARREGLADO
+  // 🔐 MANEJAR CALLBACK DE GOOGLE OAUTH -
   // ================================
 
  async manejarCallbackGoogle(googleUser: GoogleOAuthUser, usuarioActualId: number): Promise<RespuestaConexionGmail> {
