@@ -59,7 +59,7 @@ export class SyncService {
       this.logger.log(`🔍 Query Gmail: "${gmailQuery}"`);
 
       // 3️⃣ Obtener lista de mensajes de Gmail
-      const messagesList = await this.getGmailMessagesList(gmail, gmailQuery, options.maxEmails || 100);
+      const messagesList = await this.getGmailMessagesList(gmail, gmailQuery, options.maxEmails || 10000);
       this.logger.log(`📧 ¡Encontrados ${messagesList.length} emails en Gmail!`);
 
       if (messagesList.length === 0) {
@@ -75,7 +75,7 @@ export class SyncService {
       }
 
       // 4️⃣ Procesar emails en lotes (para no saturar)
-      const BATCH_SIZE = 10; // Procesar de a 10 emails
+      const BATCH_SIZE = 50; // Procesar de a 10 emails
       const emailsMetadata: EmailMetadataDB[] = [];
       let ultimaFechaEmail: Date | undefined;
 
@@ -164,16 +164,16 @@ export class SyncService {
     }
 
     // Si es fullSync, no agregamos limitaciones adicionales
-    if (!options.fullSync) {
-      // Por defecto, solo emails de los últimos 30 días para evitar sobrecarga
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const defaultSinceDate = thirtyDaysAgo.toISOString().split('T')[0];
-      
-      if (!options.sinceDate) {
-        queryParts.push(`after:${defaultSinceDate}`);
-      }
-    }
+  if (!options.fullSync) {
+  // Emails de los últimos 6 meses (balance entre rendimiento y cantidad real)
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  const defaultSinceDate = sixMonthsAgo.toISOString().split('T')[0];
+  
+  if (!options.sinceDate) {
+    queryParts.push(`after:${defaultSinceDate}`);
+  }
+}
 
     const finalQuery = queryParts.join(' ');
     return finalQuery;
@@ -302,7 +302,7 @@ export class SyncService {
   async syncIncrementalEmails(
     accessToken: string,
     cuentaGmailId: number,
-    maxEmails: number = 50
+    maxEmails: number = 10000
   ): Promise<SyncStats> {
     try {
       this.logger.log(`🔄 ⚡ INICIANDO SYNC INCREMENTAL para cuenta ${cuentaGmailId}`);
