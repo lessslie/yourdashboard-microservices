@@ -253,7 +253,7 @@ export class AuthOrchestratorController {
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
     summary: 'Listar cuentas Gmail del usuario',
-    description: 'Obtiene todas las cuentas Gmail conectadas del usuario autenticado. Coordina con MS-Auth.'
+    description: 'Obtiene todas las cuentas Gmail conectadas del usuario principal autenticado. Coordina con MS-Auth.'
   })
   @ApiOkResponse({
     description: 'Lista de cuentas Gmail obtenida exitosamente',

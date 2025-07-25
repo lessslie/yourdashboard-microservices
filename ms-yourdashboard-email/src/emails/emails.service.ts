@@ -108,7 +108,7 @@ export class EmailsService {
         this.logger.log(`✅ Inbox obtenido desde Gmail API: ${gmailResult.emails.length} emails`);
         return gmailResult;
         
-      } catch (gmailError) {
+      } catch {
         this.logger.warn(`⚠️ Gmail API no disponible, usando BD local como fallback`);
         
         // 3️⃣ FALLBACK: Si Gmail API falla, intentar BD local
@@ -253,7 +253,7 @@ export class EmailsService {
         this.logger.log(`📡 Buscando en Gmail API directamente`);
         return await this.searchEmailsFromGmailAPI(accessToken, cuentaGmailId, searchTerm, page, limit);
         
-      } catch (gmailError) {
+      } catch  {
         this.logger.warn(`⚠️ Gmail API no disponible para búsqueda, usando BD local`);
         
         // 2️⃣ FALLBACK: BD local
@@ -315,7 +315,7 @@ export class EmailsService {
         this.logger.log(`📡 Obteniendo stats desde Gmail API`);
         return await this.getStatsFromGmailAPI(accessToken, cuentaGmailId);
         
-      } catch (gmailError) {
+      } catch {
         this.logger.warn(`⚠️ Gmail API no disponible para stats, usando BD local`);
         
         // 2️⃣ FALLBACK: BD local

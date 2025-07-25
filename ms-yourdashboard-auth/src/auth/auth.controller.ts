@@ -55,7 +55,7 @@ import {
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
-    private readonly configService: ConfigService // 🎯 AGREGADO ConfigService
+    private readonly configService: ConfigService
   ) {}
 
   // ================================
@@ -450,6 +450,7 @@ export class AuthController {
       
     } catch (error) {
       console.error('❌ Error en callback de OAuth:', error);
+      console.log('🔴 Redirigiendo a error de autenticación');
       
       const errorUrl = new URL(this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000');
       errorUrl.searchParams.set('auth', 'error');
@@ -474,6 +475,7 @@ export class AuthController {
       }
       
       errorUrl.searchParams.set('message', encodeURIComponent(errorMessage));
+      console.log('🔴 Redirigiendo a:', errorUrl.toString());
       
       res.redirect(errorUrl.toString());
     }
@@ -532,33 +534,31 @@ export class AuthController {
     description: 'Cuenta Gmail no encontrada',
     type: ErrorResponseDto
   })
-  obtenerCuentaGmail(
-    @Req() request: { user: UsuarioAutenticado },
-    @Param('id') cuentaId: string
-  ) {
-    try {
-      const cuentaSimulada = {
-        id: parseInt(cuentaId),
-        email_gmail: 'cuenta' + cuentaId + '@gmail.com',
-        nombre_cuenta: 'Cuenta ' + cuentaId,
-        alias_personalizado: parseInt(cuentaId) === 1 ? 'Gmail Personal' : 'Gmail Trabajo',
-        fecha_conexion: new Date().toISOString(),
-        esta_activa: true,
-        ultima_sincronizacion: new Date().toISOString(),
-        emails_count: Math.floor(Math.random() * 500) + 50
-      };
+ async obtenerCuentaGmail(
+  @Req() request: { user: UsuarioAutenticado },
+  @Param('id') cuentaId: string
+): Promise<{success: boolean; cuenta: any}> {
+  try {
+    const cuenta = await this.authService.obtenerCuentaGmailPorId(
+      request.user.id,
+      parseInt(cuentaId)
+    );
 
-      return {
-        success: true,
-        cuenta: cuentaSimulada
-      };
+    return {
+      success: true,
+      cuenta: cuenta
+    };
 
-    } catch (error) {
-      console.error('Error obteniendo cuenta Gmail:', error);
-      throw new NotFoundException('Cuenta Gmail no encontrada');
+  } catch (error) {
+    console.error('Error obteniendo cuenta Gmail:', error);
+    
+    if (error instanceof NotFoundException) {
+      throw error;
     }
+    
+    throw new NotFoundException('Cuenta Gmail no encontrada');
   }
-
+}
   @Delete('cuentas-gmail/:id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
@@ -663,7 +663,7 @@ export class AuthController {
   }
 
   // ================================
-  // ENDPOINTS DE INFORMACIÓN (sin cambios)
+  // ENDPOINTS DE INFORMACIÓN
   // ================================
 
   @Get('health')
