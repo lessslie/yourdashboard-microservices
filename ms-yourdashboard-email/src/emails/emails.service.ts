@@ -487,7 +487,7 @@ export class EmailsService {
     const emailDetail = await gmail.users.messages.get({
       userId: 'me',
       id: messageId,
-      format: 'metadata'
+      format: 'full'
     });
 
     const extractedData = this.extractFullEmailData(emailDetail.data);
