@@ -3,8 +3,8 @@ import { IsEmail, IsString, MinLength, MaxLength, IsNotEmpty } from 'class-valid
 
 export class RegisterDto {
   @ApiProperty({
-    description: 'Email del usuario',
-    example: 'usuario@algo.com',
+    description: 'Email del usuario principal',
+    example: 'alonso@example.com',
     format: 'email'
   })
   @IsEmail({}, { message: 'Debe ser un email válido' })
@@ -25,13 +25,13 @@ export class RegisterDto {
 
   @ApiProperty({
     description: 'Nombre completo del usuario',
-    example: 'Juan Pérez',
+    example: 'Alonso González',
     minLength: 2,
     maxLength: 100
   })
-  @IsString({ message: 'Name debe ser un string' })
-  @MinLength(2, { message: 'Name debe tener al menos 2 caracteres' })
-  @MaxLength(100, { message: 'Name no puede tener más de 100 caracteres' })
-  @IsNotEmpty({ message: 'Name es requerido' })
-  name: string;
+  @IsString({ message: 'Nombre debe ser un string' })
+  @MinLength(2, { message: 'Nombre debe tener al menos 2 caracteres' })
+  @MaxLength(100, { message: 'Nombre no puede tener más de 100 caracteres' })
+  @IsNotEmpty({ message: 'Nombre es requerido' })
+  nombre: string;
 }

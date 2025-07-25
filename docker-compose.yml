@@ -1,0 +1,193 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  # ================================
+  # INFRAESTRUCTURA
+  # ================================
+  
+  # PostgreSQL - Base de datos principal
+  postgres:
+    image: postgres:15-alpine
+    container_name: yourdashboard-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./ms-yourdashboard-auth/src/database/init_ms_auth.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - yourdashboard-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis - Cache
+  redis:
+    image: redis:7-alpine
+    container_name: yourdashboard-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - yourdashboard-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ================================
+  # MICROSERVICIOS
+  # ================================
+
+  # MS-Auth
+  ms-auth:
+    build:
+      context: ./ms-yourdashboard-auth
+      dockerfile: Dockerfile
+    container_name: yourdashboard-ms-auth
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION=24h
+      - BCRYPT_ROUNDS=10
+      - FRONTEND_URL=http://localhost:3000
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=http://localhost:3001/auth/google/callback
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - yourdashboard-network
+    volumes:
+      - ./ms-yourdashboard-auth:/app
+      - /app/node_modules
+
+  # MS-Email
+  ms-email:
+    build:
+      context: ./ms-yourdashboard-email
+      dockerfile: Dockerfile
+    container_name: yourdashboard-ms-email
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=development
+      - PORT=3002
+    networks:
+      - yourdashboard-network
+    volumes:
+      - ./ms-yourdashboard-email:/app
+      - /app/node_modules
+
+  # MS-Orchestrator
+  ms-orchestrator:
+    build:
+      context: ./ms-yourdashboard-orchestrator
+      dockerfile: Dockerfile
+    container_name: yourdashboard-ms-orchestrator
+    ports:
+      - "3003:3003"
+    environment:
+      - NODE_ENV=development
+      - PORT=3003
+      - MS_AUTH_URL=http://ms-auth:3001
+      - MS_EMAIL_URL=http://ms-email:3002
+      - MS_WHATSAPP_URL=http://ms-whatsapp:3004
+      # - MS_CALENDAR_URL=http://ms-calendar:3005
+      - FRONTEND_URL=http://localhost:3000
+      - ORCHESTRATOR_URL=http://localhost:3003
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+      ms-auth:
+        condition: service_started
+      ms-email:
+        condition: service_started
+    networks:
+      - yourdashboard-network
+    volumes:
+      - ./ms-yourdashboard-orchestrator:/app
+      - /app/node_modules
+
+  # MS-WhatsApp
+  ms-whatsapp:
+    build:
+      context: ./ms-yourdashboard-whatsapp
+      dockerfile: Dockerfile
+    container_name: yourdashboard-ms-whatsapp
+    ports:
+      - "3004:3004"
+    environment:
+      - NODE_ENV=development
+      - PORT=3004
+    networks:
+      - yourdashboard-network
+    volumes:
+      - ./ms-yourdashboard-whatsapp:/app
+      - /app/node_modules
+
+  # MS-Calendar (comentado hasta que esté listo)
+  # ms-calendar:
+  #   build:
+  #     context: ./ms-yourdashboard-calendar
+  #     dockerfile: Dockerfile
+  #   container_name: yourdashboard-ms-calendar
+  #   ports:
+  #     - "3005:3005"
+  #   environment:
+  #     - NODE_ENV=development
+  #     - PORT=3005
+  #   networks:
+  #     - yourdashboard-network
+  #   volumes:
+  #     - ./ms-yourdashboard-calendar:/app
+  #     - /app/node_modules
+
+  # Frontend
+  frontend:
+    build:
+      context: ./fe-yourdashboard
+      dockerfile: Dockerfile
+    container_name: yourdashboard-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_MS_AUTH_URL=http://localhost:3001
+      - NEXT_PUBLIC_MS_ORCHESTRATOR_URL=http://localhost:3003
+    networks:
+      - yourdashboard-network
+    volumes:
+      - ./fe-yourdashboard:/app
+      - /app/node_modules
+      - /app/.next
+
+# ================================
+# VOLÚMENES Y REDES
+# ================================
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  yourdashboard-network:
+    driver: bridge

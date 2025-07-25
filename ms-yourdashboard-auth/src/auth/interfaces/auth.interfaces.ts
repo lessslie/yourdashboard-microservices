@@ -1,91 +1,386 @@
+
 // ================================
-// INTERFACES EXISTENTES (mantener)
+// 📋 USUARIOS PRINCIPALES
 // ================================
 
-export interface UserAccount {
+import { Profile } from "passport";
+
+export interface UsuarioPrincipal {
   id: number;
   email: string;
-  name: string;
-  password_hash?: string;
-  is_email_verified: boolean;
-  created_at: Date;
-  updated_at: Date;
+  password_hash?: string; // Opcional al retornar al frontend
+  nombre: string;
+  fecha_registro: Date;
+  ultima_actualizacion: Date;
+  estado: 'activo' | 'suspendido' | 'eliminado';
+  email_verificado: boolean;
 }
 
-export interface LoginCredentials {
+export interface RegistroUsuarioDto {
+  email: string;
+  password: string;
+  nombre: string;
+}
+
+export interface LoginUsuarioDto {
   email: string;
   password: string;
 }
 
-export interface RegisterData {
+export interface UsuarioPrincipalResponse {
+  id: number;
   email: string;
-  password: string;
-  name: string;
+  nombre: string;
+  fecha_registro: Date;
+  estado: string;
+  email_verificado: boolean;
+  // NO incluimos password_hash por seguridad
 }
 
-export interface AuthResponse {
+// ================================
+// 📧 CUENTAS GMAIL ASOCIADAS  
+// ================================
+
+export interface CuentaGmailAsociada {
+  id: number;
+  usuario_principal_id: number;
+  email_gmail: string;
+  nombre_cuenta: string;
+  google_id: string;
+  access_token?: string; // Opcional al retornar
+  refresh_token?: string; // Opcional al retornar
+  token_expira_en?: Date;
+  fecha_conexion: Date;
+  ultima_sincronizacion?: Date;
+  esta_activa: boolean;
+  alias_personalizado?: string;
+}
+
+export interface CuentaGmailResponse {
+  id: number;
+  email_gmail: string;
+  nombre_cuenta: string;
+  alias_personalizado?: string;
+  fecha_conexion: Date;
+  ultima_sincronizacion?: Date;
+  esta_activa: boolean;
+  emails_count: number; // Calculado dinámicamente
+}
+
+export interface ConectarGmailDto {
+  usuario_principal_id: number;
+  google_auth_code: string; // Code del OAuth callback
+  alias_personalizado?: string;
+}
+
+// ================================
+// 📨 EMAILS SINCRONIZADOS
+// ================================
+
+export interface EmailSincronizado {
+  id: number;
+  cuenta_gmail_id: number;
+  gmail_message_id: string;
+  asunto?: string;
+  remitente_email?: string;
+  remitente_nombre?: string;
+  fecha_recibido?: Date;
+  esta_leido: boolean;
+  tiene_adjuntos: boolean;
+  etiquetas_gmail?: string[];
+  fecha_sincronizado: Date;
+}
+
+export interface EmailSincronizadoResponse {
+  id: number;
+  gmail_message_id: string;
+  asunto: string;
+  remitente_email: string;
+  remitente_nombre: string;
+  fecha_recibido: Date;
+  esta_leido: boolean;
+  tiene_adjuntos: boolean;
+  // NO incluimos fecha_sincronizado (interno)
+}
+
+export interface SincronizarEmailsDto {
+  cuenta_gmail_id: number;
+  limite_emails?: number; // Default: 50
+  solo_nuevos?: boolean; // Default: true
+}
+
+// ================================
+// 🔐 SESIONES JWT
+// ================================
+
+export interface SesionJwt {
+  id: number;
+  usuario_principal_id: number;
+  jwt_token: string;
+  expira_en: Date;
+  fecha_creacion: Date;
+  esta_activa: boolean;
+  ip_origen?: string;
+  user_agent?: string;
+}
+
+export interface CrearSesionDto {
+  usuario_principal_id: number;
+  ip_origen?: string;
+  user_agent?: string;
+  duracion_horas?: number; // Default: 24
+}
+
+export interface SesionResponse {
+  id: number;
+  fecha_creacion: Date;
+  expira_en: Date;
+  ip_origen?: string;
+  user_agent?: string;
+  esta_activa: boolean;
+}
+
+// ================================
+// 🔑 JWT PAYLOAD (CUSTOM)
+// ================================
+
+export interface CustomJwtPayload {
+  sub: number; // usuario_principal_id (estándar JWT)
+  email: string;
+  nombre: string;
+  sesionId?: number; // ID de la sesión específica
+  iat?: number; // Issued at (automático por jsonwebtoken)
+  exp?: number; // Expires (automático por jsonwebtoken)
+}
+
+// Alias para mayor claridad - ESTA es la que usas en el código
+export type JwtPayload = CustomJwtPayload;
+export interface UsuarioAutenticado {
+  id: number;
+  email: string;
+  nombre: string;
+  sesion_id: number; // Para invalidar sesión específica
+}
+
+// ================================
+// 📡 RESPUESTAS DE AUTENTICACIÓN
+// ================================
+
+export interface RespuestaLogin {
   success: boolean;
   message: string;
-  user: {
-    id: number;
-    email: string;
-    name: string;
-    isEmailVerified: boolean;
-  };
+  usuario: UsuarioPrincipalResponse;
   token: string;
+  sesion_id: number;
 }
 
-export interface ProfileResponse {
+export interface RespuestaRegistro {
   success: boolean;
+  message: string;
+  usuario: UsuarioPrincipalResponse;
+  token: string;
+  sesion_id: number;
+}
+
+export interface RespuestaPerfil {
+  success: boolean;
+  usuario: UsuarioPrincipalResponse;
+  cuentas_gmail: CuentaGmailResponse[];
+  sesiones_activas: SesionResponse[];
+  estadisticas: EstadisticasUsuario;
+}
+
+export interface RespuestaConexionGmail {
+  success: true;
+  message: string;
+  cuenta_gmail: {
+    id: number;
+    email_gmail: string;
+    nombre_cuenta: string;
+    alias_personalizado?: string;
+    fecha_conexion: Date;
+    ultima_sincronizacion?: Date;
+    esta_activa: boolean;
+    emails_count: number;
+  };
+  emails_sincronizados: number;
+}
+// ================================
+// para auth.controller.ts
+// ===============================
+
+export interface ReqUsuarioAutenticado extends Request {
   user: {
     id: number;
     email: string;
-    name: string;
-    isEmailVerified: boolean;
-    createdAt: Date;
-    profilePicture?: string | null;
+    nombre: string;
   };
-  connections: OAuthConnection[];
+}
+export interface ReqCallbackGoogle extends Request {
+  user: GoogleOAuthUser;
 }
 
-export interface OAuthConnection {
-  provider: string;
-  is_connected: boolean;
-  connected_at: Date;
-  expires_at: Date | null;
+
+// ================================
+// 🔧 INTERFACE INTERNA PARA GOOGLE PROFILe
+// ===============================E
+export interface GoogleProfile extends Profile {
+  id: string;
+  name: {
+    familyName: string;
+    givenName: string;
+  };
+  emails: Array<{
+    value: string;
+    verified: boolean;
+  }>;
+}
+// ================================
+// 📊 PAGINACIÓN Y LISTADOS
+// ================================
+
+export interface OpcionesPaginacion {
+  page: number;
+  limit: number;
+  orden?: 'ASC' | 'DESC';
+  campo_orden?: string;
 }
 
-export interface JWTPayload {
-  userId: number;
+export interface RespuestaPaginada<T> {
+  datos: T[];
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+  has_next_page: boolean;
+  has_previous_page: boolean;
+}
+
+export interface ListarEmailsDto extends OpcionesPaginacion {
+  cuenta_gmail_id: number;
+  solo_no_leidos?: boolean;
+  busqueda?: string; // Buscar en asunto o remitente
+  fecha_desde?: Date;
+  fecha_hasta?: Date;
+}
+
+// ================================
+// 🔍 BÚSQUEDAS Y FILTROS
+// ================================
+
+export interface FiltrosEmails {
+  cuenta_gmail_id?: number;
+  esta_leido?: boolean;
+  tiene_adjuntos?: boolean;
+  remitente_email?: string;
+  busqueda_texto?: string;
+  fecha_desde?: Date;
+  fecha_hasta?: Date;
+}
+
+export interface ResultadoBusqueda {
+  emails: EmailSincronizadoResponse[];
+  total_encontrados: number;
+  termino_busqueda: string;
+  tiempo_busqueda_ms: number;
+}
+
+// ================================
+// 📈 ESTADÍSTICAS
+// ================================
+
+export interface EstadisticasUsuario {
+  total_cuentas_gmail: number;
+  cuentas_gmail_activas: number;
+  total_emails_sincronizados: number;
+  emails_no_leidos: number;
+  ultima_sincronizacion: Date;
+  cuenta_mas_activa: {
+    email_gmail: string;
+    emails_count: number;
+  };
+}
+
+export interface EstadisticasCuentaGmail {
+  cuenta_gmail_id: number;
+  email_gmail: string;
+  total_emails: number;
+  emails_no_leidos: number;
+  emails_hoy: number;
+  primer_email: Date;
+  ultimo_email: Date;
+  remitentes_frecuentes: Array<{
+    email: string;
+    nombre: string;
+    count: number;
+  }>;
+}
+
+// ================================
+// 🚨 MANEJO DE ERRORES
+// ================================
+
+export interface ErrorAutenticacion {
+  codigo: string;
+  mensaje: string;
+  detalles?: any;
+}
+
+export interface ErrorResponse {
+  success: false;
+  error: ErrorAutenticacion;
+  timestamp: string;
+  path?: string;
+}
+
+// Códigos de error específicos
+export enum CodigosErrorAuth {
+  EMAIL_YA_EXISTE = 'EMAIL_YA_EXISTE',
+  CREDENCIALES_INVALIDAS = 'CREDENCIALES_INVALIDAS',
+  USUARIO_NO_ENCONTRADO = 'USUARIO_NO_ENCONTRADO',
+  TOKEN_INVALIDO = 'TOKEN_INVALIDO',
+  TOKEN_EXPIRADO = 'TOKEN_EXPIRADO',
+  SESION_INACTIVA = 'SESION_INACTIVA',
+  CUENTA_GMAIL_YA_CONECTADA = 'CUENTA_GMAIL_YA_CONECTADA',
+  CUENTA_GMAIL_NO_ENCONTRADA = 'CUENTA_GMAIL_NO_ENCONTRADA',
+  GOOGLE_OAUTH_ERROR = 'GOOGLE_OAUTH_ERROR',
+  PERMISOS_INSUFICIENTES = 'PERMISOS_INSUFICIENTES'
+}
+
+// ================================
+// 🔄 INTEGRACIONES EXTERNAS
+// ================================
+
+export interface GoogleOAuthData {
+  google_id: string;
   email: string;
-  name: string;
-  iat?: number;
-  exp?: number;
+  nombre: string;
+  access_token: string;
+  refresh_token?: string;
+  token_expira_en?: number;
 }
 
-export interface Session {
-  id: number;
-  account_id: number;
-  jwt_token: string;
-  expires_at: Date;
-  is_active: boolean;
-  created_at: Date;
-}
-
-export interface OAuthData {
-  providerUserId: string;
-  accessToken: string;
-  refreshToken?: string;
-  expiresAt?: Date;
-}
-
-export interface GoogleUserProfile {
+// Interfaz específica para el usuario de Google OAuth en guards
+export interface GoogleOAuthUser {
   googleId: string;
   email: string;
   name: string;
   accessToken: string;
   refreshToken: string;
+  tokenExpiraEn?: number;
+  profilePicture?: string; // Opcional, si se obtiene de Google
+  locale?: string; // Opcional, si se obtiene de Google
 }
+
+export interface RefreshTokenResponse {
+  access_token: string;
+  expires_in: number;
+  token_renovado: boolean;
+}
+
+// ================================
+// 🎯 TYPES PARA DATABASE SERVICE
+// ================================
 
 export interface DatabaseQueryResult<T = any> {
   rows: T[];
@@ -93,7 +388,80 @@ export interface DatabaseQueryResult<T = any> {
   command: string;
 }
 
-// Tipos para TokensService
+export interface TransaccionDatabase {
+  commit(): Promise<void>;
+  rollback(): Promise<void>;
+  query<T>(sql: string, params?: any[]): Promise<DatabaseQueryResult<T>>;
+}
+
+// ================================
+// 🔧 CONFIGURACIÓN Y HEALTH
+// ================================
+
+export interface HealthResponse {
+  service: string;
+  status: 'OK' | 'ERROR';
+  timestamp: string;
+  uptime: number;
+  database: {
+    connected: boolean;
+    query_time_ms?: number;
+  };
+  estadisticas: {
+    usuarios_activos: number;
+    cuentas_gmail_conectadas: number;
+    sesiones_activas: number;
+  };
+}
+
+export interface ConfiguracionAuth {
+  jwt_secret: string;
+  jwt_expiration: string;
+  bcrypt_rounds: number;
+  google_client_id: string;
+  google_client_secret: string;
+  frontend_url: string;
+}
+
+// ================================
+// 🎭 RESPUESTAS PARA FRONTEND
+// ================================
+
+export interface DashboardData {
+  usuario: UsuarioPrincipalResponse;
+  estadisticas: EstadisticasUsuario;
+  cuentas_gmail: CuentaGmailResponse[];
+  emails_recientes: EmailSincronizadoResponse[];
+}
+
+export interface SelectorCuentasGmail {
+  cuentas: Array<{
+    id: number;
+    email_gmail: string;
+    alias_personalizado?: string;
+    emails_no_leidos: number;
+    ultima_sincronizacion?: Date;
+    esta_activa: boolean;
+  }>;
+  cuenta_seleccionada_id?: number;
+}
+
+// ================================
+// ✅ EXPORT DEFAULT (para fácil importación)
+// ================================
+
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: ErrorAutenticacion;
+  timestamp: string;
+}
+
+// ================================
+// 🔑 TIPOS PARA TOKENS SERVICE
+//Tipos para TokensService
+// ================================
+
 export interface ValidTokenResponse {
   success: boolean;
   accessToken: string;
@@ -101,6 +469,7 @@ export interface ValidTokenResponse {
     id: string;
     email: string;
     name: string;
+    cuentaGmailId: string;
   };
   renewed: boolean;
 }
@@ -125,7 +494,6 @@ export interface UsersListResponse {
   total: number;
 }
 
-// Tipos para Database
 export interface TokenData {
   access_token: string;
   refresh_token: string | null;
@@ -133,121 +501,8 @@ export interface TokenData {
   email: string;
   name: string;
 }
-
 export interface UserTokens {
   access_token: string;
   refresh_token?: string;
-  expiry_date?: number;
-}
-
-export interface DbUser {
-  id: number;
-  google_id: string;
-  email: string;
-  name: string;
-  access_token: string;
-  refresh_token: string | null;
-  token_expires_at: Date;
-  provider: string;
-  created_at: Date;
-  updated_at: Date;
-}
-
-export interface UserData {
-  googleId: string;
-  email: string;
-  name: string;
-  accessToken: string;
-  refreshToken?: string;
-}
-
-// ================================
-//  INTERFACES PARA OAUTH + JWT
-// ================================
-
-// Para el callback de Google OAuth
-export interface GoogleCallbackUser {
-  googleId: string;
-  email: string;
-  name: string;
-  accessToken: string;
-  refreshToken: string;
-}
-
-// Respuesta del callback OAuth mejorado
-export interface GoogleCallbackResult {
-  user: {
-    id: number;
-    email: string;
-    name: string;
-    google_id: string;
-  };
-  jwt: string;
-  accountId: number;
-  status: string;
-}
-
-// Para consultas de la tabla accounts
-export interface AccountRow {
-  id: number;
-  email: string;
-  name: string;
-  password_hash?: string;
-  is_email_verified: boolean;
-  created_at: Date;
-  updated_at: Date;
-}
-
-// Para el request autenticado de Express
-export interface AuthenticatedRequest {
-  user: GoogleCallbackUser;
-}
-
-// Para respuestas del controlador
-export interface ProfileControllerResponse {
-  success: boolean;
-  user: {
-    id: number;
-    email: string;
-    name: string;
-    isEmailVerified: boolean;
-    createdAt: Date;
-    profilePicture: string | null;
-  };
-  connections: any[];
-}
-
-export interface HealthResponse {
-  service: string;
-  status: string;
-  timestamp: string;
-  port: string | number;
-  features: {
-    traditional_auth: boolean;
-    oauth_google: boolean;
-    jwt_sessions: boolean;
-    multi_provider_support: boolean;
-  };
-}
-
-export interface InfoResponse {
-  service: string;
-  description: string;
-  endpoints: {
-    traditional: {
-      register: string;
-      login: string;
-      profile: string;
-      logout: string;
-    };
-    oauth: {
-      google: string;
-      callback: string;
-    };
-    tokens: {
-      get_token: string;
-    };
-  };
-  supported_providers: string[];
-  upcoming_providers: string[];
+  expiry_date?: string | number | Date;
 }

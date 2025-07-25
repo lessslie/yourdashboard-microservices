@@ -1,6 +1,6 @@
+// src/auth/dto/error-response.dto.ts
 import { ApiProperty } from "@nestjs/swagger";
 
-// src/auth/dto/error-response.dto.ts
 export class ErrorResponseDto {
   @ApiProperty({
     description: 'Indica que hubo un error',
@@ -9,20 +9,26 @@ export class ErrorResponseDto {
   success: boolean;
 
   @ApiProperty({
-    description: 'Mensaje de error',
-    example: 'Email ya está registrado'
+    description: 'Código del error',
+    example: 'EMAIL_YA_EXISTE'
   })
-  message: string;
+  codigo: string;
 
   @ApiProperty({
-    description: 'Código de error HTTP',
-    example: 409
+    description: 'Mensaje de error',
+    example: 'El email ya está registrado'
   })
-  statusCode: number;
+  mensaje: string;
 
   @ApiProperty({
     description: 'Timestamp del error',
     example: '2024-01-15T10:30:00Z'
   })
   timestamp: string;
+
+  @ApiProperty({
+    description: 'Detalles adicionales del error',
+    required: false
+  })
+  detalles?: any;
 }

@@ -1,7 +1,7 @@
+// src/auth/dto/auth-response.dto.ts
 import { ApiProperty } from "@nestjs/swagger";
 
-// src/auth/dto/auth-response.dto.ts
-export class UserResponseDto {
+export class UserDto {
   @ApiProperty({
     description: 'ID único del usuario',
     example: 1
@@ -10,7 +10,7 @@ export class UserResponseDto {
 
   @ApiProperty({
     description: 'Email del usuario',
-    example: 'usuario@test.com'
+    example: 'usuario@example.com'
   })
   email: string;
 
@@ -27,18 +27,56 @@ export class UserResponseDto {
   isEmailVerified: boolean;
 
   @ApiProperty({
-    description: 'Fecha de creación',
-    example: '2024-01-15T10:30:00Z',
-    required: false
+    description: 'Fecha de registro',
+    example: '2024-01-15T10:30:00Z'
   })
-  createdAt?: string;
+  createdAt: string;
 
   @ApiProperty({
     description: 'URL de foto de perfil',
     example: null,
-    required: false
+    nullable: true
   })
-  profilePicture?: string | null;
+  profilePicture: string | null;
+}
+
+export class UsuarioPrincipalResponseDto {
+  @ApiProperty({
+    description: 'ID único del usuario principal',
+    example: 1
+  })
+  id: number;
+
+  @ApiProperty({
+    description: 'Email del usuario principal',
+    example: 'usuario@example.com'
+  })
+  email: string;
+
+  @ApiProperty({
+    description: 'Nombre completo del usuario',
+    example: 'Juan Pérez'
+  })
+  nombre: string;
+
+  @ApiProperty({
+    description: 'Fecha de registro',
+    example: '2024-01-15T10:30:00Z'
+  })
+  fecha_registro: string;
+
+  @ApiProperty({
+    description: 'Estado de la cuenta',
+    example: 'activo',
+    enum: ['activo', 'suspendido', 'eliminado']
+  })
+  estado: string;
+
+  @ApiProperty({
+    description: 'Si el email está verificado',
+    example: true
+  })
+  email_verificado: boolean;
 }
 
 export class AuthResponseDto {
@@ -55,10 +93,10 @@ export class AuthResponseDto {
   message: string;
 
   @ApiProperty({
-    description: 'Datos del usuario autenticado',
-    type: UserResponseDto
+    description: 'Datos del usuario autenticado (formato frontend)',
+    type: UserDto
   })
-  user: UserResponseDto;
+  user: UserDto;
 
   @ApiProperty({
     description: 'Token JWT para autenticación',
