@@ -90,20 +90,23 @@ export class ConversationsService {
     return result.rows;
   }
 
-  async searchMessages(contentMessage: string) {
+  async searchMessages(query: string) {
     const result = await this.pool.query(
-      ` SELECT DISTINCT ON (conversations.id)
-          conversations.id AS conversation_id,
-          conversations.name,
-          conversations.phone,
-          conversations.last_message,
-          conversations.last_message_date
-        FROM conversations
-        JOIN messages ON messages.conversation_id = conversations.id
-        WHERE messages.message ILIKE '%' || $1 || '%'
-        ORDER BY conversations.id, messages.timestamp DESC
-      `,
-      [contentMessage],
+      `SELECT DISTINCT ON (conversations.id)
+        conversations.id AS conversation_id,
+        conversations.name,
+        conversations.phone,
+        conversations.last_message,
+        conversations.last_message_date
+     FROM conversations
+     LEFT JOIN messages ON messages.conversation_id = conversations.id
+     WHERE
+       messages.message ILIKE '%' || $1 || '%' OR
+       conversations.name ILIKE '%' || $1 || '%' OR
+       conversations.phone ILIKE '%' || $1 || '%'
+     ORDER BY conversations.id, messages.timestamp DESC
+    `,
+      [query],
     );
     return result.rows;
   }
