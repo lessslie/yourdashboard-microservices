@@ -4,7 +4,7 @@ import { Layout, Button, List, Skeleton, Pagination, Card, Input } from "antd";
 import { handleConnectService } from "./lib/emails";
 import { DownOutlined, UpOutlined } from "@ant-design/icons";
 import { ICuentaGmail } from "../Auth/hooks/useAuth";
-import { useEmails } from "./hooks/useEmails";
+import { useEmails, useEmailSearch } from "./hooks/useEmails";
 import TabsTest from "./Tabs";
 
 const { Content } = Layout;
@@ -27,9 +27,13 @@ const ListEmails = ({
     handleAccountChange,
     selectedCuentaGmailId,
   } = useEmails(cuentasGmail);
+  // const { handleSearchTermChange, handleCheck, emails } = useEmailSearch(
+  //   selectedCuentaGmailId || cuentasGmail[0].id
+  // );
   const conectEmail = async () => {
     await handleConnectService(token);
   };
+  //  console.log("emails", emails);
 
   return (
     <div style={{ padding: "24px" }}>
@@ -103,8 +107,12 @@ const ListEmails = ({
               ({list.total})
             </h4>
             <div style={{ display: "flex", gap: "50px" }}>
-              <Input.Search placeholder="Buscar..." enterButton />
-              <Input placeholder="Filtrar por..." />
+              <Input.Search
+                placeholder="Buscar..."
+                // onChange={handleSearchTermChange}
+                // onSearch={handleCheck}
+              />
+              {/* <Input placeholder="Filtrar por..." /> */}
             </div>
           </div>
         }

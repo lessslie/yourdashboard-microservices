@@ -36,13 +36,14 @@ const ViewEmails = () => {
           alignItems: "center",
         }}
       >
-        <Image
+        <h1>YOUR DASHBOARD</h1>
+        {/* <Image
           src="/logo.png"
           alt="Logo"
           width={270}
           height={106}
           style={{ margin: "0" }}
-        />
+        /> */}
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
           <h4>Hola, {userData.name}</h4>
           <Button
