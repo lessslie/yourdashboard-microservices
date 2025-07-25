@@ -304,6 +304,7 @@ export class EmailsService {
       this.logger.log(`📊 🎯 ESTADÍSTICAS GMAIL-LIKE para cuenta Gmail ${cuentaGmailId}`);
       
       const cuentaGmailIdNum = parseInt(cuentaGmailId);
+      
 
       if (isNaN(cuentaGmailIdNum)) {
         throw new Error('cuentaGmailId debe ser un número válido');
@@ -444,25 +445,32 @@ export class EmailsService {
   /**
    * 📊 Método original de stats (Gmail API)
    */
-  private async getStatsFromGmailAPI(accessToken: string, cuentaGmailId: string): Promise<EmailStats> {
-    const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({ access_token: accessToken });
-    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+ private async getStatsFromGmailAPI(accessToken: string, cuentaGmailId: string): Promise<EmailStats> {
+  const oauth2Client = new google.auth.OAuth2();
+  oauth2Client.setCredentials({ access_token: accessToken });
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
-    const [unreadResponse, totalResponse] = await Promise.all([
-      gmail.users.messages.list({ userId: 'me', q: 'in:inbox is:unread' }),
-      gmail.users.messages.list({ userId: 'me', q: 'in:inbox' })
-    ]);
+  console.log('🔍 DEBUG - Getting stats for cuenta:', cuentaGmailId);
 
-    const totalEmails = totalResponse.data.resultSizeEstimate || 0;
-    const unreadEmails = unreadResponse.data.resultSizeEstimate || 0;
+  // 🎯 USAR getRealEmailCount EN LUGAR DE resultSizeEstimate
+  const [totalEmails, unreadEmails] = await Promise.all([
+    this.getRealEmailCount(gmail, 'in:inbox'),
+    this.getRealEmailCount(gmail, 'in:inbox is:unread')
+  ]);
 
-    return {
-      totalEmails,
-      unreadEmails,
-      readEmails: totalEmails - unreadEmails
-    };
-  }
+  console.log('🔍 DEBUG - Stats REALES:', { 
+    totalEmails,
+    unreadEmails,
+    cuentaGmailId,
+    accessToken: accessToken ? 'presente' : 'faltante'
+  });
+
+  return {
+    totalEmails,
+    unreadEmails,
+    readEmails: totalEmails - unreadEmails
+  };
+}
 
   /**
    * 📧 Obtener email específico desde Gmail API
@@ -479,7 +487,7 @@ export class EmailsService {
     const emailDetail = await gmail.users.messages.get({
       userId: 'me',
       id: messageId,
-      format: 'full'
+      format: 'metadata'
     });
 
     const extractedData = this.extractFullEmailData(emailDetail.data);
