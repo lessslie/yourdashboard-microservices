@@ -10,7 +10,7 @@ import {
 } from './interfaces/email.interfaces';
 
 export interface SyncOptions {
-  maxEmails?: number;        // Máximo emails a sincronizar (default: 100)
+  maxEmails?: number;        // Máximo emails a sincronizar (sin tope default: 10000)
   onlyUnread?: boolean;      // Solo emails no leídos (default: false)  
   sinceDate?: Date;          // Solo emails desde esta fecha
   fullSync?: boolean;        // Sincronización completa (default: false)
@@ -75,7 +75,7 @@ export class SyncService {
       }
 
       // 4️⃣ Procesar emails en lotes (para no saturar)
-      const BATCH_SIZE = 50; // Procesar de a 10 emails
+      const BATCH_SIZE = 25; // Procesar de a 10 emails
       const emailsMetadata: EmailMetadataDB[] = [];
       let ultimaFechaEmail: Date | undefined;
 
@@ -233,7 +233,7 @@ export class SyncService {
       const emailDetail = await gmail.users.messages.get({
         userId: 'me',
         id: messageId,
-        format: 'metadata',
+        format: 'metadata', // Obtener todos los datos del email
         metadataHeaders: ['Subject', 'From', 'To', 'Date']
       });
 

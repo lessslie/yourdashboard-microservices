@@ -247,6 +247,32 @@ export class AuthService {
     }
   }
 
+  /**
+ * 📧 Obtener cuenta Gmail específica por ID
+ */
+async obtenerCuentaGmailPorId(usuarioId: number, cuentaId: number) {
+  const cuenta = await this.databaseService.obtenerCuentaGmailPorId(cuentaId, usuarioId);
+  
+  if (!cuenta) {
+    throw new NotFoundException({
+      codigo: CodigosErrorAuth.CUENTA_GMAIL_NO_ENCONTRADA,
+      mensaje: 'Cuenta Gmail no encontrada'
+    });
+  }
+  
+  // Convertir Date → string para el DTO
+  return {
+    id: cuenta.id,
+    email_gmail: cuenta.email_gmail,
+    nombre_cuenta: cuenta.nombre_cuenta,
+    alias_personalizado: cuenta.alias_personalizado,
+    fecha_conexion: cuenta.fecha_conexion.toISOString(),
+    ultima_sincronizacion: cuenta.ultima_sincronizacion?.toISOString(),
+    esta_activa: cuenta.esta_activa,
+    emails_count: 0 // El orchestrator lo llenará con el count real
+  };
+}
+
   // ================================
   // 🔐 GENERAR URL OAUTH CON STATE
   // ================================
@@ -288,7 +314,7 @@ export class AuthService {
   }
 
   // ================================
-  // 🔐 MANEJAR CALLBACK DE GOOGLE OAUTH - ARREGLADO
+  // 🔐 MANEJAR CALLBACK DE GOOGLE OAUTH
   // ================================
 
  async manejarCallbackGoogle(googleUser: GoogleOAuthUser, usuarioActualId: number): Promise<RespuestaConexionGmail> {
@@ -412,7 +438,7 @@ export class AuthService {
   }
 
   // ================================
-  // 📧 LISTAR CUENTAS GMAIL DE USUARIO  
+  // 📧 LISTAR CUENTAS GMAIL DE USUARIO 
   // ================================
 
   async listarCuentasGmailUsuario(usuarioId: number): Promise<Array<{

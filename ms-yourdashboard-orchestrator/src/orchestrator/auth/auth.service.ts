@@ -11,8 +11,10 @@ import {
   AuthResponseDto,
   ProfileResponseDto,
   CuentasGmailResponseDto,
-  CuentaGmailResponseDto
+  CuentaGmailResponseDto,
+  CuentaGmailDto
 } from './interfaces/auth.interfaces';
+import { CacheService } from '../cache/cache.service';
 
 @Injectable()
 export class AuthOrchestratorService {
@@ -20,11 +22,16 @@ export class AuthOrchestratorService {
   private readonly msAuthUrl: string;
   private readonly frontendUrl: string;
   private readonly orchestratorUrl: string;
+  private readonly msEmailUrl: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly cacheService: CacheService
+  ) {
     this.msAuthUrl = this.configService.get<string>('MS_AUTH_URL') || 'http://localhost:3001';
     this.frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
     this.orchestratorUrl = this.configService.get<string>('ORCHESTRATOR_URL') || 'http://localhost:3003';
+    this.msEmailUrl = this.configService.get<string>('MS_EMAIL_URL') || 'http://localhost:3002';
   }
 
   /**
@@ -201,7 +208,7 @@ export class AuthOrchestratorService {
     try {
       console.log(`🔵 ORCHESTRATOR-AUTH - Procesando callback de Google OAuth`);
       console.log(`🔵 ORCHESTRATOR-AUTH - Query params recibidos:`, req.query);
-      
+      //aca llama a la url de ms-auth con el query params de req que viene de google
       const msAuthCallbackUrl = `${this.msAuthUrl}/auth/google/callback`;
       
       const query = req.query;
@@ -227,7 +234,7 @@ export class AuthOrchestratorService {
     } catch (error) {
       const authError = error as AuthError;
       console.error('❌ ORCHESTRATOR-AUTH - Error en callback:', authError.message);
-      
+      console.log(`🔵 ORCHESTRATOR-AUTH - Redirigiendo a frontend con error`);
       const errorUrl = new URL(this.frontendUrl);
       errorUrl.searchParams.set('auth', 'error');
       errorUrl.searchParams.set('message', encodeURIComponent('Error en autenticación OAuth'));
@@ -237,14 +244,15 @@ export class AuthOrchestratorService {
     }
   }
 
-  /**
+/**
    * 📧 Listar cuentas Gmail del usuario
    */
   async getCuentasGmail(authHeader: string): Promise<CuentasGmailResponseDto> {
     try {
       this.logger.log(`📧 Obteniendo cuentas Gmail del usuario`);
       
-      const response = await axios.get(
+      // 1. Obtener cuentas desde MS-Auth (como siempre)
+      const response: AxiosResponse<CuentasGmailResponseDto> = await axios.get(
         `${this.msAuthUrl}/auth/cuentas-gmail`,
         {
           headers: {
@@ -253,8 +261,80 @@ export class AuthOrchestratorService {
         }
       );
       
-      this.logger.log(`✅ Cuentas Gmail obtenidas exitosamente`);
-      return response.data as CuentasGmailResponseDto;
+      // 2. 🎯 ENRIQUECER CON COUNTS REALES (con cache)
+      const cuentasConStats = await Promise.all(
+        response.data.cuentas.map(async (cuenta: CuentaGmailDto) => {
+          try {
+            // Intentar obtener del cache primero
+            const cacheKey = `gmail_count:${cuenta.id}`;
+            let emailCount = await this.cacheService.get<number>(cacheKey);
+            
+            if (emailCount === null) {
+              // No hay cache, obtener stats reales
+              this.logger.log(`📊 Obteniendo count real para cuenta ${cuenta.id} (${cuenta.email_gmail})`);
+              
+              // Obtener token para esta cuenta específica
+              const tokenResponse: AxiosResponse<{
+                success: boolean;
+                accessToken: string;
+                user: {
+                  id: string;
+                  email: string;
+                  name: string;
+                  cuentaGmailId: string;
+                };
+                renewed: boolean;
+              }> = await axios.get(
+                `${this.msAuthUrl}/tokens/gmail/${cuenta.id}`
+              );
+              
+              if (!tokenResponse.data.success) {
+                throw new Error('No se pudo obtener token');
+              }
+              
+              // Obtener stats desde MS-Email
+              const statsResponse: AxiosResponse<{
+                totalEmails: number;
+                unreadEmails: number;
+                readEmails: number;
+              }> = await axios.get(
+                `${this.msEmailUrl}/emails/stats`,
+                {
+                  params: { cuentaGmailId: cuenta.id },
+                  headers: {
+                    'Authorization': `Bearer ${tokenResponse.data.accessToken}`
+                  }
+                }
+              );
+              
+              emailCount = statsResponse.data.totalEmails;
+              
+              this.logger.log(`✅ Count real obtenido: ${emailCount} emails para ${cuenta.email_gmail}`);
+              
+              // Guardar en cache por 10 minutos
+              await this.cacheService.set(cacheKey, emailCount, 600);
+            } else {
+              this.logger.log(`⚡ Count desde cache: ${emailCount} emails para ${cuenta.email_gmail}`);
+            }
+            
+            return {
+              ...cuenta,
+              emails_count: emailCount
+            };
+          } catch (error) {
+            this.logger.warn(`⚠️ No se pudo obtener count para cuenta ${cuenta.id}: ${error}`);
+            return cuenta; // Mantener el count original (0)
+          }
+        })
+      );
+      
+      this.logger.log(`✅ Cuentas Gmail obtenidas con counts reales`);
+      
+      return {
+        success: true,
+        cuentas: cuentasConStats,
+        total: response.data.total
+      };
       
     } catch (error) {
       const axiosError = error as AxiosError;
@@ -274,49 +354,114 @@ export class AuthOrchestratorService {
     }
   }
 
-  /**
-   * 📧 Obtener cuenta Gmail específica
-   */
-  async getCuentaGmail(authHeader: string, cuentaId: string): Promise<CuentaGmailResponseDto> {
-    try {
-      this.logger.log(`📧 Obteniendo cuenta Gmail ${cuentaId}`);
-      
-      const response : AxiosResponse<CuentaGmailResponseDto> = await axios.get(
-        `${this.msAuthUrl}/auth/cuentas-gmail/${cuentaId}`,
-        {
-          headers: {
-            'Authorization': authHeader
-          }
+/**
+ * 📧 Obtener cuenta Gmail específica
+ */
+async getCuentaGmail(authHeader: string, cuentaId: string): Promise<CuentaGmailResponseDto> {
+  try {
+    this.logger.log(`📧 Obteniendo cuenta Gmail ${cuentaId}`);
+    
+    // 1. Obtener cuenta desde MS-Auth
+    const response: AxiosResponse<CuentaGmailResponseDto> = await axios.get(
+      `${this.msAuthUrl}/auth/cuentas-gmail/${cuentaId}`,
+      {
+        headers: {
+          'Authorization': authHeader
         }
-      );
+      }
+    );
+    
+    // 2. 🎯 ENRIQUECER CON COUNT REAL (con cache)
+    try {
+      // Intentar obtener del cache primero
+      const cacheKey = `gmail_count:${cuentaId}`;
+      let emailCount = await this.cacheService.get<number>(cacheKey);
       
-      this.logger.log(`✅ Cuenta Gmail obtenida exitosamente`);
-      return response.data;
+      if (emailCount === null) {
+        // No hay cache, obtener stats reales
+        this.logger.log(`📊 Obteniendo count real para cuenta ${cuentaId}`);
+        
+        // Obtener token para esta cuenta específica
+        const tokenResponse: AxiosResponse<{
+          success: boolean;
+          accessToken: string;
+          user: {
+            id: string;
+            email: string;
+            name: string;
+            cuentaGmailId: string;
+          };
+          renewed: boolean;
+        }> = await axios.get(
+          `${this.msAuthUrl}/tokens/gmail/${cuentaId}`
+        );
+        
+        if (tokenResponse.data.success) {
+          // Obtener stats desde MS-Email
+          const statsResponse: AxiosResponse<{
+            totalEmails: number;
+            unreadEmails: number;
+            readEmails: number;
+          }> = await axios.get(
+            `${this.msEmailUrl}/emails/stats`,
+            {
+              params: { cuentaGmailId: cuentaId },
+              headers: {
+                'Authorization': `Bearer ${tokenResponse.data.accessToken}`
+              }
+            }
+          );
+          
+          emailCount = statsResponse.data.totalEmails;
+          
+          this.logger.log(`✅ Count real obtenido: ${emailCount} emails`);
+          
+          // Guardar en cache por 10 minutos
+          await this.cacheService.set(cacheKey, emailCount, 600);
+        }
+      } else {
+        this.logger.log(`⚡ Count desde cache: ${emailCount} emails`);
+      }
+      
+      // Actualizar el count en la respuesta
+      if (emailCount !== null && response.data.cuenta) {
+        response.data.cuenta.emails_count = emailCount;
+      }
       
     } catch (error) {
-      const axiosError = error as AxiosError;
-      this.logger.error(`❌ Error obteniendo cuenta Gmail:`, axiosError.message);
-      
-      if (axiosError.response?.status === 404) {
-        throw new HttpException(
-          'Cuenta Gmail no encontrada',
-          HttpStatus.NOT_FOUND
-        );
-      }
-      
-      if (axiosError.response?.status === 401) {
-        throw new HttpException(
-          'Token inválido o expirado',
-          HttpStatus.UNAUTHORIZED
-        );
-      }
-      
+      this.logger.error(`❌ Error en enriquecimiento:`, error);
+      // Continuar sin el count real
+    }
+    
+    this.logger.log(`✅ Cuenta Gmail obtenida exitosamente`);
+    return response.data;
+    
+  } catch (error) {
+    const axiosError = error as AxiosError;
+    this.logger.error(`❌ Error obteniendo cuenta Gmail:`, axiosError.message);
+    
+    if (axiosError.response?.status === 404) {
       throw new HttpException(
-        'Error al obtener cuenta Gmail',
-        HttpStatus.INTERNAL_SERVER_ERROR
+        'Cuenta Gmail no encontrada',
+        HttpStatus.NOT_FOUND
       );
     }
+    
+    if (axiosError.response?.status === 401) {
+      throw new HttpException(
+        'Token inválido o expirado',
+        HttpStatus.UNAUTHORIZED
+      );
+    }
+    
+    throw new HttpException(
+      'Error al obtener cuenta Gmail',
+      HttpStatus.INTERNAL_SERVER_ERROR
+    );
   }
+}
+
+  
 
   /**
    * 🗑️ Desconectar cuenta Gmail
