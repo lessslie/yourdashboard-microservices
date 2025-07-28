@@ -32,7 +32,7 @@ export const formatoDeFechaYHora = (dateStr: Date): string => {
     year: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false, // Usa formato de 24 horas
+    hour12: false,
   };
 
   return date.toLocaleDateString("es-ES", optionsDateTime);
