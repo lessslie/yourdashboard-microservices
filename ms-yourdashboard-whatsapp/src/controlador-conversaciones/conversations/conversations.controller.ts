@@ -32,7 +32,6 @@ export class ConversationsController {
       return res.status(400).json({ error: 'Falta el parámetro de conversationId' });
     }
 
-    // Validar que sea un UUID
     if (!isValidUUID(conversationId)) {
       return res.status(400).json({ error: 'El conversationId no es un UUID válido' });
     }
@@ -74,6 +73,4 @@ export class ConversationsController {
     }
   }
 }
-
-
 

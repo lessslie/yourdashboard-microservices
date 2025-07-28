@@ -2,10 +2,16 @@ import { Controller, Post, Body, Res, Query, Get } from '@nestjs/common';
 import { Response } from 'express';
 import { ConversationsService } from 'src/controlador-conversaciones/conversations/conversations.service';
 import { WhatsAppWebhookPayload } from './whatsapp-webhook.dto';
+import { MessagesGateway } from 'src/messages/messages.gateway';
+import { WhatsappService } from './whatsapp.service';
 
 @Controller('webhook')
 export class WebhookController {
-  constructor(private readonly conversationsService: ConversationsService) {}
+  constructor(
+    private readonly conversationsService: ConversationsService,
+    private readonly gateway: MessagesGateway, 
+    private readonly whatsappService: WhatsappService,
+  ) { }
 
   @Get()
   verifyWebhook(
@@ -14,12 +20,12 @@ export class WebhookController {
     @Query('hub.challenge') challenge: string,
     @Res() res: Response,
   ) {
-    const VERIFY_TOKEN = 'mi_token_123';  // El token que configuraste en la plataforma
+    const VERIFY_TOKEN = 'mi_token_123';  // El token de configuracion de la plataforma
 
     if (mode && token) {
       if (mode === 'subscribe' && token === VERIFY_TOKEN) {
         console.log('Webhook verificado!');
-        return res.status(200).send(challenge);  // Respondés con el challenge para validar
+        return res.status(200).send(challenge);  // Respondemos con el challenge para validar
       } else {
         return res.sendStatus(403);
       }
@@ -67,12 +73,37 @@ export class WebhookController {
           msgBody,
           new Date(timestamp),
         );
+
+        this.gateway.emitNewMessage({
+          from,
+          message: msgBody,
+          timestamp: new Date(timestamp).toISOString(),
+          name: contact.profile?.name || 'Sin nombre',
+        });
       }
 
       return res.status(200).send('EVENT_RECEIVED');
     } catch (error) {
       console.error('Error procesando mensaje:', error);
       return res.sendStatus(500);
+    }
+  }
+
+  @Post('/send')
+  async sendMessage(
+    @Body() body: { to: string; message: string },
+    @Res() res: Response,
+  ) {
+    try {
+      const { to, message } = body;
+      if (!to || !message) {
+        return res.status(400).json({ error: 'Faltan parámetros' });
+      }
+      const response = await this.whatsappService.sendMessage(to, message);
+      return res.status(200).json(response);
+    } catch (error) {
+      console.error('Error enviando mensaje:', error);
+      return res.status(500).json({ error: 'No se pudo enviar el mensaje' });
     }
   }
 }
