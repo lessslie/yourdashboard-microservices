@@ -82,7 +82,7 @@ export class EmailsOrchestratorController {
   }
 
   /**
-   * 🔄 POST /emails/sync/incremental - Sincronización incremental coordinada
+   * 🔄 POST /emails/sync/incremental - Sincronización incremental coordinada no sncroniza tooodooo otra vez- solo los ultimos para una actualizacion mas rapda.
    */
   @Post('sync/incremental')
   @ApiOperation({ 

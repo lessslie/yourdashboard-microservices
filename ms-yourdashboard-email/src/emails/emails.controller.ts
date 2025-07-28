@@ -107,7 +107,7 @@ export class EmailsController {
   }
 
   /**
-   * 🔄 POST /emails/sync/incremental - Sincronización incremental
+   * 🔄 POST /emails/sync/incremental - Sincronización incremental,mas rapido, solo trae los ultimos no actuliza tooodoooo
    */
   @Post('sync/incremental')
   @ApiBearerAuth('Gmail-Token')
