@@ -1,23 +1,7 @@
 -- =====================================
 -- NUEVA ARQUITECTURA - YOURDASHBOARD
 -- =====================================
--- Solución al problema: 1 usuario principal → N cuentas Gmail
--- Base de datos: ms_yourdashboard_auth (mantenemos el nombre)
-
--- =====================================
--- PASO 1: BORRAR TABLAS VIEJAS
--- =====================================
-
--- Borrar en orden (respetando foreign keys)
-DROP TABLE IF EXISTS user_tokens CASCADE;
-DROP TABLE IF EXISTS oauth_connections CASCADE;
-DROP TABLE IF EXISTS sessions CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
-DROP TABLE IF EXISTS accounts CASCADE;
-
--- =====================================
--- PASO 2: CREAR NUEVAS TABLAS
--- =====================================
+CREATE DATABASE ms_yourdashboard_auth;
 
 -- 📋 TABLA 1: usuarios_principales
 -- Un registro por usuario que se registra con email/password
@@ -58,9 +42,9 @@ CREATE TABLE emails_sincronizados (
   cuenta_gmail_id INTEGER NOT NULL,
   gmail_message_id VARCHAR(255) NOT NULL, -- ID del mensaje en Gmail
   asunto TEXT,
-  remitente_email VARCHAR(255),
-  remitente_nombre VARCHAR(255),
-  destinatario_email VARCHAR(255),
+  remitente_email TEXT,
+  remitente_nombre TEXT,
+  destinatario_email TEXT,
   fecha_recibido TIMESTAMP WITHOUT TIME ZONE,
   esta_leido BOOLEAN DEFAULT FALSE,
   tiene_adjuntos BOOLEAN DEFAULT FALSE,

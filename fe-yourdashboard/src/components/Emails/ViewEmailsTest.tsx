@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useAuth, useUserData } from "../Auth/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { handleConnectService, getEmails, syncEmails } from "./lib/email";
-import GmailAccountSelector from "./GmailAccountSelector";
+import GmailAccountSelector from "./GmailAccountSelectorTest";
 
 const { Footer } = Layout;
 

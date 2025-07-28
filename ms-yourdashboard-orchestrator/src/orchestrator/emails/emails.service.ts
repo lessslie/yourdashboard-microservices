@@ -101,7 +101,8 @@ export class EmailsOrchestratorService {
           params: { cuentaGmailId, maxEmails },
           headers: {
             'Authorization': `Bearer ${accessToken}`
-          }
+          },
+          timeout: 120000 // 2 minutos de timeout
         }
       );
 

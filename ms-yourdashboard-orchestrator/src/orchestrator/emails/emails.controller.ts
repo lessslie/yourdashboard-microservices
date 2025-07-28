@@ -77,12 +77,12 @@ export class EmailsOrchestratorController {
 
     return this.emailsService.syncEmails(
       cuentaGmailId, 
-      maxEmails ? parseInt(maxEmails, 10) : 100
+      maxEmails ? parseInt(maxEmails, 10) : 10000
     );
   }
 
   /**
-   * 🔄 POST /emails/sync/incremental - Sincronización incremental coordinada
+   * 🔄 POST /emails/sync/incremental - Sincronización incremental coordinada no sncroniza tooodooo otra vez- solo los ultimos para una actualizacion mas rapda.
    */
   @Post('sync/incremental')
   @ApiOperation({ 
@@ -126,7 +126,7 @@ export class EmailsOrchestratorController {
 
     return this.emailsService.syncIncremental(
       cuentaGmailId, 
-      maxEmails ? parseInt(maxEmails, 10) : 30
+      maxEmails ? parseInt(maxEmails, 10) : 10000
     );
   }
 
