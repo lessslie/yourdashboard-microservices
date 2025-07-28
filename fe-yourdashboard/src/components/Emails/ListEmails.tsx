@@ -1,13 +1,11 @@
 import React, { useState } from "react";
-import { Layout, Button, List, Skeleton, Pagination, Card, Input } from "antd";
+import { Button, List, Skeleton, Pagination, Card, Input } from "antd";
 
 import { handleConnectService } from "./lib/emails";
 import { DownOutlined, UpOutlined } from "@ant-design/icons";
 import { ICuentaGmail } from "../Auth/hooks/useAuth";
-import { useEmails, useEmailSearch } from "./hooks/useEmails";
+import { useEmails } from "./hooks/useEmails";
 import TabsTest from "./Tabs";
-
-const { Content } = Layout;
 
 const ListEmails = ({
   token,

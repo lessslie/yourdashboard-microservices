@@ -1,7 +1,6 @@
 "use client";
 import React from "react";
-import { Button, Card, Input, Layout, Skeleton } from "antd";
-import Image from "next/image";
+import { Button, Layout, Skeleton } from "antd";
 import ListEmails from "./ListEmails";
 import { useUserData, useCuentasGmail, useAuth } from "../Auth/hooks/useAuth";
 import { useRouter } from "next/navigation";
