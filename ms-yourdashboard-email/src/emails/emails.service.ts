@@ -499,6 +499,210 @@ export class EmailsService {
     return extractedData;
   }
 
+  
+/**
+ * 🌍 BÚSQUEDA GLOBAL - Buscar en TODAS las cuentas Gmail del usuario
+ * 🎯 NUEVO: Método principal de búsqueda unificada
+ */
+async searchAllAccountsEmailsWithUserId(
+  userId: string,
+  searchTerm: string,
+  page: number = 1,
+  limit: number = 10
+): Promise<EmailListResponse & { accountsSearched: string[] }> {
+  try {
+    this.logger.log(`🌍 🎯 BÚSQUEDA GLOBAL "${searchTerm}" para usuario principal ${userId}`);
+
+    // 🎯 VALIDAR USERID
+    const userIdNum = parseInt(userId, 10);
+    if (isNaN(userIdNum)) {
+      throw new Error('userId debe ser un número válido');
+    }
+
+    // 1️⃣ OBTENER TODAS LAS CUENTAS GMAIL DEL USUARIO
+    const cuentasGmail = await this.databaseService.obtenerCuentasGmailUsuario(userIdNum);
+    
+    if (!cuentasGmail || cuentasGmail.length === 0) {
+      this.logger.warn(`⚠️ Usuario ${userId} no tiene cuentas Gmail conectadas`);
+      return {
+        emails: [],
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPreviousPage: false,
+        searchTerm,
+        accountsSearched: []
+      };
+    }
+
+    this.logger.log(`📧 Usuario ${userId} tiene ${cuentasGmail.length} cuentas Gmail conectadas`);
+
+    // 2️⃣ BUSCAR EN PARALELO EN TODAS LAS CUENTAS
+    const searchPromises = cuentasGmail.map(async (cuenta) => {
+      try {
+        this.logger.log(`🔍 Buscando en cuenta: ${cuenta.email_gmail} (ID: ${cuenta.id})`);
+        
+        // 🎯 OBTENER TOKEN PARA ESTA CUENTA ESPECÍFICA
+        const accessToken = await this.getValidTokenForAccount(cuenta.id);
+        
+        // 🎯 BUSCAR EN ESTA CUENTA (reutilizamos el método existente)
+        const resultadoCuenta = await this.searchEmailsWithToken(
+          accessToken,
+          cuenta.id.toString(),
+          searchTerm,
+          1, // Siempre página 1 para cada cuenta
+          100 // Más resultados por cuenta para unificar después
+        );
+
+        // 🎯 AGREGAR INFO DE LA CUENTA A CADA EMAIL
+        const emailsConCuenta = resultadoCuenta.emails.map(email => ({
+          ...email,
+          sourceAccount: cuenta.email_gmail,
+          sourceAccountId: cuenta.id
+        }));
+
+        this.logger.log(`✅ Cuenta ${cuenta.email_gmail}: ${emailsConCuenta.length} resultados`);
+
+        return {
+          cuenta: cuenta.email_gmail,
+          emails: emailsConCuenta,
+          total: resultadoCuenta.total
+        };
+
+      } catch (error) {
+        this.logger.warn(`⚠️ Error buscando en cuenta ${cuenta.email_gmail}:`, error);
+        
+        // 🎯 FALLBACK: Buscar en BD local para esta cuenta
+        try {
+          this.logger.log(`💾 FALLBACK BD local para cuenta ${cuenta.email_gmail}`);
+          
+          const filters = {
+            busqueda_texto: searchTerm.trim()
+          };
+
+          const fallbackResult = await this.databaseService.searchEmailsInDB(
+            cuenta.id,
+            filters,
+            1,
+            100
+          );
+
+          const emailsFromDB = fallbackResult.emails.map(this.convertDBToEmailMetadata).map(email => ({
+            ...email,
+            sourceAccount: cuenta.email_gmail,
+            sourceAccountId: cuenta.id
+          }));
+
+          this.logger.log(`💾 FALLBACK exitoso: ${emailsFromDB.length} resultados desde BD`);
+
+          return {
+            cuenta: cuenta.email_gmail,
+            emails: emailsFromDB,
+            total: fallbackResult.total
+          };
+
+        } catch (fallbackError) {
+          this.logger.error(`❌ FALLBACK falló para cuenta ${cuenta.email_gmail}:`, fallbackError);
+          return {
+            cuenta: cuenta.email_gmail,
+            emails: [],
+            total: 0
+          };
+        }
+      }
+    });
+
+    // 3️⃣ ESPERAR TODOS LOS RESULTADOS EN PARALELO
+    const resultadosPorCuenta = await Promise.all(searchPromises);
+
+    // 4️⃣ UNIFICAR Y COMBINAR TODOS LOS EMAILS
+    const todosLosEmails = resultadosPorCuenta
+      .filter(resultado => resultado.emails.length > 0)
+      .flatMap(resultado => resultado.emails);
+
+    // 5️⃣ ORDENAR GLOBALMENTE POR FECHA (MÁS RECIENTES PRIMERO)
+    todosLosEmails.sort((a, b) => {
+      const fechaA = new Date(a.receivedDate).getTime();
+      const fechaB = new Date(b.receivedDate).getTime();
+      return fechaB - fechaA; // Descendente (más recientes primero)
+    });
+
+    // 6️⃣ APLICAR PAGINACIÓN GLOBAL
+    const totalEmails = todosLosEmails.length;
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const emailsPaginados = todosLosEmails.slice(startIndex, endIndex);
+
+    // 7️⃣ CALCULAR METADATOS DE PAGINACIÓN
+    const totalPages = Math.ceil(totalEmails / limit);
+    const hasNextPage = page < totalPages;
+    const hasPreviousPage = page > 1;
+
+    // 8️⃣ OBTENER LISTA DE CUENTAS BUSCADAS
+    const accountsSearched = resultadosPorCuenta.map(resultado => resultado.cuenta);
+
+    this.logger.log(`✅ BÚSQUEDA GLOBAL COMPLETADA:`);
+    this.logger.log(`   📊 Total emails encontrados: ${totalEmails}`);
+    this.logger.log(`   📧 Cuentas buscadas: ${accountsSearched.join(', ')}`);
+    this.logger.log(`   📄 Página ${page}/${totalPages} (${emailsPaginados.length} emails)`);
+
+    return {
+      emails: emailsPaginados,
+      total: totalEmails,
+      page,
+      limit,
+      totalPages,
+      hasNextPage,
+      hasPreviousPage,
+      searchTerm,
+      accountsSearched
+    };
+
+  } catch (error) {
+    this.logger.error('❌ Error en búsqueda global:', error);
+    const emailError = error as EmailServiceError;
+    throw new Error('Error en búsqueda global: ' + emailError.message);
+  }
+}
+
+// ================================
+// 🔧 MÉTODOS AUXILIARES PARA BÚSQUEDA GLOBAL
+// ================================
+
+/**
+ * 🔑 Obtener token válido para una cuenta específica
+ * 🎯 NUEVO: Helper para obtener tokens por cuenta
+ */
+private async getValidTokenForAccount(cuentaGmailId: number): Promise<string> {
+  try {
+    // 🎯 CONSULTAR A MS-AUTH PARA OBTENER TOKEN
+    const response = await fetch(`http://localhost:3001/tokens/gmail/${cuentaGmailId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error obteniendo token: ${response.status}`);
+    }
+
+    const tokenData = await response.json();
+
+    if (!tokenData.success || !tokenData.accessToken) {
+      throw new Error('Token no válido recibido de MS-Auth');
+    }
+
+    return tokenData.accessToken;
+
+  } catch (error) {
+    this.logger.error(`❌ Error obteniendo token para cuenta ${cuentaGmailId}:`, error);
+    throw new Error(`No se pudo obtener token para cuenta Gmail ${cuentaGmailId}`);
+  }
+}
+
   // ================================
   // 🔧 MÉTODOS AUXILIARES
   // ================================

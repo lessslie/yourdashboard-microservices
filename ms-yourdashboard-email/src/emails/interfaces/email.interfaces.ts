@@ -52,6 +52,9 @@ export interface EmailMetadata {
   receivedDate: Date;
   isRead: boolean;
   hasAttachments: boolean;
+  ///extras para la busqueda de emails global
+   sourceAccount?: string;      
+  sourceAccountId?: number;
 }
 
 export interface EmailDetail extends EmailMetadata {
@@ -69,6 +72,13 @@ export interface EmailListResponse {
   hasNextPage: boolean;
   hasPreviousPage: boolean;
   searchTerm?: string;
+  
+  // 🎯 NUEVO CAMPO PARA BÚSQUEDA GLOBAL
+  accountsSearched?: string[];
+}
+// 🎯 INTERFACE ESPECÍFICA PARA BÚSQUEDA GLOBAL
+export interface GlobalSearchResponse extends EmailListResponse {
+  accountsSearched: string[]; // Obligatorio para búsqueda global
 }
 
 export interface EmailStats {
