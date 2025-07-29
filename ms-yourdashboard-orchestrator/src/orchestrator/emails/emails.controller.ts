@@ -222,6 +222,132 @@ export class EmailsOrchestratorController {
     );
   }
 
+
+
+
+  
+  /**
+   * 🌍 GET /emails/search-all-accounts - Buscar emails (TODAS LAS CUENTAS) - NUEVO
+   */
+  @Get('search-all-accounts')
+  @ApiOperation({ 
+    summary: '🌍 Buscar emails en TODAS las cuentas Gmail del usuario',
+    description: 'Coordina MS-Auth + MS-Email para buscar emails en TODAS las cuentas Gmail asociadas al usuario principal. Unifica resultados y los ordena por fecha globalmente.'
+  })
+  @ApiQuery({ 
+    name: 'userId', 
+    description: 'ID del usuario principal (extraído del JWT)', 
+    example: '3' 
+  })
+  @ApiQuery({ 
+    name: 'q', 
+    description: 'Término de búsqueda global', 
+    example: 'reunión proyecto' 
+  })
+  @ApiQuery({ 
+    name: 'page', 
+    description: 'Número de página', 
+    example: 1, 
+    required: false 
+  })
+  @ApiQuery({ 
+    name: 'limit', 
+    description: 'Emails por página (máx 50)', 
+    example: 10, 
+    required: false 
+  })
+  @ApiOkResponse({ 
+    description: 'Resultados de búsqueda global obtenidos exitosamente',
+    type: OrchestratorEmailListDto,
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        source: { type: 'string', example: 'orchestrator-global-search' },
+        searchTerm: { type: 'string', example: 'reunión proyecto' },
+        accountsSearched: { 
+          type: 'array', 
+          items: { type: 'string' },
+          example: ['juan.trabajo@gmail.com', 'juan.personal@gmail.com']
+        },
+        data: {
+          type: 'object',
+          properties: {
+            emails: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', example: '1847a8e123456789' },
+                  subject: { type: 'string', example: 'Reunión proyecto' },
+                  fromEmail: { type: 'string', example: 'jefe@empresa.com' },
+                  fromName: { type: 'string', example: 'Juan Pérez' },
+                  receivedDate: { type: 'string', example: '2024-01-15T10:30:00Z' },
+                  isRead: { type: 'boolean', example: false },
+                  hasAttachments: { type: 'boolean', example: true },
+                  sourceAccount: { type: 'string', example: 'juan.trabajo@gmail.com' }
+                }
+              }
+            },
+            total: { type: 'number', example: 45 },
+            page: { type: 'number', example: 1 },
+            limit: { type: 'number', example: 10 },
+            totalPages: { type: 'number', example: 5 },
+            hasNextPage: { type: 'boolean', example: true },
+            hasPreviousPage: { type: 'boolean', example: false },
+            searchTerm: { type: 'string', example: 'reunión proyecto' }
+          }
+        }
+      }
+    }
+  })
+  @ApiBadRequestResponse({ 
+    description: 'userId y q son requeridos',
+    type: OrchestratorErrorDto 
+  })
+  async searchAllAccountsEmails(
+    @Query('userId') userId: string,
+    @Query('q') searchTerm: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string
+  ) {
+    // 🎯 VALIDACIONES
+    if (!userId) {
+      throw new BadRequestException('userId es requerido');
+    }
+
+    if (!searchTerm || searchTerm.trim() === '') {
+      return {
+        success: true,
+        source: 'orchestrator-global-search',
+        searchTerm: searchTerm || '',
+        accountsSearched: [],
+        data: {
+          emails: [],
+          total: 0,
+          page: page ? parseInt(page, 10) : 1,
+          limit: limit ? parseInt(limit, 10) : 10,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPreviousPage: false,
+          searchTerm: searchTerm || ''
+        }
+      };
+    }
+
+    // 🎯 LLAMAR AL NUEVO MÉTODO DEL SERVICE
+    return this.emailsService.searchAllAccountsEmails(
+      userId, 
+      searchTerm, 
+      page ? parseInt(page, 10) : 1, 
+      limit ? parseInt(limit, 10) : 10
+    );
+  }
+
+
+
+  
+
   /**
    * 📊 GET /emails/stats - Estadísticas coordinadas
    */

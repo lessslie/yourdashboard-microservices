@@ -1,4 +1,4 @@
-import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosResponse, AxiosError } from 'axios';
 import { CacheService } from '../cache/cache.service';
@@ -292,6 +292,107 @@ export class EmailsOrchestratorService {
       );
     }
   }
+
+
+  
+/**
+ * 🌍 Buscar emails en TODAS las cuentas Gmail del usuario - ⚡ CON CACHE
+ * 🎯 NUEVO: Búsqueda global unificada
+ */
+async searchAllAccountsEmails(
+  userId: string, 
+  searchTerm: string, 
+  page: number = 1, 
+  limit: number = 10
+) {
+  try {
+    this.logger.log(`🌍 BÚSQUEDA GLOBAL para usuario ${userId}: "${searchTerm}"`);
+
+    // 🎯 VALIDAR USERID ES NÚMERO
+    const userIdNum = parseInt(userId, 10);
+    if (isNaN(userIdNum)) {
+      throw new BadRequestException(`userId debe ser un número válido: ${userId}`);
+    }
+
+    // 1️⃣ VERIFICAR CACHE PRIMERO
+    const cacheKey = this.cacheService.generateKey('global-search', userId, { 
+      searchTerm: searchTerm.toLowerCase().trim(),
+      page, 
+      limit 
+    });
+    
+    const cachedResult = await this.cacheService.get<EmailListResponse & { 
+      accountsSearched?: string[]; 
+    }>(cacheKey);
+    
+    if (cachedResult) {
+      this.logger.log(`⚡ CACHE HIT - Búsqueda global desde cache para usuario ${userId}`);
+      return {
+        success: true,
+        source: 'orchestrator-cache',
+        searchTerm,
+        accountsSearched: cachedResult.accountsSearched || [],
+        data: cachedResult
+      };
+    }
+
+    // 2️⃣ SI NO HAY CACHE → LLAMAR MS-EMAIL
+    this.logger.log(`📡 CACHE MISS - Búsqueda global desde API para usuario ${userId}`);
+    
+    // 🎯 LLAMAR AL NUEVO ENDPOINT EN MS-EMAIL
+    const response: AxiosResponse<EmailListResponse & { 
+      accountsSearched?: string[]; 
+    }> = await axios.get(`${this.msEmailUrl}/emails/search-all-accounts`, {
+      params: { userId, q: searchTerm, page, limit },
+      headers: {
+        // 🎯 POR AHORA SIN TOKEN - El ms-email manejará la autenticación internamente
+        'X-User-ID': userId // Header para identificar al usuario
+      }
+    });
+
+    // 3️⃣ GUARDAR EN CACHE (TTL más corto para búsquedas globales)
+    await this.cacheService.set(cacheKey, response.data, this.CACHE_TTL.SEARCH);
+    
+    this.logger.log(`✅ Búsqueda global completada y guardada en cache`);
+    this.logger.log(`📊 Resultados: ${response.data.total} emails de ${response.data.accountsSearched?.length || 0} cuentas`);
+    
+    return {
+      success: true,
+      source: 'orchestrator-api',
+      searchTerm,
+      accountsSearched: response.data.accountsSearched || [],
+      data: response.data
+    };
+
+  } catch (error) {
+    console.log(error);
+    const apiError = error as AxiosError<ErrorResponse>;
+    this.logger.error(`❌ Error en búsqueda global:`, apiError.message);
+    
+    // 🎯 MANEJAR ERRORES ESPECÍFICOS
+    if (apiError.response?.status === 404) {
+      throw new HttpException(
+        `Usuario ${userId} no tiene cuentas Gmail conectadas`,
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    if (apiError.response?.status === 401) {
+      throw new HttpException(
+        `Error de autenticación para usuario ${userId}`,
+        HttpStatus.UNAUTHORIZED
+      );
+    }
+
+    throw new HttpException(
+      `Error en búsqueda global: ${apiError.response?.data?.message || apiError.message}`,
+      HttpStatus.INTERNAL_SERVER_ERROR
+    );
+  }
+}
+
+
+
 
   /**
    * 📊 Obtener estadísticas de emails - ⚡ CON CACHE

@@ -318,6 +318,71 @@ export class DatabaseService implements OnModuleDestroy {
     };
   }
 
+
+  
+/**
+ * 📧 Obtener todas las cuentas Gmail de un usuario principal
+ * 🎯 Para búsqueda global
+ */
+async obtenerCuentasGmailUsuario(usuarioId: number): Promise<Array<{
+  id: number;
+  email_gmail: string;
+  nombre_cuenta: string;
+  alias_personalizado?: string;
+  fecha_conexion: Date;
+  ultima_sincronizacion?: Date;
+  esta_activa: boolean;
+  emails_count: number;
+}>> {
+  try {
+    this.logger.log(`📧 Obteniendo cuentas Gmail para usuario ${usuarioId}`);
+
+    const query = `
+      SELECT 
+        cga.id,
+        cga.email_gmail,
+        cga.nombre_cuenta,
+        cga.alias_personalizado,
+        cga.fecha_conexion,
+        cga.ultima_sincronizacion,
+        cga.esta_activa,
+        COALESCE(email_counts.count, 0) as emails_count
+      FROM cuentas_gmail_asociadas cga
+      LEFT JOIN (
+        SELECT cuenta_gmail_id, COUNT(*) as count 
+        FROM emails_sincronizados 
+        GROUP BY cuenta_gmail_id
+      ) email_counts ON cga.id = email_counts.cuenta_gmail_id
+      WHERE cga.usuario_principal_id = $1 
+      AND cga.esta_activa = TRUE
+      ORDER BY cga.fecha_conexion DESC
+    `;
+
+    const result = await this.query<{
+      id: number;
+      email_gmail: string;
+      nombre_cuenta: string;
+      alias_personalizado?: string;
+      fecha_conexion: Date;
+      ultima_sincronizacion?: Date;
+      esta_activa: boolean;
+      emails_count: string; // Viene como string del COUNT
+    }>(query, [usuarioId]);
+
+    const cuentas = result.rows.map(cuenta => ({
+      ...cuenta,
+      emails_count: parseInt(cuenta.emails_count, 10) || 0
+    }));
+
+    this.logger.log(`✅ ${cuentas.length} cuentas Gmail encontradas para usuario ${usuarioId}`);
+    
+    return cuentas;
+
+  } catch (error) {
+    this.logger.error(`❌ Error obteniendo cuentas Gmail:`, error);
+    throw error;
+  }
+}
   // ================================
   // 📊 ESTADÍSTICAS RÁPIDAS
   // ================================
