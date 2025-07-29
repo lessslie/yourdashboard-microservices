@@ -667,6 +667,170 @@ async searchAllAccountsEmailsWithUserId(
   }
 }
 
+
+// ================================
+// 📥 INBOX UNIFICADO - TODAS LAS CUENTAS GMAIL
+// ================================
+
+/**
+ * 📥 INBOX UNIFICADO - Obtener inbox de TODAS las cuentas Gmail del usuario
+ * 🎯 NUEVO: Método para inbox global unificado
+ */
+async getInboxAllAccountsWithUserId(
+  userId: string,
+  page: number = 1,
+  limit: number = 10
+): Promise<EmailListResponse & { accountsLoaded: string[] }> {
+  try {
+    this.logger.log(`📥 🎯 INBOX UNIFICADO para usuario principal ${userId}`);
+
+    // 🎯 VALIDAR USERID
+    const userIdNum = parseInt(userId, 10);
+    if (isNaN(userIdNum)) {
+      throw new Error('userId debe ser un número válido');
+    }
+
+    // 1️⃣ OBTENER TODAS LAS CUENTAS GMAIL DEL USUARIO
+    const cuentasGmail = await this.databaseService.obtenerCuentasGmailUsuario(userIdNum);
+    
+    if (!cuentasGmail || cuentasGmail.length === 0) {
+      this.logger.warn(`⚠️ Usuario ${userId} no tiene cuentas Gmail conectadas`);
+      return {
+        emails: [],
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPreviousPage: false,
+        accountsLoaded: []
+      };
+    }
+
+    this.logger.log(`📧 Usuario ${userId} tiene ${cuentasGmail.length} cuentas Gmail para inbox unificado`);
+
+    // 2️⃣ OBTENER INBOX DE CADA CUENTA EN PARALELO
+    const inboxPromises = cuentasGmail.map(async (cuenta) => {
+      try {
+        this.logger.log(`📥 Obteniendo inbox de cuenta: ${cuenta.email_gmail} (ID: ${cuenta.id})`);
+        
+        // 🎯 OBTENER TOKEN PARA ESTA CUENTA ESPECÍFICA
+        const accessToken = await this.getValidTokenForAccount(cuenta.id);
+        
+        // 🎯 OBTENER INBOX DE ESTA CUENTA
+        const inboxCuenta = await this.getInboxWithToken(
+          accessToken,
+          cuenta.id.toString(),
+          1, // Siempre página 1 para cada cuenta
+          100 // Más resultados por cuenta para unificar después
+        );
+
+        // 🎯 AGREGAR INFO DE LA CUENTA A CADA EMAIL
+        const emailsConCuenta = inboxCuenta.emails.map(email => ({
+          ...email,
+          sourceAccount: cuenta.email_gmail,
+          sourceAccountId: cuenta.id
+        }));
+
+        this.logger.log(`✅ Inbox cuenta ${cuenta.email_gmail}: ${emailsConCuenta.length} emails`);
+
+        return {
+          cuenta: cuenta.email_gmail,
+          emails: emailsConCuenta,
+          total: inboxCuenta.total
+        };
+
+      } catch (error) {
+        this.logger.warn(`⚠️ Error obteniendo inbox de cuenta ${cuenta.email_gmail}:`, error);
+        
+        // 🎯 FALLBACK: Obtener emails de BD local para esta cuenta
+        try {
+          this.logger.log(`💾 FALLBACK BD local para inbox de cuenta ${cuenta.email_gmail}`);
+          
+          const fallbackResult = await this.databaseService.getEmailsPaginated(
+            cuenta.id,
+            1,
+            100,
+            false // Todos los emails, no solo no leídos
+          );
+
+          const emailsFromDB = fallbackResult.emails.map(this.convertDBToEmailMetadata).map(email => ({
+            ...email,
+            sourceAccount: cuenta.email_gmail,
+            sourceAccountId: cuenta.id
+          }));
+
+          this.logger.log(`💾 FALLBACK exitoso: ${emailsFromDB.length} emails desde BD`);
+
+          return {
+            cuenta: cuenta.email_gmail,
+            emails: emailsFromDB,
+            total: fallbackResult.total
+          };
+
+        } catch (fallbackError) {
+          this.logger.error(`❌ FALLBACK falló para cuenta ${cuenta.email_gmail}:`, fallbackError);
+          return {
+            cuenta: cuenta.email_gmail,
+            emails: [],
+            total: 0
+          };
+        }
+      }
+    });
+
+    // 3️⃣ ESPERAR TODOS LOS RESULTADOS EN PARALELO
+    const resultadosPorCuenta = await Promise.all(inboxPromises);
+
+    // 4️⃣ UNIFICAR Y COMBINAR TODOS LOS EMAILS
+    const todosLosEmails = resultadosPorCuenta
+      .filter(resultado => resultado.emails.length > 0)
+      .flatMap(resultado => resultado.emails);
+
+    // 5️⃣ ORDENAR GLOBALMENTE POR FECHA (MÁS RECIENTES PRIMERO)
+    todosLosEmails.sort((a, b) => {
+      const fechaA = new Date(a.receivedDate).getTime();
+      const fechaB = new Date(b.receivedDate).getTime();
+      return fechaB - fechaA; // Descendente (más recientes primero)
+    });
+
+    // 6️⃣ APLICAR PAGINACIÓN GLOBAL
+    const totalEmails = todosLosEmails.length;
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const emailsPaginados = todosLosEmails.slice(startIndex, endIndex);
+
+    // 7️⃣ CALCULAR METADATOS DE PAGINACIÓN
+    const totalPages = Math.ceil(totalEmails / limit);
+    const hasNextPage = page < totalPages;
+    const hasPreviousPage = page > 1;
+
+    // 8️⃣ OBTENER LISTA DE CUENTAS CARGADAS
+    const accountsLoaded = resultadosPorCuenta.map(resultado => resultado.cuenta);
+
+    this.logger.log(`✅ INBOX UNIFICADO COMPLETADO:`);
+    this.logger.log(`   📊 Total emails unificados: ${totalEmails}`);
+    this.logger.log(`   📧 Cuentas cargadas: ${accountsLoaded.join(', ')}`);
+    this.logger.log(`   📄 Página ${page}/${totalPages} (${emailsPaginados.length} emails)`);
+
+    return {
+      emails: emailsPaginados,
+      total: totalEmails,
+      page,
+      limit,
+      totalPages,
+      hasNextPage,
+      hasPreviousPage,
+      accountsLoaded
+    };
+
+  } catch (error) {
+    this.logger.error('❌ Error en inbox unificado:', error);
+    const emailError = error as EmailServiceError;
+    throw new Error('Error en inbox unificado: ' + emailError.message);
+  }
+}
+
 // ================================
 // 🔧 MÉTODOS AUXILIARES PARA BÚSQUEDA GLOBAL
 // ================================

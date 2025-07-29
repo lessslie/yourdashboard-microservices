@@ -393,6 +393,93 @@ async searchAllAccountsEmails(
 
 
 
+/**
+ * 📥 Inbox unificado de TODAS las cuentas Gmail del usuario - ⚡ CON CACHE
+ * 🎯 NUEVO: Inbox global unificado
+ */
+async getInboxAllAccounts(
+  userId: string, 
+  page: number = 1, 
+  limit: number = 10
+) {
+  try {
+    this.logger.log(`📥 🎯 INBOX UNIFICADO para usuario ${userId} - Página ${page}`);
+
+    // 🎯 VALIDAR USERID ES NÚMERO
+    const userIdNum = parseInt(userId, 10);
+    if (isNaN(userIdNum)) {
+      throw new BadRequestException(`userId debe ser un número válido: ${userId}`);
+    }
+
+    // 1️⃣ VERIFICAR CACHE PRIMERO
+    const cacheKey = this.cacheService.generateKey('inbox-unified', userId, { page, limit });
+    
+    const cachedResult = await this.cacheService.get<EmailListResponse & { 
+      accountsLoaded?: string[]; 
+    }>(cacheKey);
+    
+    if (cachedResult) {
+      this.logger.log(`⚡ CACHE HIT - Inbox unificado desde cache para usuario ${userId}`);
+      return {
+        success: true,
+        source: 'orchestrator-cache',
+        accountsLoaded: cachedResult.accountsLoaded || [],
+        data: cachedResult
+      };
+    }
+
+    // 2️⃣ SI NO HAY CACHE → LLAMAR MS-EMAIL
+    this.logger.log(`📡 CACHE MISS - Inbox unificado desde API para usuario ${userId}`);
+    
+    // 🎯 LLAMAR AL NUEVO ENDPOINT EN MS-EMAIL
+    const response: AxiosResponse<EmailListResponse & { 
+      accountsLoaded?: string[]; 
+    }> = await axios.get(`${this.msEmailUrl}/emails/inbox-all-accounts`, {
+      params: { userId, page, limit },
+      headers: {
+        'X-User-ID': userId
+      }
+    });
+
+    // 3️⃣ GUARDAR EN CACHE (TTL similar a emails normales)
+    await this.cacheService.set(cacheKey, response.data, this.CACHE_TTL.EMAILS);
+    
+    this.logger.log(`✅ Inbox unificado completado y guardado en cache`);
+    this.logger.log(`📊 Resultados: ${response.data.total} emails de ${response.data.accountsLoaded?.length || 0} cuentas`);
+    
+    return {
+      success: true,
+      source: 'orchestrator-api',
+      accountsLoaded: response.data.accountsLoaded || [],
+      data: response.data
+    };
+
+  } catch (error) {
+    console.log(error);
+    const apiError = error as AxiosError<ErrorResponse>;
+    this.logger.error(`❌ Error en inbox unificado:`, apiError.message);
+    
+    // 🎯 MANEJAR ERRORES ESPECÍFICOS
+    if (apiError.response?.status === 404) {
+      throw new HttpException(
+        `Usuario ${userId} no tiene cuentas Gmail conectadas`,
+        HttpStatus.NOT_FOUND
+      );
+    }
+
+    if (apiError.response?.status === 401) {
+      throw new HttpException(
+        `Error de autenticación para usuario ${userId}`,
+        HttpStatus.UNAUTHORIZED
+      );
+    }
+
+    throw new HttpException(
+      `Error en inbox unificado: ${apiError.response?.data?.message || apiError.message}`,
+      HttpStatus.INTERNAL_SERVER_ERROR
+    );
+  }
+}
 
   /**
    * 📊 Obtener estadísticas de emails - ⚡ CON CACHE
