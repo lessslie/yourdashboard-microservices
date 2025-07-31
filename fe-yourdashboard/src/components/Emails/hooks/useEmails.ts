@@ -5,8 +5,8 @@ import {
   getEmails,
   getSearchEmails,
 } from "../../../services/emails/emails";
-import { ICuentaGmail } from "@/components/Auth/hooks/useAuth";
 import { IDataEmail, IEmail, IEmailBack } from "@/interfaces/interfacesEmails";
+import { ICuentaGmail } from "@/interfaces/interfacesAuth";
 
 export const useEmails = (cuentasGmail: ICuentaGmail[], userId: number) => {
   const [initLoading, setInitLoading] = useState(true);

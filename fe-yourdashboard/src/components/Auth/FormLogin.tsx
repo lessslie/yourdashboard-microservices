@@ -28,7 +28,7 @@ const FormLogin = () => {
       name="login"
       initialValues={{ remember: true }}
       style={{ width: 500, margin: "50px" }}
-      onFinish={onFinish} // funcion que se ejecuta cuando se envia el formulario
+      onFinish={onFinish}
     >
       <Form.Item
         name="email"

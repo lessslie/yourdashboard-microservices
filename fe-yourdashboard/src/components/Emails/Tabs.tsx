@@ -1,8 +1,9 @@
 import React from "react";
 import { Button, Table } from "antd";
 import type { TableProps } from "antd";
-import { ICuentaGmail } from "../Auth/hooks/useAuth";
+
 import { formatoDeFecha } from "@/utils/date";
+import { ICuentaGmail } from "@/interfaces/interfacesAuth";
 
 type TabsProps = {
   data: ICuentaGmail[];

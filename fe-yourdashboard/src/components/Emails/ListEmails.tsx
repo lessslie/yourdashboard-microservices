@@ -3,9 +3,10 @@ import { Button, List, Skeleton, Pagination, Card, Input } from "antd";
 
 import { handleConnectService } from "../../services/emails/emails";
 import { DownOutlined, UpOutlined } from "@ant-design/icons";
-import { ICuentaGmail } from "../Auth/hooks/useAuth";
+
 import { useEmails } from "./hooks/useEmails";
 import TabsTest from "./Tabs";
+import { ICuentaGmail } from "@/interfaces/interfacesAuth";
 
 const ListEmails = ({
   userId,
