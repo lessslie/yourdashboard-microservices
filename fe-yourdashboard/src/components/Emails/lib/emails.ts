@@ -1,6 +1,5 @@
 import axios from "axios";
-
-const MS_ORCHES_URL =
+export const MS_ORCHES_URL =
   process.env.NEXT_PUBLIC_MS_ORCHESTRATOR_URL || "http://localhost:3001";
 
 export const handleConnectService = async (token: string) => {
