@@ -57,7 +57,11 @@ const ViewEmails = () => {
         </div>
       </Header>
 
-      <ListEmails token={token} cuentasGmail={cuentasGmail} />
+      <ListEmails
+        userId={userData.id}
+        token={token}
+        cuentasGmail={cuentasGmail}
+      />
 
       <Footer style={{ textAlign: "center" }}>
         Inspiration Factory Copyright ©{new Date().getFullYear()}

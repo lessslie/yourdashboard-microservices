@@ -1,41 +1,16 @@
 import { useEffect, useState } from "react";
-import { getEmails, getSearchEmails } from "../lib/emails";
+import {
+  getAllEmails,
+  getAllSearchEmails,
+  getEmails,
+  getSearchEmails,
+} from "../../../services/emails/emails";
 import { ICuentaGmail } from "@/components/Auth/hooks/useAuth";
+import { IDataEmail, IEmail, IEmailBack } from "@/interfaces/interfacesEmails";
 
-export interface IEmailBack {
-  id: string;
-  messageId: string;
-  subject: string;
-  fromEmail: string;
-  fromName: string;
-  receivedDate: string;
-  isRead: false;
-  hasAttachments: false;
-}
-
-export interface IDataEmail {
-  emails: IEmail[];
-  hasNextPage: boolean;
-  hasPreviousPage: boolean;
-  limit: number;
-  page: number;
-  total: number;
-  totalPages: number;
-}
-
-export interface IEmail {
-  id: string;
-  name: string;
-  from: string;
-  to?: string[];
-  subject: string;
-  body?: string;
-  date: string;
-  read?: boolean;
-}
-
-export const useEmails = (cuentasGmail: ICuentaGmail[]) => {
+export const useEmails = (cuentasGmail: ICuentaGmail[], userId: number) => {
   const [initLoading, setInitLoading] = useState(true);
+  const [viewAll, setViewAll] = useState(true);
   const [list, setList] = useState<IDataEmail>({
     emails: [],
     hasNextPage: false,
@@ -50,58 +25,136 @@ export const useEmails = (cuentasGmail: ICuentaGmail[]) => {
   const [selectedCuentaGmailId, setSelectedCuentaGmailId] = useState<
     string | null
   >(null);
-
-  useEffect(() => {
-    if (cuentasGmail.length > 0 && !selectedCuentaGmailId) {
-      setSelectedCuentaGmailId(cuentasGmail[0].id);
-    }
-  }, [cuentasGmail, selectedCuentaGmailId]);
-
+  const [searchTerm, setSearchTerm] = useState<string>("");
   const handleAccountChange = (cuentaGmailId: string) => {
     setSelectedCuentaGmailId(cuentaGmailId);
+    setViewAll(false);
     setPage(1);
+  };
+  const handleViewAll = () => {
+    setViewAll(true);
+    setSelectedCuentaGmailId(null);
+    setPage(1);
+  };
+
+  const handleSearchTermChange = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setSearchTerm(event.target.value);
+    setPage(1);
+  };
+
+  const handleCheck = async () => {
+    const token = localStorage.getItem("token");
+    if (!token || searchTerm === "") return;
+
+    setInitLoading(true);
+    try {
+      let emails;
+      if (viewAll) {
+        emails = await getAllSearchEmails(
+          token,
+          String(userId),
+          searchTerm,
+          page,
+          limit
+        );
+      } else {
+        if (!selectedCuentaGmailId) return;
+        emails = await getSearchEmails(
+          token,
+          selectedCuentaGmailId,
+          searchTerm,
+          page,
+          limit
+        );
+      }
+      const dataEmails = emails.data;
+
+      setList({
+        emails: dataEmails.emails.map(
+          (email: IEmailBack): IEmail => ({
+            id: email.id,
+            name: email.fromName,
+            from: email.fromEmail,
+            subject: email.subject,
+            date: email.receivedDate,
+            read: email.isRead,
+          })
+        ),
+        hasNextPage: dataEmails.hasNextPage,
+        hasPreviousPage: dataEmails.hasPreviousPage,
+        limit: dataEmails.limit,
+        page: dataEmails.page,
+        total: dataEmails.total,
+        totalPages: dataEmails.totalPages,
+      });
+    } catch (error) {
+      console.error("❌ Error al buscar emails:", error);
+    } finally {
+      setInitLoading(false);
+    }
   };
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    if (token) {
-      const fetchEmails = async () => {
-        try {
-          setInitLoading(true);
-          const emails = await getEmails(
-            token,
-            selectedCuentaGmailId || cuentasGmail[0].id,
-            page,
-            limit
-          );
-          const dataEmails = emails.data;
-          setList({
-            emails: dataEmails.emails.map(
-              (email: IEmailBack): IEmail => ({
-                id: email.id,
-                name: email.fromName,
-                from: email.fromEmail,
-                subject: email.subject,
-                date: email.receivedDate,
-                read: email.isRead,
-              })
-            ),
-            hasNextPage: dataEmails.hasNextPage,
-            hasPreviousPage: dataEmails.hasPreviousPage,
-            limit: dataEmails.limit,
-            page: dataEmails.page,
-            total: dataEmails.total,
-            totalPages: dataEmails.totalPages,
-          });
-        } catch (error) {
-          console.error("❌ Error fetching emails:", error);
-        } finally {
-          setInitLoading(false);
+    if (!token || !userId || searchTerm !== "") return;
+
+    setInitLoading(true);
+
+    const fetchEmails = async () => {
+      try {
+        let emails;
+        if (viewAll) {
+          emails = await getAllEmails(token, String(userId), page, limit);
+        } else {
+          if (!selectedCuentaGmailId) return;
+          emails = await getEmails(token, selectedCuentaGmailId, page, limit);
         }
-      };
-      fetchEmails();
+
+        const dataEmails = emails.data;
+
+        setList({
+          emails: dataEmails.emails.map(
+            (email: IEmailBack): IEmail => ({
+              id: email.id,
+              name: email.fromName,
+              from: email.fromEmail,
+              subject: email.subject,
+              date: email.receivedDate,
+              read: email.isRead,
+            })
+          ),
+          hasNextPage: dataEmails.hasNextPage,
+          hasPreviousPage: dataEmails.hasPreviousPage,
+          limit: dataEmails.limit,
+          page: dataEmails.page,
+          total: dataEmails.total,
+          totalPages: dataEmails.totalPages,
+        });
+      } catch (error) {
+        console.error("❌ Error fetching emails:", error);
+      } finally {
+        setInitLoading(false);
+      }
+    };
+
+    fetchEmails();
+  }, [
+    page,
+    limit,
+    selectedCuentaGmailId,
+    cuentasGmail,
+    searchTerm,
+    userId,
+    viewAll,
+  ]);
+
+  useEffect(() => {
+    if (searchTerm !== "") {
+      handleCheck();
     }
-  }, [page, cuentasGmail, limit, selectedCuentaGmailId]);
+  }, [page, limit]);
 
   return {
     initLoading,
@@ -113,71 +166,10 @@ export const useEmails = (cuentasGmail: ICuentaGmail[]) => {
     handleAccountChange,
     selectedCuentaGmailId,
     setSelectedCuentaGmailId,
-  };
-};
-
-export const useEmailSearch = (cuentaGmailId: string) => {
-  const [searchTerm, setSearchTerm] = useState<string>("");
-  const [emails, setEmails] = useState<IDataEmail>({
-    emails: [],
-    hasNextPage: false,
-    hasPreviousPage: false,
-    limit: 10,
-    page: 1,
-    total: 0,
-    totalPages: 0,
-  });
-
-  const handleSearchTermChange = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    setSearchTerm(event.target.value);
-  };
-
-  const handleCheck = async () => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      const response = await getSearchEmails(token, cuentaGmailId, searchTerm);
-      const emails = response.data;
-      console.log("✅ Emails response:", emails);
-      if (searchTerm !== "") {
-        return setEmails({
-          emails: emails.emails.map(
-            (email: IEmailBack): IEmail => ({
-              id: email.id,
-              name: email.fromName,
-              from: email.fromEmail,
-              subject: email.subject,
-              date: email.receivedDate,
-              read: email.isRead,
-            })
-          ),
-          hasNextPage: emails.hasNextPage,
-          hasPreviousPage: emails.hasPreviousPage,
-          limit: emails.limit,
-          page: emails.page,
-          total: emails.total,
-          totalPages: emails.totalPages,
-        });
-      } else {
-        return setEmails({
-          emails: [],
-          hasNextPage: false,
-          hasPreviousPage: false,
-          limit: 10,
-          page: 1,
-          total: 0,
-          totalPages: 0,
-        });
-      }
-    }
-  };
-
-  return {
-    searchTerm,
-    emails,
-    handleCheck,
-    setSearchTerm,
     handleSearchTermChange,
+    handleCheck,
+    searchTerm,
+    handleViewAll,
+    viewAll,
   };
 };

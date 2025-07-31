@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getGmailCuentas, getUserData } from "../lib/auth";
+import { getGmailCuentas, getUserData } from "../../../services/auth/auth";
 
 export interface IUserBack {
   id: number;

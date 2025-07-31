@@ -2,7 +2,7 @@
 import React from "react";
 import { LockOutlined, MailOutlined } from "@ant-design/icons";
 import { Button, Form, Input } from "antd";
-import { login } from "./lib/auth";
+import { login } from "../../services/auth/auth";
 import { useAuth } from "./hooks/useAuth";
 import { useRouter } from "next/navigation";
 
