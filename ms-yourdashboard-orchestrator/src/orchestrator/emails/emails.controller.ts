@@ -345,6 +345,102 @@ export class EmailsOrchestratorController {
   }
 
 
+/**
+ * 📥 GET /emails/inbox-all-accounts - INBOX UNIFICADO (TODAS LAS CUENTAS) - NUEVO
+ * 🎯 NUEVA FUNCIONALIDAD: Inbox unificado de todas las cuentas Gmail del usuario
+ */
+@Get('inbox-all-accounts')
+@ApiOperation({ 
+  summary: '📥 Inbox unificado de TODAS las cuentas Gmail',
+  description: `
+    Obtiene los emails más recientes de TODAS las cuentas Gmail del usuario unificados y ordenados por fecha.
+    Similar a /emails/inbox pero abarca múltiples cuentas en lugar de una sola.
+    
+    Perfecto para ver un "stream unificado" de todos los emails recientes del usuario.
+  `
+})
+@ApiQuery({ 
+  name: 'userId', 
+  description: 'ID del usuario principal (extraído del JWT)', 
+  example: '1' 
+})
+@ApiQuery({ 
+  name: 'page', 
+  description: 'Número de página para paginación unificada', 
+  example: 1, 
+  required: false 
+})
+@ApiQuery({ 
+  name: 'limit', 
+  description: 'Emails por página (máx 50)', 
+  example: 10, 
+  required: false 
+})
+@ApiOkResponse({ 
+  description: 'Inbox unificado obtenido exitosamente',
+  type: OrchestratorEmailListDto,
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      source: { type: 'string', example: 'orchestrator-unified-inbox' },
+      accountsLoaded: { 
+        type: 'array', 
+        items: { type: 'string' },
+        example: ['agata.morales92@gmail.com', 'celestino.lely54@gmail.com']
+      },
+      data: {
+        type: 'object',
+        properties: {
+          emails: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', example: '1847a8e123456789' },
+                subject: { type: 'string', example: 'Actualización del proyecto' },
+                fromEmail: { type: 'string', example: 'cliente@empresa.com' },
+                fromName: { type: 'string', example: 'María García' },
+                receivedDate: { type: 'string', example: '2024-01-15T10:30:00Z' },
+                isRead: { type: 'boolean', example: false },
+                hasAttachments: { type: 'boolean', example: true },
+                sourceAccount: { type: 'string', example: 'agata.morales92@gmail.com' },
+                sourceAccountId: { type: 'number', example: 1 }
+              }
+            }
+          },
+          total: { type: 'number', example: 156 },
+          page: { type: 'number', example: 1 },
+          limit: { type: 'number', example: 10 },
+          totalPages: { type: 'number', example: 16 },
+          hasNextPage: { type: 'boolean', example: true },
+          hasPreviousPage: { type: 'boolean', example: false }
+        }
+      }
+    }
+  }
+})
+@ApiBadRequestResponse({ 
+  description: 'userId es requerido',
+  type: OrchestratorErrorDto 
+})
+async getInboxAllAccounts(
+  @Query('userId') userId: string,
+  @Query('page') page?: string,
+  @Query('limit') limit?: string
+) {
+  // 🎯 VALIDACIONES
+  if (!userId) {
+    throw new BadRequestException('userId es requerido para inbox unificado');
+  }
+
+  // 🎯 LLAMAR AL MÉTODO DEL SERVICE
+  return this.emailsService.getInboxAllAccounts(
+    userId, 
+    page ? parseInt(page, 10) : 1, 
+    limit ? parseInt(limit, 10) : 10
+  );
+}
 
   
 

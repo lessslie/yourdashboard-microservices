@@ -494,6 +494,88 @@ async searchAllAccountsEmails(
 }
 
 
+/**
+ * 📥 GET /emails/inbox-all-accounts - Inbox unificado de TODAS las cuentas Gmail
+ * 🎯 NUEVO: Inbox global unificado
+ */
+@Get('inbox-all-accounts')
+@ApiOperation({ 
+  summary: '📥 Inbox unificado de TODAS las cuentas Gmail del usuario',
+  description: 'Obtiene los emails más recientes de TODAS las cuentas Gmail asociadas al usuario principal. Unifica resultados y los ordena por fecha globalmente.'
+})
+@ApiQuery({ 
+  name: 'userId', 
+  description: 'ID del usuario principal', 
+  example: '1' 
+})
+@ApiQuery({ 
+  name: 'page', 
+  description: 'Número de página', 
+  example: 1, 
+  required: false 
+})
+@ApiQuery({ 
+  name: 'limit', 
+  description: 'Emails por página (máx 50)', 
+  example: 10, 
+  required: false 
+})
+@ApiOkResponse({ 
+  description: 'Inbox unificado obtenido exitosamente',
+  schema: {
+    type: 'object',
+    properties: {
+      emails: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: '1847a8e123456789' },
+            subject: { type: 'string', example: 'Actualización del proyecto' },
+            fromEmail: { type: 'string', example: 'cliente@empresa.com' },
+            fromName: { type: 'string', example: 'María García' },
+            receivedDate: { type: 'string', example: '2024-01-15T10:30:00Z' },
+            isRead: { type: 'boolean', example: false },
+            hasAttachments: { type: 'boolean', example: true },
+            sourceAccount: { type: 'string', example: 'agata.morales92@gmail.com' },
+            sourceAccountId: { type: 'number', example: 1 }
+          }
+        }
+      },
+      total: { type: 'number', example: 156 },
+      page: { type: 'number', example: 1 },
+      limit: { type: 'number', example: 10 },
+      totalPages: { type: 'number', example: 16 },
+      hasNextPage: { type: 'boolean', example: true },
+      hasPreviousPage: { type: 'boolean', example: false },
+      accountsLoaded: { 
+        type: 'array', 
+        items: { type: 'string' },
+        example: ['agata.morales92@gmail.com', 'celestino.lely54@gmail.com']
+      }
+    }
+  }
+})
+@ApiBadRequestResponse({ 
+  description: 'userId es requerido'
+})
+async getInboxAllAccounts(
+  @Query('userId') userId: string,
+  @Query('page') page?: string,
+  @Query('limit') limit?: string
+) {
+  // 🎯 VALIDACIONES
+  if (!userId) {
+    throw new BadRequestException('userId es requerido');
+  }
+
+  // 🎯 LLAMAR AL NUEVO MÉTODO DEL SERVICE
+  return this.emailsService.getInboxAllAccountsWithUserId(
+    userId, 
+    page ? parseInt(page, 10) : 1, 
+    limit ? parseInt(limit, 10) : 10
+  );
+}
 
   /**
    * 📧 GET /emails/:id - Obtener email específico
