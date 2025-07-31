@@ -28,10 +28,11 @@ const ListEmails = ({
   // const { handleSearchTermChange, handleCheck, emails } = useEmailSearch(
   //   selectedCuentaGmailId || cuentasGmail[0].id
   // );
+  // console.log("cuentasGmail", cuentasGmail);
+
   const conectEmail = async () => {
     await handleConnectService(token);
   };
-  //  console.log("emails", emails);
 
   return (
     <div style={{ padding: "24px" }}>

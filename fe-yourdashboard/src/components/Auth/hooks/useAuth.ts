@@ -36,7 +36,7 @@ export interface ICuentaGmail {
   nameGmail: string;
   alias: string;
   createdAt: string;
-  lastSync: Date;
+  lastSync: Date | string;
   isActive: "Activo" | "Inactivo";
   emailsCount: number;
 }
