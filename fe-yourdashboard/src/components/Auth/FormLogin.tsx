@@ -2,7 +2,7 @@
 import React from "react";
 import { LockOutlined, MailOutlined } from "@ant-design/icons";
 import { Button, Form, Input } from "antd";
-import { login } from "./lib/auth";
+import { login } from "../../services/auth/auth";
 import { useAuth } from "./hooks/useAuth";
 import { useRouter } from "next/navigation";
 
@@ -28,7 +28,7 @@ const FormLogin = () => {
       name="login"
       initialValues={{ remember: true }}
       style={{ width: 500, margin: "50px" }}
-      onFinish={onFinish} // funcion que se ejecuta cuando se envia el formulario
+      onFinish={onFinish}
     >
       <Form.Item
         name="email"

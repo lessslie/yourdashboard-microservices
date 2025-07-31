@@ -1,20 +1,23 @@
 import React, { useState } from "react";
 import { Button, List, Skeleton, Pagination, Card, Input } from "antd";
 
-import { handleConnectService } from "./lib/emails";
+import { handleConnectService } from "../../services/emails/emails";
 import { DownOutlined, UpOutlined } from "@ant-design/icons";
-import { ICuentaGmail } from "../Auth/hooks/useAuth";
+
 import { useEmails } from "./hooks/useEmails";
 import TabsTest from "./Tabs";
+import { ICuentaGmail } from "@/interfaces/interfacesAuth";
 
 const ListEmails = ({
+  userId,
   token,
   cuentasGmail,
 }: {
+  userId: number;
   token: string;
   cuentasGmail: ICuentaGmail[];
 }) => {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const {
     initLoading,
     list,
@@ -23,15 +26,17 @@ const ListEmails = ({
     page,
     limit,
     handleAccountChange,
+    handleSearchTermChange,
     selectedCuentaGmailId,
-  } = useEmails(cuentasGmail);
-  // const { handleSearchTermChange, handleCheck, emails } = useEmailSearch(
-  //   selectedCuentaGmailId || cuentasGmail[0].id
-  // );
+    handleCheck,
+    searchTerm,
+    viewAll,
+    handleViewAll,
+  } = useEmails(cuentasGmail, userId);
+
   const conectEmail = async () => {
     await handleConnectService(token);
   };
-  //  console.log("emails", emails);
 
   return (
     <div style={{ padding: "24px" }}>
@@ -45,29 +50,38 @@ const ListEmails = ({
                 alignItems: "center",
               }}
             >
-              <h4>📧 Cuentas de Gmail conectadas</h4>
-
-              {open ? (
-                <UpOutlined onClick={() => setOpen(false)} />
-              ) : (
-                <DownOutlined onClick={() => setOpen(true)} />
-              )}
+              <h4>
+                📧 Cuentas de Gmail conectadas
+                <span> ({cuentasGmail.length})</span>
+              </h4>
+              <Button type="primary" onClick={handleViewAll}>
+                Ver todos los emails
+              </Button>
+              <div style={{ display: "flex", gap: "16px" }}>
+                <Button type="primary" onClick={conectEmail}>
+                  Conectar mas de una cuenta
+                </Button>
+                {open ? (
+                  <Button onClick={() => setOpen(false)}>
+                    Ocultar lista de emails
+                    <UpOutlined />
+                  </Button>
+                ) : (
+                  <Button onClick={() => setOpen(true)}>
+                    Ver lista de emails
+                    <DownOutlined />
+                  </Button>
+                )}
+              </div>
             </div>
           }
           style={{ marginBottom: "24px", textAlign: "center" }}
         >
           {open && (
-            <div
-              style={{ gap: "16px", display: "flex", flexDirection: "column" }}
-            >
-              <TabsTest
-                data={cuentasGmail}
-                handleConnectService={handleAccountChange}
-              />
-              <Button type="primary" onClick={conectEmail}>
-                Conectar mas de una cuenta
-              </Button>
-            </div>
+            <TabsTest
+              data={cuentasGmail}
+              handleConnectService={handleAccountChange}
+            />
           )}
         </Card>
       ) : (
@@ -99,24 +113,29 @@ const ListEmails = ({
             }}
           >
             <h4>
-              📧 Emails:{" "}
+              {viewAll ? "📧 Todos los emails" : `📧 Emails: `}
               {cuentasGmail.find((c) => selectedCuentaGmailId?.includes(c.id))
                 ?.emailGmail || ""}{" "}
               ({list.total})
             </h4>
             <div style={{ display: "flex", gap: "50px" }}>
               <Input.Search
+                allowClear
                 placeholder="Buscar..."
-                // onChange={handleSearchTermChange}
-                // onSearch={handleCheck}
+                onChange={handleSearchTermChange}
+                onSearch={handleCheck}
+                enterButton
               />
-              {/* <Input placeholder="Filtrar por..." /> */}
             </div>
           </div>
         }
         style={{ flex: 1 }}
       >
-        {list.total === 0 ? (
+        {list.total === 0 && searchTerm !== "" ? (
+          <div style={{ textAlign: "center", padding: "50px" }}>
+            <p>No se encontraron emails con el termino: {searchTerm}</p>
+          </div>
+        ) : list.total === 0 ? (
           <div style={{ textAlign: "center", padding: "50px" }}>
             <p>Conecta una cuenta Gmail para ver tus emails</p>
             <Button type="primary" onClick={conectEmail}>

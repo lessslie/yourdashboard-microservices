@@ -1,8 +1,9 @@
 import React from "react";
 import { Button, Table } from "antd";
 import type { TableProps } from "antd";
-import { ICuentaGmail } from "../Auth/hooks/useAuth";
+
 import { formatoDeFecha } from "@/utils/date";
+import { ICuentaGmail } from "@/interfaces/interfacesAuth";
 
 type TabsProps = {
   data: ICuentaGmail[];
@@ -21,22 +22,25 @@ const TabsTest = ({ data, handleConnectService }: TabsProps) => {
       dataIndex: "emailGmail",
       key: "emailGmail",
     },
-    // {
-    //   title: "Alias",
-    //   dataIndex: "alias",
-    //   key: "alias",
-    // },
+    {
+      title: "Alias",
+      dataIndex: "alias",
+      key: "alias",
+    },
 
-    // {
-    //   title: "Cantidad de emails",
-    //   key: "emailsCount",
-    //   dataIndex: "emailsCount",
-    // },
+    {
+      title: "Cantidad de emails",
+      key: "emailsCount",
+      dataIndex: "emailsCount",
+    },
     {
       title: "Ultima sincronizacion",
       key: "lastSync",
       dataIndex: "lastSync",
-      render: (_, record) => formatoDeFecha(record.lastSync),
+      render: (_, record) =>
+        record.lastSync === "Sin sincronizar"
+          ? "Sin sincronizar"
+          : formatoDeFecha(record.lastSync as Date),
     },
     {
       title: "Activo",
