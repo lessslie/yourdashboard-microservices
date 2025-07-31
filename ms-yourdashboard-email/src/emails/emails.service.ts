@@ -673,8 +673,7 @@ async searchAllAccountsEmailsWithUserId(
 // ================================
 
 /**
- * 📥 INBOX UNIFICADO - Obtener inbox de TODAS las cuentas Gmail del usuario
- * 🎯 NUEVO: Método para inbox global unificado
+ *  cantidad de emails total real de Gmail API (no de BD local)
  */
 async getInboxAllAccountsWithUserId(
   userId: string,
@@ -709,7 +708,27 @@ async getInboxAllAccountsWithUserId(
 
     this.logger.log(`📧 Usuario ${userId} tiene ${cuentasGmail.length} cuentas Gmail para inbox unificado`);
 
-    // 2️⃣ OBTENER INBOX DE CADA CUENTA EN PARALELO
+    // 2️⃣ 🆕 OBTENER TOTAL REAL DE TODAS LAS CUENTAS EN PARALELO
+    this.logger.log(`📊 Obteniendo totales reales de Gmail API...`);
+    const totalRealPromises = cuentasGmail.map(async (cuenta) => {
+      try {
+        const accessToken = await this.getValidTokenForAccount(cuenta.id);
+        const stats = await this.getStatsFromGmailAPI(accessToken, cuenta.id.toString());
+        this.logger.log(`✅ Cuenta ${cuenta.email_gmail}: ${stats.totalEmails} emails totales`);
+        return stats.totalEmails;
+      } catch (error) {
+        this.logger.warn(`⚠️ No se pudo obtener total real de ${cuenta.email_gmail}:`, error);
+        return 0; // Si una cuenta falla, contribuye con 0 al total
+      }
+    });
+
+    // Esperar todos los totales reales
+    const totalesReales = await Promise.all(totalRealPromises);
+    const totalRealGlobal = totalesReales.reduce((sum, total) => sum + total, 0);
+    
+    this.logger.log(`🔥 TOTAL REAL GLOBAL: ${totalRealGlobal} emails de todas las cuentas`);
+
+    // 3️⃣ OBTENER INBOX DE CADA CUENTA EN PARALELO (PARA MOSTRAR)
     const inboxPromises = cuentasGmail.map(async (cuenta) => {
       try {
         this.logger.log(`📥 Obteniendo inbox de cuenta: ${cuenta.email_gmail} (ID: ${cuenta.id})`);
@@ -732,12 +751,12 @@ async getInboxAllAccountsWithUserId(
           sourceAccountId: cuenta.id
         }));
 
-        this.logger.log(`✅ Inbox cuenta ${cuenta.email_gmail}: ${emailsConCuenta.length} emails`);
+        this.logger.log(`✅ Inbox cuenta ${cuenta.email_gmail}: ${emailsConCuenta.length} emails obtenidos`);
 
         return {
           cuenta: cuenta.email_gmail,
           emails: emailsConCuenta,
-          total: inboxCuenta.total
+          total: inboxCuenta.total // Este es el total de la cuenta individual
         };
 
       } catch (error) {
@@ -779,43 +798,43 @@ async getInboxAllAccountsWithUserId(
       }
     });
 
-    // 3️⃣ ESPERAR TODOS LOS RESULTADOS EN PARALELO
+    // 4️⃣ ESPERAR TODOS LOS RESULTADOS EN PARALELO
     const resultadosPorCuenta = await Promise.all(inboxPromises);
 
-    // 4️⃣ UNIFICAR Y COMBINAR TODOS LOS EMAILS
+    // 5️⃣ UNIFICAR Y COMBINAR TODOS LOS EMAILS
     const todosLosEmails = resultadosPorCuenta
       .filter(resultado => resultado.emails.length > 0)
       .flatMap(resultado => resultado.emails);
 
-    // 5️⃣ ORDENAR GLOBALMENTE POR FECHA (MÁS RECIENTES PRIMERO)
+    // 6️⃣ ORDENAR GLOBALMENTE POR FECHA (MÁS RECIENTES PRIMERO)
     todosLosEmails.sort((a, b) => {
       const fechaA = new Date(a.receivedDate).getTime();
       const fechaB = new Date(b.receivedDate).getTime();
       return fechaB - fechaA; // Descendente (más recientes primero)
     });
 
-    // 6️⃣ APLICAR PAGINACIÓN GLOBAL
-    const totalEmails = todosLosEmails.length;
+    // 7️⃣ APLICAR PAGINACIÓN GLOBAL
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
     const emailsPaginados = todosLosEmails.slice(startIndex, endIndex);
 
-    // 7️⃣ CALCULAR METADATOS DE PAGINACIÓN
-    const totalPages = Math.ceil(totalEmails / limit);
+    // 8️⃣ CALCULAR METADATOS DE PAGINACIÓN CON TOTAL REAL
+    const totalPages = Math.ceil(totalRealGlobal / limit); // ← 🔥 USANDO TOTAL REAL
     const hasNextPage = page < totalPages;
     const hasPreviousPage = page > 1;
 
-    // 8️⃣ OBTENER LISTA DE CUENTAS CARGADAS
+    // 9️⃣ OBTENER LISTA DE CUENTAS CARGADAS
     const accountsLoaded = resultadosPorCuenta.map(resultado => resultado.cuenta);
 
     this.logger.log(`✅ INBOX UNIFICADO COMPLETADO:`);
-    this.logger.log(`   📊 Total emails unificados: ${totalEmails}`);
+    this.logger.log(`   🔥 Total REAL global: ${totalRealGlobal} emails`);
+    this.logger.log(`   📧 Emails mostrados: ${emailsPaginados.length} de ${todosLosEmails.length} obtenidos`);
     this.logger.log(`   📧 Cuentas cargadas: ${accountsLoaded.join(', ')}`);
-    this.logger.log(`   📄 Página ${page}/${totalPages} (${emailsPaginados.length} emails)`);
+    this.logger.log(`   📄 Página ${page}/${totalPages}`);
 
     return {
       emails: emailsPaginados,
-      total: totalEmails,
+      total: totalRealGlobal, // ← 🔥 TOTAL REAL DE GMAIL API
       page,
       limit,
       totalPages,
