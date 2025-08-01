@@ -507,8 +507,8 @@ export class EmailsService {
 async searchAllAccountsEmailsWithUserId(
   userId: string,
   searchTerm: string,
-  page: number = 1,
-  limit: number = 10
+  page: number,
+  limit: number
 ): Promise<EmailListResponse & { accountsSearched: string[] }> {
   try {
     this.logger.log(`🌍 🎯 BÚSQUEDA GLOBAL "${searchTerm}" para usuario principal ${userId}`);
@@ -553,7 +553,7 @@ async searchAllAccountsEmailsWithUserId(
           cuenta.id.toString(),
           searchTerm,
           1, // Siempre página 1 para cada cuenta
-          100 // Más resultados por cuenta para unificar después
+          1000 // Más resultados por cuenta para unificar después
         );
 
         // 🎯 AGREGAR INFO DE LA CUENTA A CADA EMAIL

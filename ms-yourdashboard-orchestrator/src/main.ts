@@ -20,7 +20,6 @@ async function bootstrap() {
     .setDescription('Backend For Frontend (BFF) - Coordina todos los microservicios de YourDashboard')
     .setVersion('1.0')
     .addTag('Emails', 'Endpoints de emails (coordina MS-Auth + MS-Email)')
-    .addTag('Dashboard', 'Endpoints de dashboard y resúmenes')
     .addTag('Authentication', 'Endpoints de autenticación')
     .addTag('Health', 'Estado del servicio')
     .addBearerAuth(
