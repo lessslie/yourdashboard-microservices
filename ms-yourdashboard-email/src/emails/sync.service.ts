@@ -136,17 +136,10 @@ export class SyncService {
     } catch (error) {
       const emailError = error as EmailServiceError;
       this.logger.error(`❌ Error crítico en sincronización:`, emailError);
-      
-      return {
-        cuenta_gmail_id: cuentaGmailId,
-        emails_procesados: 0,
-        emails_nuevos: 0,
-        emails_actualizados: 0,
-        tiempo_total_ms: Date.now() - startTime,
-        errores: [`Error crítico: ${emailError.message}`]
-      };
+      throw error; // Propagar error para manejo externo
     }
   }
+
 
   /**
    * 🔍 Construir query de Gmail según opciones
@@ -215,10 +208,11 @@ export class SyncService {
 
       return messages.slice(0, maxResults);
 
-    } catch (error) {
-      this.logger.error(`❌ Error obteniendo lista de Gmail:`, error);
-      throw error;
-    }
+    } catch (error: any) {
+  this.logger.error(`❌ Error obteniendo lista de Gmail: ${error.message || 'Error desconocido'}`);
+  // NO loguear todoo el objeto error para evitar spam
+  throw error; // Pero sí propagarlo
+}
   }
 
   /**

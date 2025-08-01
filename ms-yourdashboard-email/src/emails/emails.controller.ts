@@ -6,7 +6,8 @@ import {
   Param, 
   Headers,
   UnauthorizedException, 
-  BadRequestException
+  BadRequestException,
+  Logger
 } from '@nestjs/common';
 import { 
   ApiTags, 
@@ -28,13 +29,16 @@ import {
   EmailErrorResponseDto,
   EmailHealthResponseDto
 } from './dto';
+import { ConfigService } from '@nestjs/config';
 
 @ApiTags('Emails')
 @Controller('emails')
 export class EmailsController {
-  constructor(private readonly emailsService: EmailsService) {}
-
-
+  private readonly logger = new Logger(EmailsController.name);
+  constructor(
+    private readonly emailsService: EmailsService,
+    private readonly configService: ConfigService
+  ) {}
 
     /**
    * 🔧 GET /emails/health - Health check
@@ -49,7 +53,9 @@ export class EmailsController {
     description: 'Servicio funcionando correctamente',
     type: EmailHealthResponseDto 
   })
-  getHealth(): EmailHealthResponseDto {
+
+
+  getHealth() : EmailHealthResponseDto {
     return {
       service: 'ms-yourdashboard-email',
       status: 'OK',
@@ -149,7 +155,7 @@ export class EmailsController {
   }
 
   // ================================
-  // 📧 ENDPOINTS PRINCIPALES - ACTUALIZADOS
+  // 📧 ENDPOINTS PRINCIPALES
   // ================================
 
   /**
@@ -604,6 +610,37 @@ async getInboxAllAccounts(
     description: 'Email no encontrado',
     type: EmailErrorResponseDto 
   })
+
+
+
+  /**
+   * 🔍 GET /emails/cron-status - Ver estado del CRON
+   */
+  @Get('cron-status')
+  @ApiOperation({ 
+    summary: '📊 Ver estado del servicio CRON',
+    description: 'Muestra información sobre la configuración y estado del CRON sync.'
+  })
+  @ApiOkResponse({ 
+    description: 'Estado del CRON',
+    schema: {
+      type: 'object',
+      properties: {
+        enabled: { type: 'boolean', example: true },
+        weekdaySchedule: { type: 'string', example: '*/10 * * * 1-5' },
+        weekendSchedule: { type: 'string', example: '0 */4 * * 0,6' },
+        maxEmailsPerAccount: { type: 'number', example: 30 },
+        maxAccountsPerRun: { type: 'number', example: 100 },
+        nextWeekdayRun: { type: 'string', example: 'en 7 minutos' },
+        nextWeekendRun: { type: 'string', example: 'Sábado a las 00:00' }
+      }
+    }
+  })
+
+
+  //************************************************ */
+
+
   async getEmailById(
     @Headers('authorization') authHeader: string,
     @Param('id') emailId: string,
