@@ -5,6 +5,7 @@ import { Cron } from '@nestjs/schedule';
 import { DatabaseService } from '../database/database.service';
 import { SyncService } from '../emails/sync.service';
 
+
 @Injectable()
 export class SyncCronService implements OnModuleInit {
   private readonly logger = new Logger(SyncCronService.name);
@@ -44,15 +45,39 @@ export class SyncCronService implements OnModuleInit {
   }
 
   // CRON para sincronización automática
-  @Cron('*/10 * * * *')
-  async syncEveryMinute() {
-    if (!this.isEnabled) {
-      return;
-    }
-    
-    this.logger.log('🔄 [CRON] Iniciando sync automático - CADA 10 MINUTOS');
-    await this.performSync('test');
+ // DÍAS DE SEMANA (Lunes a Viernes)
+@Cron('*/10 * * * 1-5')  // Por defecto cada 10 min en weekdays
+async syncWeekdays() {
+  if (!this.isEnabled) {
+    return;
   }
+  
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  
+  // Solo ejecutar en días de semana (1-5)
+  if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+    this.logger.log('🔄 [CRON WEEKDAY] Iniciando sync automático');
+    await this.performSync('weekday');
+  }
+}
+
+//  FINES DE SEMANA (Sábado y Domingo)
+@Cron('0 */4 * * 0,6')  // Por defecto cada 4 horas en weekends
+async syncWeekends() {
+  if (!this.isEnabled) {
+    return;
+  }
+  
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  
+  // Solo ejecutar en fines de semana (0=domingo, 6=sábado)
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    this.logger.log('🔄 [CRON WEEKEND] Iniciando sync automático');
+    await this.performSync('weekend');
+  }
+}
 
   private async performSync(triggerType: 'weekday' | 'weekend' | 'test') {
     const startTime = Date.now();
