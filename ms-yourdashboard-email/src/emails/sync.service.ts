@@ -75,7 +75,7 @@ export class SyncService {
       }
 
       // 4️⃣ Procesar emails en lotes (para no saturar)
-      const BATCH_SIZE = 25; // Procesar de a 10 emails
+      const BATCH_SIZE = 25; // Procesar de a 25 emails
       const emailsMetadata: EmailMetadataDB[] = [];
       let ultimaFechaEmail: Date | undefined;
 
@@ -115,7 +115,7 @@ export class SyncService {
 
       this.logger.log(`✅ Procesados ${emailsMetadata.length} emails, guardando en BD...`);
 
-      // 5️⃣ Guardar tod en base de datos (UPSERT masivo)
+      // 5️⃣ Guardar todo en base de datos (UPSERT masivo)
       const syncResult = await this.databaseService.syncEmailsMetadata(emailsMetadata);
 
       const tiempoTotal = Date.now() - startTime;
@@ -134,12 +134,22 @@ export class SyncService {
       return stats;
 
     } catch (error) {
-      const emailError = error as EmailServiceError;
-      this.logger.error(`❌ Error crítico en sincronización:`, emailError);
-      throw error; // Propagar error para manejo externo
+      const emailError = error as any; // Cambio: usar 'any' para manejar diferentes tipos de error
+      
+      // 🚨 CAMBIO CLAVE: No loguear el error completo para errores 401
+      if (emailError.code === 401 || emailError.status === 401 || 
+          emailError.response?.status === 401 || emailError.message?.includes('401')) {
+        // Solo un mensaje simple para 401
+        this.logger.debug(`🔑 Token expirado detectado en syncEmailsFromGmail`);
+      } else {
+        // Para otros errores, sí mostrar más detalle
+        this.logger.error(`❌ Error crítico en sincronización: ${emailError.message || 'Error desconocido'}`);
+      }
+      
+      // Siempre relanzar el error para que el cron lo maneje
+      throw error;
     }
   }
-
 
   /**
    * 🔍 Construir query de Gmail según opciones
@@ -157,16 +167,16 @@ export class SyncService {
     }
 
     // Si es fullSync, no agregamos limitaciones adicionales
-  if (!options.fullSync) {
-  // Emails de los últimos 6 meses (balance entre rendimiento y cantidad real)
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-  const defaultSinceDate = sixMonthsAgo.toISOString().split('T')[0];
-  
-  if (!options.sinceDate) {
-    queryParts.push(`after:${defaultSinceDate}`);
-  }
-}
+    if (!options.fullSync) {
+      // Emails de los últimos 6 meses (balance entre rendimiento y cantidad real)
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      const defaultSinceDate = sixMonthsAgo.toISOString().split('T')[0];
+      
+      if (!options.sinceDate) {
+        queryParts.push(`after:${defaultSinceDate}`);
+      }
+    }
 
     const finalQuery = queryParts.join(' ');
     return finalQuery;
@@ -208,11 +218,17 @@ export class SyncService {
 
       return messages.slice(0, maxResults);
 
-    } catch (error: any) {
-  this.logger.error(`❌ Error obteniendo lista de Gmail: ${error.message || 'Error desconocido'}`);
-  // NO loguear todoo el objeto error para evitar spam
-  throw error; // Pero sí propagarlo
-}
+    } catch (error) {
+      // 🚨 CAMBIO CLAVE: No loguear el error completo
+      const emailError = error as any;
+      if (emailError.code === 401 || emailError.status === 401 || 
+          emailError.response?.status === 401) {
+        this.logger.debug(`🔑 Token expirado en getGmailMessagesList`);
+      } else {
+        this.logger.error(`❌ Error obteniendo lista de Gmail: ${emailError.message}`);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -227,7 +243,7 @@ export class SyncService {
       const emailDetail = await gmail.users.messages.get({
         userId: 'me',
         id: messageId,
-        format: 'metadata', // Obtener todos los datos del email
+        format: 'metadata', // Obtener solo metadata del email
         metadataHeaders: ['Subject', 'From', 'To', 'Date']
       });
 
@@ -314,7 +330,13 @@ export class SyncService {
       return await this.syncEmailsFromGmail(accessToken, cuentaGmailId, options);
 
     } catch (error) {
-      this.logger.error(`❌ Error en sync incremental:`, error);
+      // 🚨 CAMBIO CLAVE: No loguear el error completo
+      const emailError = error as any;
+      if (emailError.code === 401 || emailError.status === 401) {
+        this.logger.debug(`🔑 Token expirado en syncIncrementalEmails`);
+      } else {
+        this.logger.error(`❌ Error en sync incremental: ${emailError.message}`);
+      }
       throw error;
     }
   }

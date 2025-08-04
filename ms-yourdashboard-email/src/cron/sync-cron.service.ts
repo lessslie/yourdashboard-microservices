@@ -44,7 +44,7 @@ export class SyncCronService implements OnModuleInit {
   }
 
   // CRON para sincronización automática
-  @Cron('*/10 * * * *')
+  @Cron('*/1 * * * *')
   async syncEveryMinute() {
     if (!this.isEnabled) {
       return;
