@@ -30,6 +30,7 @@ CREATE TABLE cuentas_gmail_asociadas (
   fecha_conexion TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
   ultima_sincronizacion TIMESTAMP WITHOUT TIME ZONE,
   esta_activa BOOLEAN DEFAULT TRUE,
+  consecutive_zero_syncs INTEGER DEFAULT 0, -- Contador de sincronizaciones sin emails nuevos
   alias_personalizado VARCHAR(100), -- "Gmail Personal", "Trabajo", etc.
   UNIQUE(usuario_principal_id, email_gmail)
 );

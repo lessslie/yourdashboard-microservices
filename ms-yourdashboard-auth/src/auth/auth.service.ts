@@ -13,6 +13,7 @@ import {
   JwtPayload,
   CodigosErrorAuth,
 } from './interfaces/auth.interfaces';
+import axios from 'axios';
 
 @Injectable()
 export class AuthService {
@@ -350,6 +351,42 @@ async obtenerCuentaGmailPorId(usuarioId: number, cuentaId: number) {
       });
 
       // 🎯 AQUÍ SE PODRÍA TRIGGEAR SINCRONIZACIÓN INICIAL DE EMAILS
+      // 🔄 SINCRONIZACIÓN INICIAL DE EMAILS
+let emailsSincronizados = 0;
+try {
+  this.logger.log(`🔄 Iniciando sincronización automática para cuenta ${cuentaGmail.id}`);
+  
+  // Llamamos directamente al MS-Email porque ya tenemos el token
+  const syncResponse = await axios.post(
+    'http://localhost:3002/emails/sync',
+    null, // No body needed
+    {
+      params: {
+        cuentaGmailId: cuentaGmail.id.toString(),
+        maxEmails: 100 // Solo 100 para que sea rápido
+      },
+      headers: {
+        'Authorization': `Bearer ${googleUser.accessToken}`
+      },
+      timeout: 30000 // 30 segundos máximo
+    }
+  );
+
+  // Extraer cuántos emails se sincronizaron
+  emailsSincronizados = syncResponse.data?.stats?.emails_nuevos || 0;
+  
+  this.logger.log(`✅ Sincronización inicial completada: ${emailsSincronizados} emails`);
+  
+} catch (syncError: any) {
+  // NO lanzamos error - la sincronización es "nice to have"
+  this.logger.warn(`⚠️ Sync inicial falló (continuando sin sync): ${syncError.message}`);
+  
+  // Si es error de timeout, loguear específicamente
+  if (syncError.code === 'ECONNABORTED') {
+    this.logger.warn('⏱️ Timeout en sincronización inicial - el usuario puede sincronizar manualmente');
+  }
+}
+      
 
       this.logger.log(`✅ Cuenta Gmail conectada: ${googleUser.email} para usuario ${usuarioActualId}`);
 
@@ -364,9 +401,9 @@ async obtenerCuentaGmailPorId(usuarioId: number, cuentaId: number) {
           fecha_conexion: cuentaGmail.fecha_conexion,
           ultima_sincronizacion: cuentaGmail.ultima_sincronizacion,
           esta_activa: cuentaGmail.esta_activa,
-          emails_count: 0 // Se calculará en sincronización
+          emails_count: emailsSincronizados// Se calculará en sincronización
         },
-        emails_sincronizados: 0 // Retornar count real después de sincronización
+        emails_sincronizados: emailsSincronizados // Retornar count real después de sincronización
       };
 
     } catch (error) {

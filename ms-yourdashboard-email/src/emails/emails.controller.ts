@@ -89,7 +89,8 @@ export class EmailsController {
   async syncEmails(
     @Headers('authorization') authHeader: string,
     @Query('cuentaGmailId') cuentaGmailId: string,
-    @Query('maxEmails') maxEmails?: string
+    @Query('maxEmails') maxEmails?: string,
+    @Query('fullsync') fullsync?:string
   ) {
     if (!cuentaGmailId) {
       throw new UnauthorizedException('cuentaGmailId is required');
@@ -109,7 +110,7 @@ export class EmailsController {
     
     return this.emailsService.syncEmailsWithToken(accessToken, cuentaGmailId, {
       maxEmails: maxEmailsNum,
-      fullSync: false
+      fullSync: fullsync === 'true' // Convertir a booleano
     });
   }
 

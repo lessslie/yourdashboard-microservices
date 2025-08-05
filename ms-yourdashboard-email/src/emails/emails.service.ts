@@ -386,53 +386,150 @@ export class EmailsService {
   /**
    * 📧 Método original de inbox (Gmail API)
    */
-  private async getInboxFromGmailAPI(
-    accessToken: string,
-    cuentaGmailId: string,
-    page: number,
-    limit: number
-  ): Promise<EmailListResponse> {
-    const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({ access_token: accessToken });
-    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  // private async getInboxFromGmailAPI(
+  //   accessToken: string,
+  //   cuentaGmailId: string,
+  //   page: number,
+  //   limit: number
+  // ): Promise<EmailListResponse> {
+  //   const oauth2Client = new google.auth.OAuth2();
+  //   oauth2Client.setCredentials({ access_token: accessToken });
+  //   const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
-    const realTotalEmails = await this.getRealEmailCount(gmail, 'in:inbox');
-    const emailsForPage = await this.getEmailsForPage(gmail, 'in:inbox', page, limit);
-    const totalPages = Math.ceil(realTotalEmails / limit);
+  //   const realTotalEmails = await this.getRealEmailCount(gmail, 'in:inbox');
+  //   const emailsForPage = await this.getEmailsForPage(gmail, 'in:inbox', page, limit);
+  //   const totalPages = Math.ceil(realTotalEmails / limit);
+
+  //   return {
+  //     emails: emailsForPage,
+  //     total: realTotalEmails,
+  //     page,
+  //     limit,
+  //     totalPages,
+  //     hasNextPage: page < totalPages,
+  //     hasPreviousPage: page > 1
+  //   };
+  // }
+
+
+  /**
+ * 📧 Método de inbox (BD LOCAL) - NUEVA VERSIÓN
+ */
+private async getInboxFromGmailAPI(
+  accessToken: string,
+  cuentaGmailId: string,
+  page: number,
+  limit: number
+): Promise<EmailListResponse> {
+  try {
+    this.logger.log(`📧 Obteniendo inbox desde BD LOCAL para cuenta ${cuentaGmailId} - Página ${page}`);
+    
+    // 1️⃣ CONVERTIR cuentaGmailId a número
+    const cuentaGmailIdNum = parseInt(cuentaGmailId, 10);
+    if (isNaN(cuentaGmailIdNum)) {
+      throw new Error('cuentaGmailId debe ser un número válido');
+    }
+
+    // 2️⃣ OBTENER EMAILS DE BD LOCAL
+    const dbResult = await this.databaseService.getEmailsPaginated(
+      cuentaGmailIdNum, 
+      page, 
+      limit,
+      false // todos los emails, no solo no leídos
+    );
+
+    this.logger.log(`💾 Inbox desde BD: ${dbResult.emails.length} emails de ${dbResult.total} totales`);
+
+    // 3️⃣ CONVERTIR FORMATO BD → FORMATO API
+    const emails = dbResult.emails.map(this.convertDBToEmailMetadata);
+    const totalPages = Math.ceil(dbResult.total / limit);
 
     return {
-      emails: emailsForPage,
-      total: realTotalEmails,
+      emails,
+      total: dbResult.total,
       page,
       limit,
       totalPages,
       hasNextPage: page < totalPages,
       hasPreviousPage: page > 1
     };
+
+  } catch (error) {
+    this.logger.error('❌ Error obteniendo inbox desde BD:', error);
+    throw new Error('Error al obtener inbox desde base de datos');
   }
+}
 
   /**
    * 🔍 Método original de búsqueda (Gmail API)
    */
-  private async searchEmailsFromGmailAPI(
-    accessToken: string,
-    cuentaGmailId: string,
-    searchTerm: string,
-    page: number,
-    limit: number
-  ): Promise<EmailListResponse> {
-    const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({ access_token: accessToken });
-    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  // private async searchEmailsFromGmailAPI(
+  //   accessToken: string,
+  //   cuentaGmailId: string,
+  //   searchTerm: string,
+  //   page: number,
+  //   limit: number
+  // ): Promise<EmailListResponse> {
+  //   const oauth2Client = new google.auth.OAuth2();
+  //   oauth2Client.setCredentials({ access_token: accessToken });
+  //   const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
-    const gmailQuery = `in:inbox ${searchTerm}`;
-    const realTotalEmails = await this.getRealEmailCount(gmail, gmailQuery);
-    const emailsForPage = await this.getEmailsForPage(gmail, gmailQuery, page, limit);
-    const totalPages = Math.ceil(realTotalEmails / limit);
+  //   const gmailQuery = `in:inbox ${searchTerm}`;
+  //   const realTotalEmails = await this.getRealEmailCount(gmail, gmailQuery);
+  //   const emailsForPage = await this.getEmailsForPage(gmail, gmailQuery, page, limit);
+  //   const totalPages = Math.ceil(realTotalEmails / limit);
+
+  //   return {
+  //     emails: emailsForPage,
+  //     total: realTotalEmails,
+  //     page,
+  //     limit,
+  //     totalPages,
+  //     hasNextPage: page < totalPages,
+  //     hasPreviousPage: page > 1,
+  //     searchTerm
+  //   };
+  // }
+/**
+ * 🔍 Método de búsqueda (BD LOCAL) - NUEVA VERSIÓN
+ */
+private async searchEmailsFromGmailAPI(
+  accessToken: string,
+  cuentaGmailId: string,
+  searchTerm: string,
+  page: number,
+  limit: number
+): Promise<EmailListResponse> {
+  try {
+    this.logger.log(`🔍 Buscando en BD LOCAL para cuenta ${cuentaGmailId}: "${searchTerm}"`);
+    
+    // 1️⃣ CONVERTIR cuentaGmailId a número
+    const cuentaGmailIdNum = parseInt(cuentaGmailId, 10);
+    if (isNaN(cuentaGmailIdNum)) {
+      throw new Error('cuentaGmailId debe ser un número válido');
+    }
+
+    // 2️⃣ BUSCAR EN BD LOCAL
+    const filters: EmailSearchFilters = {
+      busqueda_texto: searchTerm.trim()
+    };
+
+    const searchResult = await this.databaseService.searchEmailsInDB(
+      cuentaGmailIdNum,
+      filters,
+      page,
+      limit
+    );
+
+    this.logger.log(`💾 Búsqueda en BD: ${searchResult.emails.length} resultados de ${searchResult.total} totales`);
+
+    // 3️⃣ CONVERTIR FORMATO BD → FORMATO API
+    const emails = searchResult.emails.map(this.convertDBToEmailMetadata);
+    const totalPages = Math.ceil(searchResult.total / limit);
 
     return {
-      emails: emailsForPage,
-      total: realTotalEmails,
+      emails,
+      total: searchResult.total,
       page,
       limit,
       totalPages,
@@ -440,8 +537,12 @@ export class EmailsService {
       hasPreviousPage: page > 1,
       searchTerm
     };
-  }
 
+  } catch (error) {
+    this.logger.error('❌ Error buscando en BD:', error);
+    throw new Error('Error al buscar emails en base de datos');
+  }
+}
   /**
    * 📊 Método original de stats (Gmail API)
    */
@@ -675,13 +776,196 @@ async searchAllAccountsEmailsWithUserId(
 /**
  *  cantidad de emails total real de Gmail API (no de BD local)
  */
+// async getInboxAllAccountsWithUserId(
+//   userId: string,
+//   page: number = 1,
+//   limit: number = 10
+// ): Promise<EmailListResponse & { accountsLoaded: string[] }> {
+//   try {
+//     this.logger.log(`📥 🎯 INBOX UNIFICADO para usuario principal ${userId}`);
+
+//     // 🎯 VALIDAR USERID
+//     const userIdNum = parseInt(userId, 10);
+//     if (isNaN(userIdNum)) {
+//       throw new Error('userId debe ser un número válido');
+//     }
+
+//     // 1️⃣ OBTENER TODAS LAS CUENTAS GMAIL DEL USUARIO
+//     const cuentasGmail = await this.databaseService.obtenerCuentasGmailUsuario(userIdNum);
+    
+//     if (!cuentasGmail || cuentasGmail.length === 0) {
+//       this.logger.warn(`⚠️ Usuario ${userId} no tiene cuentas Gmail conectadas`);
+//       return {
+//         emails: [],
+//         total: 0,
+//         page,
+//         limit,
+//         totalPages: 0,
+//         hasNextPage: false,
+//         hasPreviousPage: false,
+//         accountsLoaded: []
+//       };
+//     }
+
+//     this.logger.log(`📧 Usuario ${userId} tiene ${cuentasGmail.length} cuentas Gmail para inbox unificado`);
+
+//     // 2️⃣ 🆕 OBTENER TOTAL REAL DE TODAS LAS CUENTAS EN PARALELO
+//     this.logger.log(`📊 Obteniendo totales reales de Gmail API...`);
+//     const totalRealPromises = cuentasGmail.map(async (cuenta) => {
+//       try {
+//         const accessToken = await this.getValidTokenForAccount(cuenta.id);
+//         const stats = await this.getStatsFromGmailAPI(accessToken, cuenta.id.toString());
+//         this.logger.log(`✅ Cuenta ${cuenta.email_gmail}: ${stats.totalEmails} emails totales`);
+//         return stats.totalEmails;
+//       } catch (error) {
+//         this.logger.warn(`⚠️ No se pudo obtener total real de ${cuenta.email_gmail}:`, error);
+//         return 0; // Si una cuenta falla, contribuye con 0 al total
+//       }
+//     });
+
+//     // Esperar todos los totales reales
+//     const totalesReales = await Promise.all(totalRealPromises);
+//     const totalRealGlobal = totalesReales.reduce((sum, total) => sum + total, 0);
+    
+//     this.logger.log(`🔥 TOTAL REAL GLOBAL: ${totalRealGlobal} emails de todas las cuentas`);
+
+//     // 3️⃣ OBTENER INBOX DE CADA CUENTA EN PARALELO (PARA MOSTRAR)
+//     const inboxPromises = cuentasGmail.map(async (cuenta) => {
+//       try {
+//         this.logger.log(`📥 Obteniendo inbox de cuenta: ${cuenta.email_gmail} (ID: ${cuenta.id})`);
+        
+//         // 🎯 OBTENER TOKEN PARA ESTA CUENTA ESPECÍFICA
+//         const accessToken = await this.getValidTokenForAccount(cuenta.id);
+        
+//         // 🎯 OBTENER INBOX DE ESTA CUENTA
+//         const inboxCuenta = await this.getInboxWithToken(
+//           accessToken,
+//           cuenta.id.toString(),
+//           1, // Siempre página 1 para cada cuenta
+//           100 // Más resultados por cuenta para unificar después
+//         );
+
+//         // 🎯 AGREGAR INFO DE LA CUENTA A CADA EMAIL
+//         const emailsConCuenta = inboxCuenta.emails.map(email => ({
+//           ...email,
+//           sourceAccount: cuenta.email_gmail,
+//           sourceAccountId: cuenta.id
+//         }));
+
+//         this.logger.log(`✅ Inbox cuenta ${cuenta.email_gmail}: ${emailsConCuenta.length} emails obtenidos`);
+
+//         return {
+//           cuenta: cuenta.email_gmail,
+//           emails: emailsConCuenta,
+//           total: inboxCuenta.total // Este es el total de la cuenta individual
+//         };
+
+//       } catch (error) {
+//         this.logger.warn(`⚠️ Error obteniendo inbox de cuenta ${cuenta.email_gmail}:`, error);
+        
+//         // 🎯 FALLBACK: Obtener emails de BD local para esta cuenta
+//         try {
+//           this.logger.log(`💾 FALLBACK BD local para inbox de cuenta ${cuenta.email_gmail}`);
+          
+//           const fallbackResult = await this.databaseService.getEmailsPaginated(
+//             cuenta.id,
+//             1,
+//             100,
+//             false // Todos los emails, no solo no leídos
+//           );
+
+//           const emailsFromDB = fallbackResult.emails.map(this.convertDBToEmailMetadata).map(email => ({
+//             ...email,
+//             sourceAccount: cuenta.email_gmail,
+//             sourceAccountId: cuenta.id
+//           }));
+
+//           this.logger.log(`💾 FALLBACK exitoso: ${emailsFromDB.length} emails desde BD`);
+
+//           return {
+//             cuenta: cuenta.email_gmail,
+//             emails: emailsFromDB,
+//             total: fallbackResult.total
+//           };
+
+//         } catch (fallbackError) {
+//           this.logger.error(`❌ FALLBACK falló para cuenta ${cuenta.email_gmail}:`, fallbackError);
+//           return {
+//             cuenta: cuenta.email_gmail,
+//             emails: [],
+//             total: 0
+//           };
+//         }
+//       }
+//     });
+
+//     // 4️⃣ ESPERAR TODOS LOS RESULTADOS EN PARALELO
+//     const resultadosPorCuenta = await Promise.all(inboxPromises);
+
+//     // 5️⃣ UNIFICAR Y COMBINAR TODOS LOS EMAILS
+//     const todosLosEmails = resultadosPorCuenta
+//       .filter(resultado => resultado.emails.length > 0)
+//       .flatMap(resultado => resultado.emails);
+
+//     // 6️⃣ ORDENAR GLOBALMENTE POR FECHA (MÁS RECIENTES PRIMERO)
+//     todosLosEmails.sort((a, b) => {
+//       const fechaA = new Date(a.receivedDate).getTime();
+//       const fechaB = new Date(b.receivedDate).getTime();
+//       return fechaB - fechaA; // Descendente (más recientes primero)
+//     });
+
+//     // 7️⃣ APLICAR PAGINACIÓN GLOBAL
+//     const startIndex = (page - 1) * limit;
+//     const endIndex = startIndex + limit;
+//     const emailsPaginados = todosLosEmails.slice(startIndex, endIndex);
+
+//     // 8️⃣ CALCULAR METADATOS DE PAGINACIÓN CON TOTAL REAL
+//     const totalPages = Math.ceil(totalRealGlobal / limit); // ← 🔥 USANDO TOTAL REAL
+//     const hasNextPage = page < totalPages;
+//     const hasPreviousPage = page > 1;
+
+//     // 9️⃣ OBTENER LISTA DE CUENTAS CARGADAS
+//     const accountsLoaded = resultadosPorCuenta.map(resultado => resultado.cuenta);
+
+//     this.logger.log(`✅ INBOX UNIFICADO COMPLETADO:`);
+//     this.logger.log(`   🔥 Total REAL global: ${totalRealGlobal} emails`);
+//     this.logger.log(`   📧 Emails mostrados: ${emailsPaginados.length} de ${todosLosEmails.length} obtenidos`);
+//     this.logger.log(`   📧 Cuentas cargadas: ${accountsLoaded.join(', ')}`);
+//     this.logger.log(`   📄 Página ${page}/${totalPages}`);
+
+//     return {
+//       emails: emailsPaginados,
+//       total: totalRealGlobal, // ← 🔥 TOTAL REAL DE GMAIL API
+//       page,
+//       limit,
+//       totalPages,
+//       hasNextPage,
+//       hasPreviousPage,
+//       accountsLoaded
+//     };
+
+//   } catch (error) {
+//     this.logger.error('❌ Error en inbox unificado:', error);
+//     const emailError = error as EmailServiceError;
+//     throw new Error('Error en inbox unificado: ' + emailError.message);
+//   }
+// }
+
+// ================================
+// 🔧 MÉTODOS AUXILIARES PARA BÚSQUEDA GLOBAL
+// ================================
+
+
+/**
+ * 📥 INBOX UNIFICADO - TODAS LAS CUENTAS (VERSIÓN BD - RÁPIDA)
+ */
 async getInboxAllAccountsWithUserId(
   userId: string,
   page: number = 1,
   limit: number = 10
 ): Promise<EmailListResponse & { accountsLoaded: string[] }> {
   try {
-    this.logger.log(`📥 🎯 INBOX UNIFICADO para usuario principal ${userId}`);
+    this.logger.log(`📥 🎯 INBOX UNIFICADO (BD) para usuario principal ${userId}`);
 
     // 🎯 VALIDAR USERID
     const userIdNum = parseInt(userId, 10);
@@ -706,95 +990,47 @@ async getInboxAllAccountsWithUserId(
       };
     }
 
-    this.logger.log(`📧 Usuario ${userId} tiene ${cuentasGmail.length} cuentas Gmail para inbox unificado`);
+    this.logger.log(`📧 Usuario ${userId} tiene ${cuentasGmail.length} cuentas Gmail`);
 
-    // 2️⃣ 🆕 OBTENER TOTAL REAL DE TODAS LAS CUENTAS EN PARALELO
-    this.logger.log(`📊 Obteniendo totales reales de Gmail API...`);
-    const totalRealPromises = cuentasGmail.map(async (cuenta) => {
-      try {
-        const accessToken = await this.getValidTokenForAccount(cuenta.id);
-        const stats = await this.getStatsFromGmailAPI(accessToken, cuenta.id.toString());
-        this.logger.log(`✅ Cuenta ${cuenta.email_gmail}: ${stats.totalEmails} emails totales`);
-        return stats.totalEmails;
-      } catch (error) {
-        this.logger.warn(`⚠️ No se pudo obtener total real de ${cuenta.email_gmail}:`, error);
-        return 0; // Si una cuenta falla, contribuye con 0 al total
-      }
-    });
+    // 2️⃣ 🚀 TOTAL DESDE BD (INSTANTÁNEO!)
+    const totalRealGlobal = cuentasGmail.reduce((sum, cuenta) => sum + cuenta.emails_count, 0);
+    this.logger.log(`🔥 TOTAL DESDE BD: ${totalRealGlobal} emails de todas las cuentas`);
 
-    // Esperar todos los totales reales
-    const totalesReales = await Promise.all(totalRealPromises);
-    const totalRealGlobal = totalesReales.reduce((sum, total) => sum + total, 0);
-    
-    this.logger.log(`🔥 TOTAL REAL GLOBAL: ${totalRealGlobal} emails de todas las cuentas`);
-
-    // 3️⃣ OBTENER INBOX DE CADA CUENTA EN PARALELO (PARA MOSTRAR)
+    // 3️⃣ OBTENER EMAILS DE CADA CUENTA DESDE BD
     const inboxPromises = cuentasGmail.map(async (cuenta) => {
       try {
-        this.logger.log(`📥 Obteniendo inbox de cuenta: ${cuenta.email_gmail} (ID: ${cuenta.id})`);
+        this.logger.log(`💾 Obteniendo emails de BD para: ${cuenta.email_gmail} (ID: ${cuenta.id})`);
         
-        // 🎯 OBTENER TOKEN PARA ESTA CUENTA ESPECÍFICA
-        const accessToken = await this.getValidTokenForAccount(cuenta.id);
-        
-        // 🎯 OBTENER INBOX DE ESTA CUENTA
-        const inboxCuenta = await this.getInboxWithToken(
-          accessToken,
-          cuenta.id.toString(),
-          1, // Siempre página 1 para cada cuenta
-          100 // Más resultados por cuenta para unificar después
+        // 🎯 DIRECTO DESDE BD - SIN TOKEN NI API
+        const dbResult = await this.databaseService.getEmailsPaginated(
+          cuenta.id,
+          1,    // Siempre página 1 para cada cuenta
+          100,  // Más emails por cuenta para unificar
+          false // Todos los emails
         );
 
         // 🎯 AGREGAR INFO DE LA CUENTA A CADA EMAIL
-        const emailsConCuenta = inboxCuenta.emails.map(email => ({
+        const emailsConCuenta = dbResult.emails.map(this.convertDBToEmailMetadata).map(email => ({
           ...email,
           sourceAccount: cuenta.email_gmail,
           sourceAccountId: cuenta.id
         }));
 
-        this.logger.log(`✅ Inbox cuenta ${cuenta.email_gmail}: ${emailsConCuenta.length} emails obtenidos`);
+        this.logger.log(`✅ BD cuenta ${cuenta.email_gmail}: ${emailsConCuenta.length} emails obtenidos`);
 
         return {
           cuenta: cuenta.email_gmail,
           emails: emailsConCuenta,
-          total: inboxCuenta.total // Este es el total de la cuenta individual
+          total: dbResult.total
         };
 
       } catch (error) {
-        this.logger.warn(`⚠️ Error obteniendo inbox de cuenta ${cuenta.email_gmail}:`, error);
-        
-        // 🎯 FALLBACK: Obtener emails de BD local para esta cuenta
-        try {
-          this.logger.log(`💾 FALLBACK BD local para inbox de cuenta ${cuenta.email_gmail}`);
-          
-          const fallbackResult = await this.databaseService.getEmailsPaginated(
-            cuenta.id,
-            1,
-            100,
-            false // Todos los emails, no solo no leídos
-          );
-
-          const emailsFromDB = fallbackResult.emails.map(this.convertDBToEmailMetadata).map(email => ({
-            ...email,
-            sourceAccount: cuenta.email_gmail,
-            sourceAccountId: cuenta.id
-          }));
-
-          this.logger.log(`💾 FALLBACK exitoso: ${emailsFromDB.length} emails desde BD`);
-
-          return {
-            cuenta: cuenta.email_gmail,
-            emails: emailsFromDB,
-            total: fallbackResult.total
-          };
-
-        } catch (fallbackError) {
-          this.logger.error(`❌ FALLBACK falló para cuenta ${cuenta.email_gmail}:`, fallbackError);
-          return {
-            cuenta: cuenta.email_gmail,
-            emails: [],
-            total: 0
-          };
-        }
+        this.logger.error(`❌ Error obteniendo emails de ${cuenta.email_gmail}:`, error);
+        return {
+          cuenta: cuenta.email_gmail,
+          emails: [],
+          total: 0
+        };
       }
     });
 
@@ -810,7 +1046,7 @@ async getInboxAllAccountsWithUserId(
     todosLosEmails.sort((a, b) => {
       const fechaA = new Date(a.receivedDate).getTime();
       const fechaB = new Date(b.receivedDate).getTime();
-      return fechaB - fechaA; // Descendente (más recientes primero)
+      return fechaB - fechaA; // Descendente
     });
 
     // 7️⃣ APLICAR PAGINACIÓN GLOBAL
@@ -818,23 +1054,24 @@ async getInboxAllAccountsWithUserId(
     const endIndex = startIndex + limit;
     const emailsPaginados = todosLosEmails.slice(startIndex, endIndex);
 
-    // 8️⃣ CALCULAR METADATOS DE PAGINACIÓN CON TOTAL REAL
-    const totalPages = Math.ceil(totalRealGlobal / limit); // ← 🔥 USANDO TOTAL REAL
+    // 8️⃣ CALCULAR METADATOS DE PAGINACIÓN
+    const totalPages = Math.ceil(totalRealGlobal / limit);
     const hasNextPage = page < totalPages;
     const hasPreviousPage = page > 1;
 
     // 9️⃣ OBTENER LISTA DE CUENTAS CARGADAS
     const accountsLoaded = resultadosPorCuenta.map(resultado => resultado.cuenta);
 
-    this.logger.log(`✅ INBOX UNIFICADO COMPLETADO:`);
-    this.logger.log(`   🔥 Total REAL global: ${totalRealGlobal} emails`);
-    this.logger.log(`   📧 Emails mostrados: ${emailsPaginados.length} de ${todosLosEmails.length} obtenidos`);
+    this.logger.log(`✅ INBOX UNIFICADO DESDE BD COMPLETADO:`);
+    this.logger.log(`   💾 Total emails (BD): ${totalRealGlobal}`);
+    this.logger.log(`   📧 Emails mostrados: ${emailsPaginados.length}`);
     this.logger.log(`   📧 Cuentas cargadas: ${accountsLoaded.join(', ')}`);
     this.logger.log(`   📄 Página ${page}/${totalPages}`);
+    this.logger.log(`   ⚡ Tiempo: INSTANTÁNEO (desde BD)`);
 
     return {
       emails: emailsPaginados,
-      total: totalRealGlobal, // ← 🔥 TOTAL REAL DE GMAIL API
+      total: totalRealGlobal,
       page,
       limit,
       totalPages,
@@ -844,15 +1081,11 @@ async getInboxAllAccountsWithUserId(
     };
 
   } catch (error) {
-    this.logger.error('❌ Error en inbox unificado:', error);
+    this.logger.error('❌ Error en inbox unificado (BD):', error);
     const emailError = error as EmailServiceError;
     throw new Error('Error en inbox unificado: ' + emailError.message);
   }
 }
-
-// ================================
-// 🔧 MÉTODOS AUXILIARES PARA BÚSQUEDA GLOBAL
-// ================================
 
 /**
  * 🔑 Obtener token válido para una cuenta específica

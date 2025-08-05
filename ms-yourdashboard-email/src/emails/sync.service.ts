@@ -167,16 +167,19 @@ export class SyncService {
     }
 
     // Si es fullSync, no agregamos limitaciones adicionales
-    if (!options.fullSync) {
-      // Emails de los últimos 6 meses (balance entre rendimiento y cantidad real)
-      const sixMonthsAgo = new Date();
-      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-      const defaultSinceDate = sixMonthsAgo.toISOString().split('T')[0];
+    //esto traia los emails de los ultimos 6 meses,
+    // pero traia tambien conflictos con la cantidad de emails reales en bd
+    
+    // if (!options.fullSync) {
+    //   // Emails de los últimos 6 meses (balance entre rendimiento y cantidad real)
+    //   const sixMonthsAgo = new Date();
+    //   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    //   const defaultSinceDate = sixMonthsAgo.toISOString().split('T')[0];
       
-      if (!options.sinceDate) {
-        queryParts.push(`after:${defaultSinceDate}`);
-      }
-    }
+    //   if (!options.sinceDate) {
+    //     queryParts.push(`after:${defaultSinceDate}`);
+    //   }
+    // }
 
     const finalQuery = queryParts.join(' ');
     return finalQuery;
