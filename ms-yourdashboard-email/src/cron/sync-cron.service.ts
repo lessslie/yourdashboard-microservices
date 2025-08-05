@@ -81,7 +81,7 @@ async syncWeekends() {
    //***************
   // CRON para backfill de emails históricos
   //********************************* */
-@Cron('*/2 * * * *')  // Cada 30 minutos para evitar rate limits
+@Cron('*/30 * * * *')  // Cada 30 minutos para evitar rate limits
 async backfillHistoricalEmails() {
   if (!this.isEnabled) {
     return;
