@@ -32,6 +32,8 @@ CREATE TABLE cuentas_gmail_asociadas (
   esta_activa BOOLEAN DEFAULT TRUE,
   consecutive_zero_syncs INTEGER DEFAULT 0, -- Contador de sincronizaciones sin emails nuevos
   alias_personalizado VARCHAR(100), -- "Gmail Personal", "Trabajo", etc.
+  backfill_checkpoint_date DATE, -- Checkpoint para sincronización por fechas (deprecado)
+  backfill_page_token VARCHAR(255), -- Token de paginación para sincronización masiva
   UNIQUE(usuario_principal_id, email_gmail)
 );
   -- Constraint: Un usuario no puede conectar la misma cuenta Gmail dos veces
@@ -67,6 +69,17 @@ CREATE TABLE sesiones_jwt (
   esta_activa BOOLEAN DEFAULT TRUE,
   ip_origen INET,
   user_agent TEXT
+);
+
+-- 📊 TABLA 5: audit_eliminaciones (NUEVA)
+-- Auditoría de eliminaciones para tracking
+CREATE TABLE audit_eliminaciones (
+  id SERIAL PRIMARY KEY,
+  tabla VARCHAR(50),
+  registro_id INTEGER,
+  datos_eliminados JSONB,
+  usuario_bd VARCHAR(50),
+  fecha_eliminacion TIMESTAMP DEFAULT NOW()
 );
 
 -- =====================================
@@ -192,44 +205,58 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- =====================================
+-- 🆕 Función: Eliminar cuenta Gmail de forma segura
+CREATE OR REPLACE FUNCTION eliminar_cuenta_gmail_segura(p_cuenta_id INTEGER)
+RETURNS JSON AS $$
+DECLARE
+    cuenta_info RECORD;
+    emails_count INTEGER;
+BEGIN
+    -- Obtener info antes de borrar
+    SELECT email_gmail, usuario_principal_id 
+    INTO cuenta_info
+    FROM cuentas_gmail_asociadas 
+    WHERE id = p_cuenta_id;
+    
+    IF NOT FOUND THEN
+        RETURN json_build_object('error', 'Cuenta no encontrada');
+    END IF;
+    
+    -- Contar emails que se van a borrar
+    SELECT COUNT(*) INTO emails_count 
+    FROM emails_sincronizados 
+    WHERE cuenta_gmail_id = p_cuenta_id;
+    
+    -- Borrar (CASCADE hace la magia)
+    DELETE FROM cuentas_gmail_asociadas WHERE id = p_cuenta_id;
+    
+    RETURN json_build_object(
+        'success', true,
+        'cuenta_eliminada', cuenta_info.email_gmail,
+        'emails_eliminados', emails_count
+    );
+END;
+$$ LANGUAGE plpgsql;
 
--- =====================================
--- PASO 6: VERIFICACIÓN
--- =====================================
+-- 🆕 Trigger: Auditar eliminaciones de cuentas
+CREATE OR REPLACE FUNCTION audit_eliminacion_cuenta()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO audit_eliminaciones (tabla, registro_id, datos_eliminados, usuario_bd)
+    VALUES (
+        'cuentas_gmail_asociadas',
+        OLD.id,
+        row_to_json(OLD)::jsonb,
+        current_user
+    );
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
 
--- Mostrar todas las tablas
-\dt
+CREATE TRIGGER tr_audit_cuenta_eliminada
+BEFORE DELETE ON cuentas_gmail_asociadas
+FOR EACH ROW EXECUTE FUNCTION audit_eliminacion_cuenta();
 
--- Mostrar estadísticas del sistema
-SELECT * FROM obtener_estadisticas_sistema();
-
--- Mostrar cuentas Gmail del usuario Alonso (ID=1)
-SELECT * FROM obtener_cuentas_gmail_usuario(1);
-
--- Verificar estructura de las tablas principales
-\d usuarios_principales
-\d cuentas_gmail_asociadas  
-\d emails_sincronizados
-\d sesiones_jwt
-
--- =====================================
--- PASO 7: COMANDOS ÚTILES
--- =====================================
-
--- Limpiar sesiones expiradas
--- SELECT limpiar_sesiones_expiradas();
-
--- Ver relaciones entre tablas
--- SELECT 
---     tc.table_name, 
---     kcu.column_name, 
---     ccu.table_name AS foreign_table_name,
---     ccu.column_name AS foreign_column_name 
--- FROM information_schema.table_constraints AS tc 
--- JOIN information_schema.key_column_usage AS kcu ON tc.constraint_name = kcu.constraint_name
--- JOIN information_schema.constraint_column_usage AS ccu ON ccu.constraint_name = tc.constraint_name
--- WHERE constraint_type = 'FOREIGN KEY';
 -- =====================================
 -- OPTIMIZACIONES PARA METADATA DE EMAILS
 -- =====================================
@@ -340,13 +367,50 @@ $$ LANGUAGE plpgsql;
 COMMENT ON TABLE emails_sincronizados IS 'Cache de metadata de emails - NO contiene contenido sensible';
 COMMENT ON COLUMN emails_sincronizados.destinatario_email IS 'Email del destinatario principal (primer TO)';
 COMMENT ON COLUMN emails_sincronizados.tamano_bytes IS 'Tamaño del email en bytes (incluye adjuntos)';
+COMMENT ON COLUMN cuentas_gmail_asociadas.backfill_page_token IS 'Token de paginación para continuar sincronización masiva';
+COMMENT ON COLUMN cuentas_gmail_asociadas.consecutive_zero_syncs IS 'Contador para detectar cuando termina el backfill';
+COMMENT ON COLUMN cuentas_gmail_asociadas.backfill_checkpoint_date IS 'Checkpoint de fecha para backfill (DEPRECADO - usar page_token)';
 COMMENT ON FUNCTION obtener_stats_emails_cuenta IS 'Estadísticas rápidas por cuenta Gmail';
 COMMENT ON FUNCTION limpiar_emails_viejos IS 'Limpieza automática de emails antiguos (GDPR compliance)';
+COMMENT ON FUNCTION eliminar_cuenta_gmail_segura IS 'Elimina cuenta Gmail y todos sus emails de forma segura con auditoría';
+
+-- =====================================
+-- PASO 6: VERIFICACIÓN
+-- =====================================
+
+-- Mostrar todas las tablas
+\dt
+
+-- Mostrar estadísticas del sistema
+SELECT * FROM obtener_estadisticas_sistema();
+
+-- Verificar estructura de las tablas principales
+\d usuarios_principales
+\d cuentas_gmail_asociadas  
+\d emails_sincronizados
+\d sesiones_jwt
+\d audit_eliminaciones
+
+-- =====================================
+-- PASO 7: COMANDOS ÚTILES
+-- =====================================
+
+-- Limpiar sesiones expiradas
+-- SELECT limpiar_sesiones_expiradas();
+
+-- Eliminar cuenta Gmail de forma segura (ejemplo)
+-- SELECT eliminar_cuenta_gmail_segura(1);
+
+-- Ver auditoría de eliminaciones
+-- SELECT * FROM audit_eliminaciones ORDER BY fecha_eliminacion DESC;
+
 -- =====================================
 -- ✅ MENSAJE DE ÉXITO
 -- =====================================
 SELECT '🎯 Nueva arquitectura implementada exitosamente! 
 📋 Usuarios principales: Registro tradicional
-📧 Cuentas Gmail: Múltiples por usuario  
-📨 Emails sincronizados: Metadata para listas
-🔐 Sesiones JWT: Autenticación del usuario principal' as estado;
+📧 Cuentas Gmail: Múltiples por usuario con paginación
+📨 Emails sincronizados: Metadata para listas con anti-duplicados
+🔐 Sesiones JWT: Autenticación del usuario principal
+📊 Auditoría: Tracking de eliminaciones
+🔧 Funciones seguras: Borrado con CASCADE automático' as estado;
