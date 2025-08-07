@@ -118,3 +118,23 @@ export const getSearchEmails = async (
     console.error(error);
   }
 };
+
+export const getEmailDetails = async (
+  token: string,
+  emailId: string,
+  cuentaGmailId: string
+) => {
+  try {
+    const response = await axios.get(`${MS_ORCHES_URL}/emails/${emailId}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      params: {
+        cuentaGmailId,
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error(error);
+  }
+};
