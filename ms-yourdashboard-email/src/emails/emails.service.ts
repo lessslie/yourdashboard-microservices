@@ -1,5 +1,5 @@
 // ms-yourdashboard-email/src/emails/emails.service.ts
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, UnauthorizedException } from '@nestjs/common';
 import { google, gmail_v1 } from 'googleapis';
 import { ConfigService } from '@nestjs/config';
 import { 
@@ -421,21 +421,133 @@ export class EmailsService {
   // ================================
   // 📧 EMAIL ESPECÍFICO - SIEMPRE GMAIL API
   // ================================
-
   /**
    * 📧 EMAIL ESPECÍFICO - Gmail API (necesitamos el contenido completo)
    */
-  async getEmailByIdWithToken(
-    accessToken: string, 
-    cuentaGmailId: string,
-    messageId: string
-  ): Promise<EmailDetail> {
-    this.logger.log(`📧 Obteniendo email específico ${messageId} desde Gmail API para cuenta ${cuentaGmailId}`);
-    
-    // Este siempre va a Gmail API porque necesitamos el contenido completo
-    return await this.getEmailFromGmailAPI(accessToken, cuentaGmailId, messageId);
-  }
+  async getEmailByIdWithJWT(
+  jwtToken: string,
+  messageId: string
+): Promise<EmailDetail> {
+  try {
+    this.logger.log(`📧 🎯 Buscando email ${messageId} con JWT token`);
 
+    // 1️⃣ EXTRAER USER ID DEL JWT TOKEN
+    const userId = this.extractUserIdFromJWT(jwtToken);
+    
+    if (!userId) {
+      throw new UnauthorizedException('Token JWT inválido - no se pudo extraer userId');
+    }
+
+    this.logger.log(`🔍 Usuario extraído del JWT: ${userId}`);
+
+    // 2️⃣ OBTENER TODAS LAS CUENTAS GMAIL DEL USUARIO
+    const cuentasGmail = await this.databaseService.obtenerCuentasGmailUsuario(userId);
+    
+    if (!cuentasGmail || cuentasGmail.length === 0) {
+      throw new NotFoundException(`Usuario ${userId} no tiene cuentas Gmail conectadas`);
+    }
+
+    this.logger.log(`📧 Usuario ${userId} tiene ${cuentasGmail.length} cuentas Gmail`);
+
+    // 3️⃣ BUSCAR EL EMAIL EN TODAS LAS CUENTAS
+    for (const cuenta of cuentasGmail) {
+      try {
+        this.logger.log(`🔍 Buscando email ${messageId} en cuenta ${cuenta.email_gmail} (ID: ${cuenta.id})`);
+        
+        // Obtener token para esta cuenta específica
+        const accessToken = await this.getValidTokenForAccount(cuenta.id);
+        
+        // Intentar obtener el email desde Gmail API
+        const email = await this.getEmailFromGmailAPI(accessToken, cuenta.id.toString(), messageId);
+        
+        this.logger.log(`✅ Email ${messageId} encontrado en cuenta ${cuenta.email_gmail}`);
+        
+        // 🎯 AGREGAR INFO DE LA CUENTA AL RESULTADO
+        return {
+          ...email,
+          sourceAccount: cuenta.email_gmail,
+          sourceAccountId: cuenta.id
+        };
+        
+      } catch (error) {
+        // Si no está en esta cuenta, continuar con la siguiente
+        this.logger.debug(`📭 Email ${messageId} no encontrado en cuenta ${cuenta.email_gmail}: ${error}`);
+        continue;
+      }
+    }
+
+    // 4️⃣ SI NO SE ENCONTRÓ EN NINGUNA CUENTA
+    throw new NotFoundException(
+      `Email ${messageId} no encontrado en ninguna de las ${cuentasGmail.length} cuentas Gmail del usuario`
+    );
+
+  } catch (error) {
+    this.logger.error('❌ Error obteniendo email por JWT:', error);
+    
+    if (error instanceof UnauthorizedException || error instanceof NotFoundException) {
+      throw error;
+    }
+    
+    throw new Error('Error interno obteniendo email: ' + (error as Error).message);
+  }
+}
+
+/**
+ * 🔧 Extraer User ID del JWT token
+ */
+private extractUserIdFromJWT(authHeader: string): number | null {
+  try {
+    // Extraer token del header "Bearer TOKEN"
+    const token = authHeader.replace('Bearer ', '');
+    
+    if (!token || token === authHeader) {
+      throw new Error('Token JWT inválido - formato Bearer requerido');
+    }
+
+    // Decodificar JWT (sin verificar - solo para extraer payload)
+    const payload = this.decodeJWTPayload(token);
+    
+    if (!payload || !payload.sub) {
+      throw new Error('Token JWT inválido - sub requerido');
+    }
+
+    return payload.sub;
+
+  } catch (error) {
+    this.logger.error('❌ Error extrayendo userId del JWT:', error);
+    return null;
+  }
+}
+
+/**
+ * 🔧 Decodificar JWT payload (sin verificar signature)
+ */
+private decodeJWTPayload(token: string): { sub: number; email: string; nombre: string } | null {
+  try {
+    // JWT format: header.payload.signature
+    const parts = token.split('.');
+    
+    if (parts.length !== 3) {
+      throw new Error('Token JWT malformado');
+    }
+
+    // Decodificar payload (base64)
+    const payloadBase64 = parts[1];
+    const payloadJson = Buffer.from(payloadBase64, 'base64').toString('utf-8');
+    const payload = JSON.parse(payloadJson);
+
+    // Validar estructura
+    if (!payload.sub || typeof payload.sub !== 'number') {
+      throw new Error('Token JWT inválido - sub debe ser número');
+    }
+
+    return payload;
+
+  } catch (error) {
+    this.logger.error('❌ Error decodificando JWT:', error);
+    return null;
+  }
+}
   // ================================
   // 🌍 BÚSQUEDA GLOBAL - MÉTODO ROUTER PRINCIPAL
   // ================================

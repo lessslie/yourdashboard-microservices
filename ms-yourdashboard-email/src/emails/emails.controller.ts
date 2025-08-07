@@ -642,36 +642,50 @@ async getInboxAllAccounts(
   //************************************************ */
 
 
-  async getEmailById(
-    @Headers('authorization') authHeader: string,
-    @Param('id') emailId: string,
-    @Query('cuentaGmailId') cuentaGmailId: string
-  ): Promise<EmailDetailDto> {
-    if (!cuentaGmailId) {
-      throw new UnauthorizedException('cuentaGmailId is required');
-    }
-
-    if (!authHeader) {
-      throw new UnauthorizedException('Authorization header is required');
-    }
-    
-    if (!emailId) {
-      throw new UnauthorizedException('Message ID is required');
-    }
-    
-    const accessToken = authHeader.replace('Bearer ', '');
-    
-    if (!accessToken) {
-      throw new UnauthorizedException('Valid Bearer token is required');
-    }
-    
-    // 🎯 OBTENER DATOS DEL SERVICIO
-    const result = await this.emailsService.getEmailByIdWithToken(accessToken, cuentaGmailId, emailId);
-
-    // 🎯 CONVERTIR Date → string PARA EL DTO
-    return {
-      ...result,
-      receivedDate: result.receivedDate.toISOString() // Date → string
-    };
+@Get(':id')
+@ApiOperation({ 
+  summary: 'Obtener email por ID',
+  description: 'Obtiene el contenido completo de un email específico usando JWT token para identificar al usuario.'
+})
+@ApiParam({ 
+  name: 'id', 
+  description: 'ID del mensaje en Gmail', 
+  example: '1847a8e123456789' 
+})
+@ApiBearerAuth('Gmail-Token') //  Ahora requiere JWT token
+@ApiOkResponse({ 
+  description: 'Email obtenido exitosamente',
+  type: EmailDetailDto 
+})
+@ApiUnauthorizedResponse({ 
+  description: 'Token JWT inválido o expirado',
+  type: EmailErrorResponseDto 
+})
+@ApiNotFoundResponse({ 
+  description: 'Email no encontrado en ninguna cuenta del usuario',
+  type: EmailErrorResponseDto 
+})
+async getEmailById(
+  @Headers('authorization') authHeader: string,
+  @Param('id') emailId: string
+): Promise<EmailDetailDto> {
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido en Authorization header');
   }
+
+  if (!emailId) {
+    throw new BadRequestException('ID del mensaje es requerido');
+  }
+
+  console.log(`📧  Obteniendo email ${emailId} por JWT token`);
+  
+  // 🎯 LLAMAR AL NUEVO MÉTODO DEL SERVICE
+  const result = await this.emailsService.getEmailByIdWithJWT(authHeader, emailId);
+
+  return {
+    ...result,
+    receivedDate: result.receivedDate.toISOString()
+  };
+}
+
 }

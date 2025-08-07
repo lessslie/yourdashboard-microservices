@@ -18,7 +18,7 @@ export class SyncCronService implements OnModuleInit {
     this.logger.log('🚀 CRON Service inicializado!');
     this.logger.log(`📅 CRON está ${this.isEnabled ? 'ACTIVADO' : 'DESACTIVADO'}`);
     if (this.isEnabled) {
-      this.logger.log('⏰ Sync programado: CADA 5 MINUTOS');
+      this.logger.log('⏰ Sync programado: CADA 15 MINUTOS( trae los emails nuevos de cuentas activas)');
     }
   }
 
@@ -46,7 +46,7 @@ export class SyncCronService implements OnModuleInit {
 
   // CRON para sincronización automática de emails nuevos
  // DÍAS DE SEMANA (Lunes a Viernes)
-@Cron('*/5 * * * 1-5')  // Por defecto cada 5 min en weekdays
+@Cron('*/15 * * * 1-5')  // Por defecto cada 15 min en weekdays
 async syncWeekdays() {
   if (!this.isEnabled) {
     return;
@@ -57,7 +57,7 @@ async syncWeekdays() {
   
   // Solo ejecutar en días de semana (1-5)
   if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-    this.logger.log('🔄 [CRON WEEKDAY] Iniciando sync automático');
+    this.logger.log('🔄 [CRON WEEKDAY] Iniciando sync automático(solo trae emails nuevos)');
     await this.performSync('weekday');
   }
 }

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Button, List, Skeleton, Pagination, Card, Input } from "antd";
+import { Button, List, Skeleton, Pagination, Card, Input, Modal, Spin } from "antd";
+
 
 import { handleConnectService } from "../../services/emails/emails";
 import { DownOutlined, UpOutlined } from "@ant-design/icons";
@@ -18,6 +19,9 @@ const ListEmails = ({
   cuentasGmail: ICuentaGmail[];
 }) => {
   const [open, setOpen] = useState(false);
+  const [emailModalVisible, setEmailModalVisible] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [currentEmail, setCurrentEmail] = useState<any>(null);
   const {
     initLoading,
     list,
@@ -177,6 +181,18 @@ const ListEmails = ({
           </div>
         )}
       </Card>
+      <Modal
+        open={emailModalVisible}
+        onCancel={() => setEmailModalVisible(false)}
+        footer={null}
+        title={currentEmail?.subject || "Email"}
+      >
+        <Spin spinning={modalLoading}>
+          <div style={{ whiteSpace: "pre-wrap" }}>
+            {currentEmail?.body || "Sin contenido"}
+          </div>
+        </Spin>
+      </Modal>
     </div>
   );
 };
