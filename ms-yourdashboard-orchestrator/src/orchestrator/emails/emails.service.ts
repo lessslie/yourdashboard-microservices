@@ -1,4 +1,4 @@
-import { Injectable, HttpException, HttpStatus, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus, Logger, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosResponse, AxiosError } from 'axios';
 import { CacheService } from '../cache/cache.service';
@@ -171,6 +171,22 @@ export class EmailsOrchestratorService {
       );
     }
   }
+  private async clearGmailAccountCache(cuentaGmailId: string): Promise<void> {
+  try {
+    this.logger.log(`🧹 Limpiando cache para cuenta Gmail ${cuentaGmailId}`);
+    
+    await Promise.all([
+      this.cacheService.deletePattern(`inbox:${cuentaGmailId}`),
+      this.cacheService.deletePattern(`search:${cuentaGmailId}`),
+      this.cacheService.deletePattern(`stats:${cuentaGmailId}`),
+      this.cacheService.deletePattern(`detail:${cuentaGmailId}`)
+    ]);
+    
+    this.logger.log(`✅ Cache limpiado para cuenta Gmail ${cuentaGmailId}`);
+  } catch (error) {
+    this.logger.error(`❌ Error limpiando cache:`, error);
+  }
+}
 
   /**
    * 📧 Obtener inbox del usuario - ⚡ CON CACHE
@@ -538,75 +554,108 @@ async getInboxAllAccounts(
   /**
    * 📧 Obtener email específico - ⚡ CON CACHE
    */
-  async getEmailById(cuentaGmailId: string, emailId: string) {
-    try {
-      this.logger.log(`📧 Obteniendo email ${emailId} para cuenta Gmail ${cuentaGmailId}`);
+ async getEmailByIdWithJWT(authHeader: string, emailId: string) {
+  try {
+    this.logger.log(`📧 🎯 Obteniendo email ${emailId} con JWT token via orchestrator`);
 
-      // 1️⃣ VERIFICAR CACHE
-      const cacheKey = this.cacheService.generateKey('detail', cuentaGmailId, { emailId });
-      const cachedResult = await this.cacheService.get<EmailDetail>(cacheKey);
-      
-      if (cachedResult) {
-        this.logger.log(`⚡ CACHE HIT - Email detail desde cache`);
-        return {
-          success: true,
-          source: 'orchestrator-cache',
-          data: cachedResult
-        };
-      }
+    // 1️⃣ VERIFICAR CACHE PRIMERO
+    const userId = this.extractUserIdFromJWT(authHeader);
+    
+    if (!userId) {
+      throw new UnauthorizedException('Token JWT inválido');
+    }
 
-      // 2️⃣ SI NO HAY CACHE → LLAMAR API
-      this.logger.log(`📡 CACHE MISS - Obteniendo email desde API`);
-      
-      const accessToken = await this.getValidTokenForGmailAccount(cuentaGmailId);
-      
-      const response: AxiosResponse<EmailDetail> = await axios.get(`${this.msEmailUrl}/emails/${emailId}`, {
-        params: { cuentaGmailId },
-        headers: {
-          'Authorization': `Bearer ${accessToken}`
-        }
-      });
-
-      // 3️⃣ GUARDAR EN CACHE (TTL más largo - emails específicos no cambian)
-      await this.cacheService.set(cacheKey, response.data, this.CACHE_TTL.DETAIL);
-      
-      this.logger.log(`✅ Email obtenido y guardado en cache`);
-      
+    const cacheKey = this.cacheService.generateKey('email-detail', userId.toString(), { emailId });
+    const cachedResult = await this.cacheService.get<EmailDetail>(cacheKey);
+    
+    if (cachedResult) {
+      this.logger.log(`⚡ CACHE HIT - Email detail desde cache`);
       return {
         success: true,
-        source: 'orchestrator-api',
-        data: response.data
+        source: 'orchestrator-cache',
+        data: cachedResult
       };
+    }
 
-    } catch (error) {
-      console.log(error);
-      const apiError = error as AxiosError<ErrorResponse>;
-      this.logger.error(`❌ Error obteniendo email:`, apiError.message);
+    // 2️⃣ SI NO HAY CACHE → LLAMAR MS-EMAIL
+    this.logger.log(`📡 CACHE MISS - Obteniendo email desde MS-Email`);
+    
+    const response: AxiosResponse<EmailDetail> = await axios.get(`${this.msEmailUrl}/emails/${emailId}`, {
+      headers: {
+        'Authorization': authHeader // 🎯 Pasar JWT directamente
+      }
+    });
+
+    // 3️⃣ GUARDAR EN CACHE
+    await this.cacheService.set(cacheKey, response.data, this.CACHE_TTL.DETAIL);
+    
+    this.logger.log(`✅ Email obtenido y guardado en cache`);
+    
+    return {
+      success: true,
+      source: 'orchestrator-api',
+      data: response.data
+    };
+
+  } catch (error) {
+    console.log(error);
+    const apiError = error as AxiosError<ErrorResponse>;
+    this.logger.error(`❌ Error obteniendo email con JWT:`, apiError.message);
+    
+    if (apiError.response?.status === 404) {
       throw new HttpException(
-        `Error obteniendo email: ${apiError.response?.data?.message || apiError.message}`,
-        HttpStatus.INTERNAL_SERVER_ERROR
+        `Email ${emailId} no encontrado`,
+        HttpStatus.NOT_FOUND
       );
     }
-  }
-
-  /**
-   * 🧹 Limpiar cache de cuenta Gmail (útil después de sync)
-   */
-  async clearGmailAccountCache(cuentaGmailId: string): Promise<void> {
-    try {
-      this.logger.log(`🧹 Limpiando cache para cuenta Gmail ${cuentaGmailId}`);
-      
-      await Promise.all([
-        this.cacheService.deletePattern(`inbox:${cuentaGmailId}`),
-        this.cacheService.deletePattern(`search:${cuentaGmailId}`),
-        this.cacheService.deletePattern(`stats:${cuentaGmailId}`),
-        this.cacheService.deletePattern(`detail:${cuentaGmailId}`)
-      ]);
-      
-      this.logger.log(`✅ Cache limpiado para cuenta Gmail ${cuentaGmailId}`);
-    } catch (error) {
-      console.error(error);
-      this.logger.error(`❌ Error limpiando cache:`, error);
+    
+    if (apiError.response?.status === 401) {
+      throw new HttpException(
+        'Token JWT inválido o expirado',
+        HttpStatus.UNAUTHORIZED
+      );
     }
+    
+    throw new HttpException(
+      `Error obteniendo email: ${apiError.response?.data?.message || apiError.message}`,
+      HttpStatus.INTERNAL_SERVER_ERROR
+    );
   }
+}
+
+/**
+ * 🔧 Extraer User ID del JWT token (en orchestrator)
+ */
+
+private extractUserIdFromJWT(authHeader: string): number | null {
+  try {
+    const token = authHeader.replace('Bearer ', '');
+    const parts = token.split('.');
+    
+    if (parts.length !== 3) return null;
+
+    const payloadBase64 = parts[1];
+    const payloadJson = Buffer.from(payloadBase64, 'base64').toString('utf-8');
+    
+    // 🎯 TIPADO ESPECÍFICO (elimina warning de 'any')
+    const payload = JSON.parse(payloadJson) as { 
+      sub?: number; 
+      email?: string; 
+      iat?: number; 
+      exp?: number; 
+    };
+    
+    // 🎯 VALIDACIÓN EXPLÍCITA (elimina unsafe member access)
+    if (typeof payload.sub !== 'number') {
+      this.logger.warn('JWT payload.sub no es válido');
+      return null;
+    }
+
+    return payload.sub;
+
+  } catch (error) {
+    this.logger.error('Error extrayendo userId del JWT:', error);
+    return null;
+  }
+}
 }

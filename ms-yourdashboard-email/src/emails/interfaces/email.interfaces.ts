@@ -61,6 +61,7 @@ export interface EmailDetail extends EmailMetadata {
   toEmails: string[];
   bodyText?: string;
   bodyHtml?: string;
+
 }
 
 export interface EmailListResponse {

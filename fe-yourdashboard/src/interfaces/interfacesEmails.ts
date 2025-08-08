@@ -30,4 +30,5 @@ export interface IEmail {
   body?: string;
   date: string;
   read?: boolean;
+
 }

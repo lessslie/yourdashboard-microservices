@@ -261,7 +261,8 @@ export class AuthOrchestratorController {
   })
   @ApiUnauthorizedResponse({
     description: 'Token faltante o inválido',
-    type: AuthErrorResponseDto
+    type: AuthErrorResponseDto,
+    
   })
   async listarCuentasGmail(@Req() req: Request): Promise<CuentasGmailResponseDto> {
     const authHeader = req.headers?.authorization;

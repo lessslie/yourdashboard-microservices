@@ -292,20 +292,35 @@ export class DatabaseService implements OnModuleDestroy {
     await this.query(query, [cuentaId, accessToken, refreshToken || null, expiresAt || null]);
     this.logger.log(`🔄 Tokens actualizados para cuenta Gmail ID: ${cuentaId}`);
   }
-
-  async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void> {
-    const query = `
-      UPDATE cuentas_gmail_asociadas 
-      SET esta_activa = FALSE 
-      WHERE id = $1 AND usuario_principal_id = $2
-    `;
-    await this.query(query, [cuentaId, usuarioId]);
-    this.logger.log(`📧 Cuenta Gmail desconectada: ID ${cuentaId}`);
-  }
+//*************
+// este desconectarCuentaGmail solo la update activa=false
+// ********************** */
+  // async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void> {
+  //   const query = `
+  //     UPDATE cuentas_gmail_asociadas 
+  //     SET esta_activa = FALSE 
+  //     WHERE id = $1 AND usuario_principal_id = $2
+  //   `;
+  //   await this.query(query, [cuentaId, usuarioId]);
+  //   this.logger.log(`📧 Cuenta Gmail desconectada: ID ${cuentaId}`);
+  // }
 
   // ================================
   // 📨 EMAILS SINCRONIZADOS
   // ================================
+
+async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void> {
+  const query = `
+    DELETE FROM cuentas_gmail_asociadas 
+    WHERE id = $1 AND usuario_principal_id = $2
+  `;
+  
+  const result = await this.query(query, [cuentaId, usuarioId]);
+  
+  this.logger.log(`🗑️ Cuenta Gmail ELIMINADA: ID ${cuentaId} (${result.rowCount} filas afectadas)`);
+  
+  // El CASCADE automáticamente borrará todos los emails_sincronizados
+}
 
   async sincronizarEmails(emails: Omit<EmailSincronizado, 'id' | 'fecha_sincronizado'>[]): Promise<number> {
     if (emails.length === 0) return 0;
