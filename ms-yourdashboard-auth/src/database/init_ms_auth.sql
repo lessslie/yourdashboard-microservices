@@ -410,7 +410,7 @@ SELECT
     is_nullable,
     column_default
 FROM information_schema.columns
-WHERE table_name IN ('usuarios_principales', 'cuentas_gmail_asociadas', 'emails_sincronizados')
+WHERE table_name IN ('usuarios_principales','sesiones_jwt','audit_eliminaciones', 'cuentas_gmail_asociadas', 'emails_sincronizados')
 ORDER BY table_name, ordinal_position;
 
 -- Verificar índices creados

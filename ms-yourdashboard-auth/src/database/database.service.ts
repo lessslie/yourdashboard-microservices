@@ -13,7 +13,7 @@ import {
   CrearSesionDto,
   EstadisticasUsuario,
   CuentaGmailResponse,
-  UserTokens,
+  // UserTokens,
 
 } from '../auth/interfaces/auth.interfaces';
 
@@ -449,30 +449,30 @@ async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void>
 
   // ================================
   // 🔑 TOKENS DE USUARIO
- // TokensService
-async saveUserTokens(userId: number, tokens: UserTokens ): Promise<void> {
-  const query = `
-    INSERT INTO user_tokens (user_id, access_token, refresh_token, expires_at, created_at)
-    VALUES ($1, $2, $3, $4, NOW())
-    ON CONFLICT (user_id) 
-    DO UPDATE SET 
-      access_token = $2,
-      refresh_token = $3,
-      expires_at = $4,
-      updated_at = NOW()
-  `;
+ // TokensService(CODIGO MUERTOO?????)
+// async saveUserTokens(userId: number, tokens: UserTokens ): Promise<void> {
+//   const query = `
+//     INSERT INTO user_tokens (user_id, access_token, refresh_token, expires_at, created_at)
+//     VALUES ($1, $2, $3, $4, NOW())
+//     ON CONFLICT (user_id) 
+//     DO UPDATE SET 
+//       access_token = $2,
+//       refresh_token = $3,
+//       expires_at = $4,
+//       updated_at = NOW()
+//   `;
 
-  const expiresAt = (typeof tokens.expiry_date === 'string' || typeof tokens.expiry_date === 'number' || tokens.expiry_date instanceof Date)
-    ? new Date(tokens.expiry_date)
-    : new Date(Date.now() + 86400000); // 24 horas por defecto
+//   const expiresAt = (typeof tokens.expiry_date === 'string' || typeof tokens.expiry_date === 'number' || tokens.expiry_date instanceof Date)
+//     ? new Date(tokens.expiry_date)
+//     : new Date(Date.now() + 86400000); // 24 horas por defecto
 
-  await this.query(query, [
-    userId,
-    tokens.access_token,
-    tokens.refresh_token || null,
-    expiresAt
-  ]);
-}
+//   await this.query(query, [
+//     userId,
+//     tokens.access_token,
+//     tokens.refresh_token || null,
+//     expiresAt
+//   ]);
+// }
 
 
   // ================================
