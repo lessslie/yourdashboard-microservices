@@ -11,6 +11,7 @@ import { ICuentaGmail } from "@/interfaces/interfacesAuth";
 export const useEmails = (cuentasGmail: ICuentaGmail[], userId: number) => {
   const [initLoading, setInitLoading] = useState(true);
   const [viewAll, setViewAll] = useState(true);
+
   const [list, setList] = useState<IDataEmail>({
     emails: [],
     hasNextPage: false,
@@ -123,6 +124,7 @@ export const useEmails = (cuentasGmail: ICuentaGmail[], userId: number) => {
               subject: email.subject,
               date: email.receivedDate,
               read: email.isRead,
+              
             })
           ),
           hasNextPage: dataEmails.hasNextPage,
@@ -149,6 +151,13 @@ export const useEmails = (cuentasGmail: ICuentaGmail[], userId: number) => {
     userId,
     viewAll,
   ]);
+  useEffect(() => {
+    if (cuentasGmail.length === 1) {
+      const únicaCuenta = cuentasGmail[0];
+      setSelectedCuentaGmailId(únicaCuenta.id);
+      setViewAll(false);
+    }
+  }, [cuentasGmail]);
 
   useEffect(() => {
     if (searchTerm !== "") {

@@ -5,10 +5,13 @@ import ListEmails from "./ListEmails";
 import { useUserData, useCuentasGmail, useAuth } from "../Auth/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { Content, Header } from "antd/es/layout/layout";
+import DetailsEmail from "./DetailsEmail";
 
 const { Footer } = Layout;
 
-const ViewEmails = () => {
+const ViewEmails = ({ emailId }: { emailId?: string }) => {
+  console.log("emailId", emailId);
+
   const router = useRouter();
   const { token, remuveToken } = useAuth();
   const { cuentasGmail } = useCuentasGmail();
@@ -57,11 +60,15 @@ const ViewEmails = () => {
         </div>
       </Header>
 
-      <ListEmails
-        userId={userData.id}
-        token={token}
-        cuentasGmail={cuentasGmail}
-      />
+      {emailId ? (
+        <DetailsEmail emailId={emailId} token={token} />
+      ) : (
+        <ListEmails
+          userId={userData.id}
+          token={token}
+          cuentasGmail={cuentasGmail}
+        />
+      )}
 
       <Footer style={{ textAlign: "center" }}>
         Inspiration Factory Copyright ©{new Date().getFullYear()}

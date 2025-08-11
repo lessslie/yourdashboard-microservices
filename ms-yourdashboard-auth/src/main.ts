@@ -63,9 +63,12 @@ async function bootstrap() {
   await app.listen(process.env.PORT ?? 3001);
 
   console.log(`🔐 MS-AUTH running on: ${await app.getUrl()}`);
-  console.log(`🔑 OAuth endpoint: http://localhost:3001/auth/google`);
-  console.log(`📊 Health check: http://localhost:3001/auth/health`);
-  console.log(`📚 Swagger API: http://localhost:3001/api`);
+  console.log(`📚 Swagger API: http://localhost:3003/api`);
+  console.log(`  - MS-Frontend: http://localhost:3000/auth`);
+  console.log(`  - MS-Auth: http://localhost:3001`);
+  console.log(`  - MS-Email: http://localhost:3002`);
+  console.log(`  - MS-Orchestrator: http://localhost:3003`);
+  console.log('  - MS-WhatsApp: http://localhost:3004');
   console.log('='.repeat(60));
 }
 

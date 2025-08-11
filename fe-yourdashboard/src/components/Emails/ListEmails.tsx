@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Button, List, Skeleton, Pagination, Card, Input } from "antd";
+import { Button, List, Skeleton, Pagination, Card, Input, Modal, Spin } from "antd";
+
 
 import { handleConnectService } from "../../services/emails/emails";
 import { DownOutlined, UpOutlined } from "@ant-design/icons";
@@ -7,6 +8,7 @@ import { DownOutlined, UpOutlined } from "@ant-design/icons";
 import { useEmails } from "./hooks/useEmails";
 import TabsTest from "./Tabs";
 import { ICuentaGmail } from "@/interfaces/interfacesAuth";
+import { useRouter } from "next/navigation";
 
 const ListEmails = ({
   userId,
@@ -17,7 +19,11 @@ const ListEmails = ({
   token: string;
   cuentasGmail: ICuentaGmail[];
 }) => {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [emailModalVisible, setEmailModalVisible] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [currentEmail, setCurrentEmail] = useState<any>(null);
   const {
     initLoading,
     list,
@@ -33,6 +39,8 @@ const ListEmails = ({
     viewAll,
     handleViewAll,
   } = useEmails(cuentasGmail, userId);
+  //console.log("list", list);
+  //console.log("cuentasGmail", cuentasGmail);
 
   const conectEmail = async () => {
     await handleConnectService(token);
@@ -54,9 +62,11 @@ const ListEmails = ({
                 📧 Cuentas de Gmail conectadas
                 <span> ({cuentasGmail.length})</span>
               </h4>
-              <Button type="primary" onClick={handleViewAll}>
-                Ver todos los emails
-              </Button>
+              {cuentasGmail.length > 1 && (
+                <Button type="primary" onClick={handleViewAll}>
+                  Ver todos los emails
+                </Button>
+              )}
               <div style={{ display: "flex", gap: "16px" }}>
                 <Button type="primary" onClick={conectEmail}>
                   Conectar mas de una cuenta
@@ -159,7 +169,12 @@ const ListEmails = ({
                       title={item.name}
                       description={item.subject}
                     />
-                    <Button type="primary">Leer mail</Button>
+                    <Button
+                      type="primary"
+                      onClick={() => router.push(`/dashboard/email/${item.id}`)}
+                    >
+                      Leer mail
+                    </Button>
                   </Skeleton>
                 </List.Item>
               )}
@@ -177,6 +192,18 @@ const ListEmails = ({
           </div>
         )}
       </Card>
+      <Modal
+        open={emailModalVisible}
+        onCancel={() => setEmailModalVisible(false)}
+        footer={null}
+        title={currentEmail?.subject || "Email"}
+      >
+        <Spin spinning={modalLoading}>
+          <div style={{ whiteSpace: "pre-wrap" }}>
+            {currentEmail?.body || "Sin contenido"}
+          </div>
+        </Spin>
+      </Modal>
     </div>
   );
 };

@@ -4,7 +4,9 @@ import {
   Post,
   Query,
   Param,
-  BadRequestException 
+  BadRequestException, 
+  Req,
+  UnauthorizedException
 } from '@nestjs/common';
 import { 
   ApiTags, 
@@ -14,6 +16,8 @@ import {
   ApiOkResponse,
   ApiBadRequestResponse,
   ApiNotFoundResponse,
+  ApiBearerAuth,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { EmailsOrchestratorService } from './emails.service';
 import {
@@ -21,6 +25,7 @@ import {
   OrchestratorStatsDto,
   OrchestratorErrorDto
 } from './dto';
+import { Request } from 'express';
 
 @Controller('emails')
 @ApiTags('Emails')
@@ -472,58 +477,69 @@ async getInboxAllAccounts(
   /**
    * 📧 GET /emails/:id - Email específico coordinado
    */
-  @Get(':id')
-  @ApiOperation({ 
-    summary: 'Obtener email por ID',
-    description: 'Coordina MS-Auth + MS-Email para obtener el contenido completo de un email específico.'
-  })
-  @ApiParam({ 
-    name: 'id', 
-    description: 'ID del email en Gmail', 
-    example: '1847a8e123456789' 
-  })
-  @ApiQuery({ name: 'cuentaGmailId', description: 'ID de la cuenta Gmail específica', example: '4' })
-  @ApiOkResponse({ 
-    description: 'Email obtenido exitosamente',
-    schema: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean', example: true },
-        source: { type: 'string', example: 'orchestrator' },
-        data: {
-          type: 'object',
-          properties: {
-            id: { type: 'string', example: '1847a8e123456789' },
-            subject: { type: 'string', example: 'Reunión de proyecto' },
-            fromEmail: { type: 'string', example: 'jefe@empresa.com' },
-            fromName: { type: 'string', example: 'Juan Pérez' },
-            receivedDate: { type: 'string', example: '2024-01-15T10:30:00Z' },
-            isRead: { type: 'boolean', example: false },
-            hasAttachments: { type: 'boolean', example: true },
-            toEmails: { type: 'array', items: { type: 'string' } },
-            bodyText: { type: 'string', example: 'Contenido del email...' },
-            bodyHtml: { type: 'string', example: '<p>Contenido del email...</p>' }
-          }
+@Get(':id')
+@ApiBearerAuth('JWT-auth') // Ahora usa JWT auth
+@ApiOperation({ 
+  summary: 'Obtener email por ID',
+  description: 'Coordina MS-Auth + MS-Email para obtener email específico. Solo necesita messageId + JWT token.'
+})
+@ApiParam({ 
+  name: 'id', 
+  description: 'ID del email en Gmail', 
+  example: '1847a8e123456789' 
+})
+@ApiOkResponse({ 
+  description: 'Email obtenido exitosamente',
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      source: { type: 'string', example: 'orchestrator' },
+      data: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: '1847a8e123456789' },
+          subject: { type: 'string', example: 'Reunión de proyecto' },
+          fromEmail: { type: 'string', example: 'jefe@empresa.com' },
+          fromName: { type: 'string', example: 'Juan Pérez' },
+          receivedDate: { type: 'string', example: '2024-01-15T10:30:00Z' },
+          isRead: { type: 'boolean', example: false },
+          hasAttachments: { type: 'boolean', example: true },
+          toEmails: { type: 'array', items: { type: 'string' } },
+          bodyText: { type: 'string', example: 'Contenido del email...' },
+          bodyHtml: { type: 'string', example: '<p>Contenido del email...</p>' },
+          sourceAccount: { type: 'string', example: 'usuario@gmail.com' },
+          sourceAccountId: { type: 'number', example: 4 }
         }
       }
     }
-  })
-  @ApiBadRequestResponse({ 
-    description: 'cuentaGmailId es requerido',
-    type: OrchestratorErrorDto 
-  })
-  @ApiNotFoundResponse({ 
-    description: 'Email no encontrado',
-    type: OrchestratorErrorDto 
-  })
-  async getEmailById(
-    @Param('id') emailId: string,
-    @Query('cuentaGmailId') cuentaGmailId: string
-  ) {
-    if (!cuentaGmailId) {
-      throw new BadRequestException('cuentaGmailId es requerido');
-    }
-
-    return this.emailsService.getEmailById(cuentaGmailId, emailId);
   }
+})
+@ApiUnauthorizedResponse({ 
+  description: 'Token JWT faltante o inválido',
+  type: OrchestratorErrorDto 
+})
+@ApiNotFoundResponse({ 
+  description: 'Email no encontrado',
+  type: OrchestratorErrorDto 
+})
+async getEmailById(
+  @Req() req: Request,
+  @Param('id') emailId: string
+) {
+  const authHeader = req.headers?.authorization;
+  
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido en Authorization header');
+  }
+
+  if (!emailId) {
+    throw new BadRequestException('ID del mensaje es requerido');
+  }
+
+  console.log(`🎭 ORCHESTRATOR - Obteniendo email ${emailId} con JWT token`);
+  
+  return this.emailsService.getEmailByIdWithJWT(authHeader, emailId);
+}
+  
 }

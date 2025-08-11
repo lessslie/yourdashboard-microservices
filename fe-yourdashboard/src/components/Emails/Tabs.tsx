@@ -1,5 +1,6 @@
 import React from "react";
 import { Button, Table } from "antd";
+
 import type { TableProps } from "antd";
 
 import { formatoDeFecha } from "@/utils/date";
@@ -66,9 +67,7 @@ const TabsTest = ({ data, handleConnectService }: TabsProps) => {
           >
             Ver emails
           </Button>
-          {/* <Button variant="solid" color="danger">
-            Desconectar
-          </Button> */}
+          
         </div>
       ),
     },
