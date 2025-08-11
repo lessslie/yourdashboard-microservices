@@ -1,29 +1,28 @@
-'use client';
+"use client";
 
-import { Input, Button, Space } from 'antd';
-import { useState } from 'react';
-import axios from 'axios';
-import { SendOutlined } from '@ant-design/icons';
+import { Input, Button, Space } from "antd";
+import { useState } from "react";
+import axios from "axios";
+import { SendOutlined } from "@ant-design/icons";
 
 export default function ChatInput({ chatId }: { chatId: string }) {
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState("");
 
   const handleSend = async () => {
     if (!message.trim()) return;
     try {
-      await axios.post('/api/messages', {
+      await axios.post("/api/messages", {
         chatId,
         message: message.trim(),
       });
-      // Opcional: mostrar feedback o actualizar mensajes
     } catch (error) {
-      console.error('Error enviando mensaje:', error);
+      console.error("Error enviando mensaje:", error);
     }
-    setMessage('');
+    setMessage("");
   };
 
   return (
-    <Space.Compact style={{ width: '100%' }}>
+    <Space.Compact style={{ width: "100%" }}>
       <Input
         placeholder="Escribe un mensaje..."
         value={message}

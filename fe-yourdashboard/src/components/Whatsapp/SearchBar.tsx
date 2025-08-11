@@ -1,19 +1,33 @@
-'use client';
+// 'use client';
 
-import { Input } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
-import { useState } from 'react';
-import { searchMessages } from '@/server/whatsapp/whatsapp';
+import { Input } from "antd";
+import { SearchOutlined } from "@ant-design/icons";
+import { useState } from "react";
+import { searchMessages } from "@/server/whatsapp/whatsapp";
+import { Conversation } from "@/interfaces/interfacesWhatsapp";
 
-export default function SearchBar({ onResults }: { onResults: (messages: any[]) => void }) {
-  const [search, setSearch] = useState('');
+interface SearchBarProps {
+  onResults: (results: Conversation[]) => void;
+}
+
+export default function SearchBar({ onResults }: SearchBarProps) {
+  const [search, setSearch] = useState("");
 
   const handleSearch = async (value: string) => {
-    console.log('Buscando:', value); // 🔍 <-- Aquí vemos lo que se escribe
     setSearch(value);
 
-    const results = await searchMessages(value);
-    onResults(results);
+    if (value.trim() === "") {
+      onResults([]);
+      return;
+    }
+
+    try {
+      const results = await searchMessages(value);
+      onResults(results);
+    } catch (error) {
+      console.error("Error al buscar mensajes:", error);
+      onResults([]);
+    }
   };
 
   return (

@@ -1,3 +1,4 @@
+import { Conversation, Message } from '@/interfaces/interfacesWhatsapp';
 import axios from 'axios';
 
 const API_URL = 'http://localhost:3004';
@@ -12,21 +13,12 @@ export const getConversations = async () => {
   }
 };
 
-
-
-interface Message {
-    id: string;
-    conversationId: string;
-    senderId: string;
-    content: string;
-    timestamp: string;
-}
-
 export const getMessagesByConversationId = async (conversationId: string): Promise<Message[]> => {
     try {
         const response = await axios.get<Message[]>(`${API_URL}/messages`, {
             params: { conversationId },
         });
+        console.log('Mensajes obtenidos:', response.data);
         return response.data;
     } catch (error) {
         console.error('Error al obtener los mensajes:', error);
@@ -35,7 +27,7 @@ export const getMessagesByConversationId = async (conversationId: string): Promi
 };
 
 
-export const searchMessages = async (query: string) => {
+export const searchMessages = async (query: string): Promise<Conversation[]> => {
   if (!query.trim()) return [];
 
   console.log('🔍 Haciendo petición al backend con:', query);
@@ -44,7 +36,12 @@ export const searchMessages = async (query: string) => {
       params: { q: query },
     });
     console.log('🔍 Respuesta del backend:', res.data);
-    return res.data.messages;
+    if (Array.isArray(res.data)) {
+      return res.data;
+    } else {
+      console.warn('⚠️ Respuesta no es un array:', res.data);
+      return [];
+    }
   } catch (error) {
     console.error('Error al buscar mensajes:', error);
     return [];
