@@ -1,6 +1,6 @@
 import axios from "axios";
 export const MS_ORCHES_URL =
-  process.env.NEXT_PUBLIC_MS_ORCHESTRATOR_URL || "http://localhost:3001";
+  process.env.NEXT_PUBLIC_MS_ORCHESTRATOR_URL || "http://localhost:3003";
 
 export const handleConnectService = async (token: string) => {
   try {
@@ -118,22 +118,37 @@ export const getSearchEmails = async (
   }
 };
 
-export const getEmailDetails = async (
-  token: string,
-  emailId: string,
-  cuentaGmailId: string
-) => {
+export const getEmailDetails = async (token: string, emailId: string) => {
   try {
     const response = await axios.get(`${MS_ORCHES_URL}/emails/${emailId}`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
-      params: {
-        cuentaGmailId,
-      },
     });
     return response.data;
   } catch (error) {
     console.error(error);
+  }
+};
+
+export const postEmailSync = async (token: string, cuentaGmailId: string) => {
+  console.log("cuentaGmailId", cuentaGmailId);
+
+  try {
+    const response = await axios.post(
+      `${MS_ORCHES_URL}/emails/sync/incremental`,
+      {}, // body vacío
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        params: {
+          cuentaGmailId,
+        },
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error sincronizando email:", error);
   }
 };

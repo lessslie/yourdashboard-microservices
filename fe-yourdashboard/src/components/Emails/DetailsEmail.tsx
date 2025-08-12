@@ -23,7 +23,7 @@ const DetailsEmail = ({
   useEffect(() => {
     const fetchDetails = async () => {
       try {
-        const response = await getEmailDetails(token, emailId, "41");
+        const response = await getEmailDetails(token, emailId);
         setEmailDetails({
           subject: response.data.subject,
           fromEmail: response.data.fromEmail,
