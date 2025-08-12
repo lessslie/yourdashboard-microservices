@@ -5,7 +5,10 @@ import {
   EmailSearchResponse, 
   EmailResult,
   GlobalSearchResponse,
-  AuthProfileResponse 
+  AuthProfileResponse,
+  WhatsappSearchResponse,
+  WhatsappResult,
+  WhatsappConversationRaw
 } from './interfaces/search.interfaces';
 
 @Injectable()
@@ -42,33 +45,58 @@ export class SearchService {
     // Extraer userId del token JWT
     const userId = await this.extractUserIdFromToken(authHeader);
 
-    // Por ahora solo ejecutamos búsqueda en emails
-    const emailsResult = await this.searchInEmails(userId, query, page, limit);
+    // Por ahora solo ejecutamos búsqueda en emails y whatsapp
+    console.log('[SEARCH] Iniciando búsqueda en emails y whatsapp para userId:', userId);
+    console.log('[SEARCH] Parámetros de búsqueda:', { query, page, limit });
+   const [emailsResult, whatsappResult] = await Promise.allSettled([
+  this.searchInEmails(userId, query, page, limit),
+  this.searchInWhatsapp(userId, query, page, limit)
+]);
 
-    // TODO: Cuando estén listos los otros microservicios, cambiar a:
+    // NOTA: Cuando estén listos los otros microservicios, cambiar a:
     // const [emailsResult, calendarResult, whatsappResult] = await Promise.allSettled([
     //   this.searchInEmails(userId, query, page, limit),
     //   this.searchInCalendar(userId, query, page, limit),
     //   this.searchInWhatsapp(userId, query, page, limit)
     // ]);
 
-    // Procesar resultado de emails
-    let emailsTotal = 0;
-    let emailsResults: EmailResult[] = [];
-    let accountsSearched: string[] = [];
+   // Procesar resultado de emails
+let emailsTotal = 0;
+let emailsResults: EmailResult[] = [];
+let accountsSearched: string[] = [];
 
-    if (emailsResult) {
-      console.log('[SEARCH] Procesando resultado de emails:', {
-        hasEmails: !!emailsResult.emails,
-        totalEmails: emailsResult.total,
-        emailCount: emailsResult.emails?.length
-      });
-      
-      // Los datos están directamente en emailsResult, no en emailsResult.data
-      emailsTotal = emailsResult.total || 0;
-      emailsResults = emailsResult.emails || [];
-      accountsSearched = emailsResult.accountsSearched || [];
-    }
+if (emailsResult.status === 'fulfilled' && emailsResult.value) {
+  console.log('[SEARCH] Procesando resultado de emails:', {
+    hasEmails: !!emailsResult.value.emails,
+    totalEmails: emailsResult.value.total,
+    emailCount: emailsResult.value.emails?.length
+  });
+  
+  emailsTotal = emailsResult.value.total || 0;
+  emailsResults = emailsResult.value.emails || [];
+  accountsSearched = emailsResult.value.accountsSearched || [];
+} else {
+  console.error('[SEARCH] Error en emails (continuando con otros servicios):', 
+    emailsResult.status === 'rejected' ? emailsResult.reason : 'Unknown error');
+}
+//****************************************************************************** */
+// Agregar procesamiento de whatsapp después del procesamiento de emails:
+// Procesar resultado de WhatsApp
+let whatsappTotal = 0;
+let whatsappResults: WhatsappResult[] = [];
+
+if (whatsappResult.status === 'fulfilled' && whatsappResult.value) {
+  console.log('[SEARCH] Procesando resultado de whatsapp:', {
+    hasResults: !!whatsappResult.value.results,
+    totalResults: whatsappResult.value.total,
+    resultsCount: whatsappResult.value.results?.length
+  });
+  
+  whatsappTotal = whatsappResult.value.total || 0;
+  whatsappResults = whatsappResult.value.results || [];
+} else if (whatsappResult.status === 'rejected') {
+  console.error('[SEARCH] Error en whatsapp (continuando con otros servicios):', whatsappResult.reason);
+}
 
     return {
       success: true,
@@ -86,17 +114,17 @@ export class SearchService {
           accountsSearched: []
         },
         whatsapp: {
-          results: [],
-          total: 0,
+          results: whatsappResults,
+          total: whatsappTotal,
           accountsSearched: []
         }
       },
       summary: {
-        totalResults: emailsTotal, // + calendarTotal + whatsappTotal
+        totalResults: emailsTotal + whatsappTotal,// + calendarTotal + whatsappTotal
         resultsPerSource: {
           emails: emailsTotal,
-          calendar: 0, // calendarTotal
-          whatsapp: 0  // whatsappTotal
+          calendar: 0, // de 0 a calendarTotal cuando implementen el uso de userId
+          whatsapp: whatsappTotal  //de 0 a whatsappTotal cuando implementen el uso de userId
         }
       }
     };
@@ -205,21 +233,53 @@ export class SearchService {
   // }
 
   /**
-   * 💬 Buscar en microservicio de whatsapp (PENDIENTE)
+   * 💬 Buscar en microservicio de whatsapp (PENDIENTE de completar por userId)
    */
-  // private async searchInWhatsapp(userId: string, query: string, page: string, limit: string): Promise<WhatsappSearchResponse | null> {
-  //   try {
-  //     const url = `${this.msWhatsappUrl}/whatsapp/search`;
-  //     const params = { userId, q: query, page, limit };
-  //     
-  //     console.log(`[SEARCH-WHATSAPP] Llamando a: ${url}`, params);
-  //     
-  //     const response: AxiosResponse<WhatsappSearchResponse> = await axios.get(url, { params });
-  //     
-  //     return response.data;
-  //   } catch (error) {
-  //     console.error('[SEARCH-WHATSAPP] Error:', error instanceof Error ? error.message : 'Error desconocido');
-  //     return null;
-  //   }
-  // }
+private async searchInWhatsapp(
+  userId: string,
+  query: string,
+  page: string,
+  limit: string
+): Promise<WhatsappSearchResponse | null> {
+  try {
+    const msWhatsappUrl = this.configService.get<string>('MS_WHATSAPP_URL') || 'http://localhost:3004';
+    const url = `${msWhatsappUrl}/search`;
+    const params = {
+      q: query,
+      userId: userId
+    };
+    
+    console.log(page, limit);
+    console.log(`[SEARCH-WHATSAPP] Llamando a: ${url}`, params);
+    
+    const response: AxiosResponse<WhatsappConversationRaw[]> = await axios.get(url, { params });
+    
+    console.log('[SEARCH-WHATSAPP] Respuesta recibida:', {
+      status: response.status,
+      resultCount: response.data?.length || 0,
+      dataPreview: JSON.stringify(response.data).substring(0, 200) + '...'
+    });
+
+    return {
+      results: response.data.map((conversation: WhatsappConversationRaw): WhatsappResult => ({
+        id: conversation.conversation_id || conversation.id || '',
+        message: conversation.last_message || conversation.message || '',
+        from: conversation.name || conversation.phone || 'Unknown',
+        timestamp: conversation.last_message_date || conversation.timestamp || new Date().toISOString(),
+        chatId: conversation.conversation_id || conversation.id,
+        type: 'conversation'
+      })),
+      total: response.data.length
+    };
+  } catch (error) {
+    console.error('[SEARCH-WHATSAPP] Error completo:', error);
+    if (axios.isAxiosError(error)) {
+      console.error('[SEARCH-WHATSAPP] Detalles del error Axios:', {
+        status: error.response?.status,
+        message: error.message
+      });
+    }
+    return null;
+  }
+}
 }
