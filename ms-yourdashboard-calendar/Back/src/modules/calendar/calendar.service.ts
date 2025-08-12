@@ -194,6 +194,4 @@ export class CalendarService {
       throw new HttpException(`Error sharing calendar: ${error.message}`, 500);
     }
   }
-
-  //... otros métodos como searchEvents, createPrivateEvent, etc.
 }
