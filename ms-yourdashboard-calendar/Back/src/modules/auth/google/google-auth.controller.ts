@@ -1,5 +1,5 @@
 import { Controller, Post, Body } from '@nestjs/common';
-import { GoogleAuthService } from './google-auth.service'
+import { GoogleAuthService } from './google-auth.service';
 @Controller('auth')
 export class GoogleAuthController {
   constructor(private readonly googleAuthService: GoogleAuthService) {}

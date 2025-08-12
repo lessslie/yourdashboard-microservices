@@ -1,7 +1,7 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { DatabaseService } from './database.service';
-import { CalendarController } from 'src/calendar/calendar.controller';
 
+@Global()
 @Module({
   providers: [DatabaseService],
   exports: [DatabaseService],

@@ -6,4 +6,3 @@ export class CalendarEvent {
   endDate: Date;
   attendees: string[];
 }
-  

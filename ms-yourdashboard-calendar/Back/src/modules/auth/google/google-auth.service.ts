@@ -15,9 +15,12 @@ export class GoogleAuthService {
         grant_type: 'authorization_code',
       });
 
-      return res.data; // Contiene access_token, refresh_token, expires_in, etc.
+      return res.data;
     } catch (error: any) {
-      this.logger.error('Error exchanging code:', error.response?.data || error.message);
+      this.logger.error(
+        'Error exchanging code:',
+        error.response?.data || error.message,
+      );
       throw new HttpException('Error exchanging code', 500);
     }
   }
