@@ -201,8 +201,10 @@ export class CalendarService {
     }
   }
 
+
+ 
   /**
-   * ➕ Crear evento con token
+   * ➕ Crear evento con token (CON AUTO-REFRESH)
    */
   async createEventWithToken(
     accessToken: string, 
@@ -212,8 +214,17 @@ export class CalendarService {
     try {
       this.logger.log(`➕ Creando evento para cuenta Gmail ${cuentaGmailId}`);
 
+      const cuentaGmailIdNum = parseInt(cuentaGmailId);
+      
+      if (isNaN(cuentaGmailIdNum)) {
+        throw new Error('cuentaGmailId debe ser un número válido');
+      }
+
+      // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
+      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+
       const oauth2Client = new google.auth.OAuth2();
-      oauth2Client.setCredentials({ access_token: accessToken });
+      oauth2Client.setCredentials({ access_token: validAccessToken });
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
       const response = await calendar.events.insert({
@@ -223,7 +234,6 @@ export class CalendarService {
       });
 
       // 🎯 GUARDAR EN BD EN BACKGROUND (como MS-Email)
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
       if (!isNaN(cuentaGmailIdNum)) {
         this.saveEventToDB(response.data, cuentaGmailIdNum).catch(err => {
           this.logger.debug(`Background save error (ignorado):`, err);
@@ -239,8 +249,9 @@ export class CalendarService {
     }
   }
 
+
   /**
-   * ➕ Crear evento privado con token
+   * ➕ Crear evento privado con token (CON AUTO-REFRESH)
    */
   async createPrivateEventWithToken(
     accessToken: string,
@@ -250,8 +261,17 @@ export class CalendarService {
     try {
       this.logger.log(`➕ Creando evento PRIVADO para cuenta Gmail ${cuentaGmailId}`);
 
+      const cuentaGmailIdNum = parseInt(cuentaGmailId);
+      
+      if (isNaN(cuentaGmailIdNum)) {
+        throw new Error('cuentaGmailId debe ser un número válido');
+      }
+
+      // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
+      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+
       const oauth2Client = new google.auth.OAuth2();
-      oauth2Client.setCredentials({ access_token: accessToken });
+      oauth2Client.setCredentials({ access_token: validAccessToken });
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
       const response = await calendar.events.insert({
@@ -268,7 +288,6 @@ export class CalendarService {
       });
 
       // Guardar en BD en background
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
       if (!isNaN(cuentaGmailIdNum)) {
         this.saveEventToDB(response.data, cuentaGmailIdNum).catch(err => {
           this.logger.debug(`Background save error (ignorado):`, err);
@@ -284,7 +303,7 @@ export class CalendarService {
     }
   }
 
-  
+
 
   /**
    * ✏️ Actualizar evento con token (CON AUTO-REFRESH)
@@ -386,8 +405,9 @@ export class CalendarService {
   }
 
   // ================================
+ 
   /**
-   * 🤝 Compartir calendario con token
+   * 🤝 Compartir calendario con token (CON AUTO-REFRESH)
    */
   async shareCalendarWithToken(
     accessToken: string,
@@ -399,8 +419,17 @@ export class CalendarService {
     try {
       this.logger.log(`🤝 Compartiendo calendario con ${userEmail} como ${role}`);
 
+      const cuentaGmailIdNum = parseInt(cuentaGmailId);
+      
+      if (isNaN(cuentaGmailIdNum)) {
+        throw new Error('cuentaGmailId debe ser un número válido');
+      }
+
+      // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
+      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+
       const oauth2Client = new google.auth.OAuth2();
-      oauth2Client.setCredentials({ access_token: accessToken });
+      oauth2Client.setCredentials({ access_token: validAccessToken });
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
       const response = await calendar.acl.insert({
@@ -422,6 +451,7 @@ export class CalendarService {
       throw new Error('Error al compartir calendario');
     }
   }
+s
 
   /**
    * 📊 Obtener estadísticas con token
@@ -471,8 +501,9 @@ export class CalendarService {
     }
   }
 
+
   /**
-   * 🔄 Sincronizar eventos con token
+   * 🔄 Sincronizar eventos con token (CON AUTO-REFRESH)
    */
   async syncEventsWithToken(
     accessToken: string,
@@ -488,9 +519,12 @@ export class CalendarService {
         throw new Error('cuentaGmailId debe ser un número válido');
       }
       
+      // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
+      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+      
       // Obtener eventos desde Google Calendar API
       const oauth2Client = new google.auth.OAuth2();
-      oauth2Client.setCredentials({ access_token: accessToken });
+      oauth2Client.setCredentials({ access_token: validAccessToken });
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
       const timeMin = options.timeMin || new Date().toISOString();
@@ -559,18 +593,29 @@ export class CalendarService {
   // 🔧 MÉTODOS PRIVADOS AUXILIARES
   // ================================
 
+ 
   /**
-   * 📅 Obtener eventos desde Google Calendar API
+   * 📅 Obtener eventos desde Google Calendar API (CON AUTO-REFRESH)
    */
   private async getEventsFromCalendarAPI(
     accessToken: string,
+    cuentaGmailId: string,
     timeMin: string,
     timeMax?: string,
     page: number = 1,
     limit: number = 10
   ): Promise<CalendarListResponse> {
+    const cuentaGmailIdNum = parseInt(cuentaGmailId);
+    
+    if (isNaN(cuentaGmailIdNum)) {
+      throw new Error('cuentaGmailId debe ser un número válido');
+    }
+
+    // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
+    const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+
     const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({ access_token: accessToken });
+    oauth2Client.setCredentials({ access_token: validAccessToken });
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
     // 🎯 Para paginación en Calendar API, usamos pageToken en lugar de skip/limit
@@ -606,18 +651,30 @@ export class CalendarService {
     };
   }
 
+
+  
   /**
-   * 🔍 Buscar eventos desde Google Calendar API
+   * 🔍 Buscar eventos desde Google Calendar API (CON AUTO-REFRESH)
    */
   private async searchEventsFromCalendarAPI(
     accessToken: string,
+    cuentaGmailId: string,
     timeMin: string,
     searchTerm: string,
     page: number = 1,
     limit: number = 10
   ): Promise<CalendarListResponse> {
+    const cuentaGmailIdNum = parseInt(cuentaGmailId);
+    
+    if (isNaN(cuentaGmailIdNum)) {
+      throw new Error('cuentaGmailId debe ser un número válido');
+    }
+
+    // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
+    const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+
     const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({ access_token: accessToken });
+    oauth2Client.setCredentials({ access_token: validAccessToken });
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
     const response = await calendar.events.list({
@@ -650,13 +707,21 @@ export class CalendarService {
       searchTerm
     };
   }
-
   /**
-   * 📊 Obtener estadísticas desde Google Calendar API
+   * 📊 Obtener estadísticas desde Google Calendar API (CON AUTO-REFRESH)
    */
-  private async getStatsFromCalendarAPI(accessToken: string): Promise<CalendarStats> {
+  private async getStatsFromCalendarAPI(accessToken: string, cuentaGmailId: string): Promise<CalendarStats> {
+    const cuentaGmailIdNum = parseInt(cuentaGmailId);
+    
+    if (isNaN(cuentaGmailIdNum)) {
+      throw new Error('cuentaGmailId debe ser un número válido');
+    }
+
+    // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
+    const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+
     const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({ access_token: accessToken });
+    oauth2Client.setCredentials({ access_token: validAccessToken });
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
     const now = new Date().toISOString();
