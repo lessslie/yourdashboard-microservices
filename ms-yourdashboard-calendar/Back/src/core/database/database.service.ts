@@ -461,6 +461,190 @@ export class DatabaseService implements OnModuleDestroy {
     }
   }
 
+
+  // ================================
+  // 🔄 REFRESH TOKEN METHODS
+  // ================================
+
+  /**
+   * 🔍 Obtener cuenta Gmail por ID para Calendar
+   */
+  async getGmailAccountById(cuentaGmailId: number): Promise<{
+    id: number;
+    email_gmail: string;
+    access_token: string;
+    refresh_token?: string;
+    token_expira_en?: Date;
+    usuario_principal_id: number;
+  } | null> {
+    try {
+      this.logger.log(`🔍 Obteniendo cuenta Gmail ID: ${cuentaGmailId}`);
+
+      const query = `
+        SELECT 
+          id, email_gmail, access_token, refresh_token, 
+          token_expira_en, usuario_principal_id
+        FROM cuentas_gmail_asociadas 
+        WHERE id = $1 AND esta_activa = TRUE
+      `;
+
+      const result = await this.query(query, [cuentaGmailId]);
+      
+      if (result.rows.length === 0) {
+        this.logger.warn(`⚠️ Cuenta Gmail ${cuentaGmailId} no encontrada o inactiva`);
+        return null;
+      }
+
+      return result.rows[0];
+
+    } catch (error) {
+      this.logger.error(`❌ Error obteniendo cuenta Gmail ${cuentaGmailId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 🔄 Renovar Google Access Token usando Refresh Token
+   */
+  async refreshGoogleToken(cuentaGmailId: number): Promise<string | null> {
+    try {
+      this.logger.log(`🔄 Intentando renovar token para cuenta ${cuentaGmailId}`);
+
+      // 1️⃣ Obtener refresh token de BD
+      const account = await this.getGmailAccountById(cuentaGmailId);
+      
+      if (!account) {
+        throw new Error(`Cuenta Gmail ${cuentaGmailId} no encontrada`);
+      }
+
+      if (!account.refresh_token) {
+        throw new Error(`Refresh token no disponible para cuenta ${cuentaGmailId}`);
+      }
+
+      // 2️⃣ Llamar a Google OAuth2 para renovar token
+      const { google } = require('googleapis');
+      
+      const oauth2Client = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+      );
+
+      oauth2Client.setCredentials({
+        refresh_token: account.refresh_token
+      });
+
+      // 3️⃣ Obtener nuevo access token
+      const { credentials } = await oauth2Client.refreshAccessToken();
+      const newAccessToken = credentials.access_token;
+
+      if (!newAccessToken) {
+        throw new Error('No se pudo obtener nuevo access token');
+      }
+
+      // 4️⃣ Calcular nueva fecha de expiración (1 hora)
+      const newExpiresAt = new Date(Date.now() + 3600000); // 1 hora
+
+      // 5️⃣ Actualizar en BD
+      const updateQuery = `
+        UPDATE cuentas_gmail_asociadas 
+        SET 
+          access_token = $1, 
+          token_expira_en = $2,
+          ultima_sincronizacion = NOW()
+        WHERE id = $3
+      `;
+
+      await this.query(updateQuery, [newAccessToken, newExpiresAt, cuentaGmailId]);
+
+      this.logger.log(`✅ Token renovado exitosamente para cuenta ${cuentaGmailId}`);
+      return newAccessToken;
+
+    } catch (error) {
+      this.logger.error(`❌ Error renovando token para cuenta ${cuentaGmailId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * 🔐 Obtener Access Token válido (con auto-refresh si es necesario)
+   */
+  async getValidAccessToken(cuentaGmailId: number): Promise<string> {
+    try {
+      this.logger.log(`🔐 Obteniendo token válido para cuenta ${cuentaGmailId}`);
+
+      // 1️⃣ Obtener cuenta y verificar token actual
+      const account = await this.getGmailAccountById(cuentaGmailId);
+      
+      if (!account) {
+        throw new Error(`Cuenta Gmail ${cuentaGmailId} no encontrada`);
+      }
+
+      if (!account.access_token) {
+        throw new Error(`Access token no disponible para cuenta ${cuentaGmailId}`);
+      }
+
+      // 2️⃣ Verificar si el token está por expirar (menos de 5 minutos)
+      const now = new Date();
+      const expiresAt = account.token_expira_en;
+      const timeToExpire = expiresAt ? expiresAt.getTime() - now.getTime() : 0;
+      const fiveMinutesInMs = 5 * 60 * 1000;
+
+      // 3️⃣ Si el token está por expirar o ya expiró, renovarlo
+      if (timeToExpire < fiveMinutesInMs) {
+        this.logger.warn(`⏰ Token expirando en ${Math.round(timeToExpire / 1000)}s, renovando...`);
+        
+        const newToken = await this.refreshGoogleToken(cuentaGmailId);
+        
+        if (!newToken) {
+          throw new Error(`No se pudo renovar el token para cuenta ${cuentaGmailId}`);
+        }
+
+        return newToken;
+      }
+
+      // 4️⃣ Token actual es válido
+      this.logger.log(`✅ Token actual válido para cuenta ${cuentaGmailId}`);
+      return account.access_token;
+
+    } catch (error) {
+      this.logger.error(`❌ Error obteniendo token válido:`, error);
+      throw new Error(`Token inválido y no se pudo renovar: ${error.message}`);
+    }
+  }
+
+  /**
+   * 🔍 Obtener cuenta Gmail por User ID (para compatibilidad con CalendarService)
+   */
+  async getGmailAccountByUserId(userId: number): Promise<{
+    id: number;
+    google_token: string;
+    refresh_token?: string;
+  } | null> {
+    try {
+      // Obtener la primera cuenta activa del usuario
+      const query = `
+        SELECT id, access_token as google_token, refresh_token
+        FROM cuentas_gmail_asociadas 
+        WHERE usuario_principal_id = $1 AND esta_activa = TRUE
+        ORDER BY fecha_conexion DESC
+        LIMIT 1
+      `;
+
+      const result = await this.query(query, [userId]);
+      
+      if (result.rows.length === 0) {
+        this.logger.warn(`⚠️ No se encontró cuenta Gmail activa para usuario ${userId}`);
+        return null;
+      }
+
+      return result.rows[0];
+
+    } catch (error) {
+      this.logger.error(`❌ Error obteniendo cuenta por user ID:`, error);
+      return null;
+    }
+  }
+
   // ================================
   // 🔄 MÉTODOS DE COMPATIBILIDAD (para que no rompan su código existente)
   // ================================
@@ -477,4 +661,5 @@ export class DatabaseService implements OnModuleDestroy {
       throw new Error('Error ejecutando la consulta SQL');
     }
   }
+  
 }

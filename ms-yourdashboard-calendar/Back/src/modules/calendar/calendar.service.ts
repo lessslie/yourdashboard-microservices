@@ -284,8 +284,10 @@ export class CalendarService {
     }
   }
 
+  
+
   /**
-   * ✏️ Actualizar evento con token
+   * ✏️ Actualizar evento con token (CON AUTO-REFRESH)
    */
   async updateEventWithToken(
     accessToken: string,
@@ -296,8 +298,17 @@ export class CalendarService {
     try {
       this.logger.log(`✏️ Actualizando evento ${eventId} para cuenta Gmail ${cuentaGmailId}`);
 
+      const cuentaGmailIdNum = parseInt(cuentaGmailId);
+      
+      if (isNaN(cuentaGmailIdNum)) {
+        throw new Error('cuentaGmailId debe ser un número válido');
+      }
+
+      // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
+      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+      
       const oauth2Client = new google.auth.OAuth2();
-      oauth2Client.setCredentials({ access_token: accessToken });
+      oauth2Client.setCredentials({ access_token: validAccessToken });
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
       // Convertir DTO a formato Google Calendar
@@ -317,12 +328,9 @@ export class CalendarService {
       });
 
       // Actualizar en BD en background
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
-      if (!isNaN(cuentaGmailIdNum)) {
-        this.updateEventInDB(eventId, response.data, cuentaGmailIdNum).catch(err => {
-          this.logger.debug(`Background update error (ignorado):`, err);
-        });
-      }
+      this.updateEventInDB(eventId, response.data, cuentaGmailIdNum).catch(err => {
+        this.logger.debug(`Background update error (ignorado):`, err);
+      });
 
       this.logger.log(`✅ Evento actualizado: ${eventId}`);
       return response.data;
@@ -334,7 +342,7 @@ export class CalendarService {
   }
 
   /**
-   * 🗑️ Eliminar evento con token
+   * 🗑️ Eliminar evento con token (CON AUTO-REFRESH)
    */
   async deleteEventWithToken(
     accessToken: string,
@@ -344,8 +352,17 @@ export class CalendarService {
     try {
       this.logger.log(`🗑️ Eliminando evento ${eventId} para cuenta Gmail ${cuentaGmailId}`);
 
+      const cuentaGmailIdNum = parseInt(cuentaGmailId);
+      
+      if (isNaN(cuentaGmailIdNum)) {
+        throw new Error('cuentaGmailId debe ser un número válido');
+      }
+
+      // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
+      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+      
       const oauth2Client = new google.auth.OAuth2();
-      oauth2Client.setCredentials({ access_token: accessToken });
+      oauth2Client.setCredentials({ access_token: validAccessToken });
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
       await calendar.events.delete({
@@ -368,6 +385,7 @@ export class CalendarService {
     }
   }
 
+  // ================================
   /**
    * 🤝 Compartir calendario con token
    */
