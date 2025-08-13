@@ -1,3 +1,4 @@
+// ms-yourdashboard-auth/src/auth/auth.service.ts
 import { Injectable, ConflictException, UnauthorizedException, NotFoundException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
@@ -293,7 +294,8 @@ async obtenerCuentaGmailPorId(usuarioId: number, cuentaId: number) {
         scope: [
           'email',
           'profile', 
-          'https://www.googleapis.com/auth/gmail.readonly'
+          'https://www.googleapis.com/auth/gmail.readonly',
+          'https://www.googleapis.com/auth/calendar'
         ].join(' '),
         access_type: 'offline',
         prompt: 'consent',
