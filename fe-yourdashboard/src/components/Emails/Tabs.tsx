@@ -3,15 +3,16 @@ import { Button, Table } from "antd";
 
 import type { TableProps } from "antd";
 
-import { formatoDeFecha } from "@/utils/date";
+import { formatoDeFechaYHora } from "@/utils/date";
 import { ICuentaGmail } from "@/interfaces/interfacesAuth";
 
 type TabsProps = {
   data: ICuentaGmail[];
   handleConnectService: (cuentaGmailId: string) => void;
+  handleSync: (cuentaGmailId: string) => void;
 };
 
-const TabsTest = ({ data, handleConnectService }: TabsProps) => {
+const TabsTest = ({ data, handleConnectService, handleSync }: TabsProps) => {
   const columns: TableProps<ICuentaGmail>["columns"] = [
     {
       title: "Nombre cuenta",
@@ -35,13 +36,27 @@ const TabsTest = ({ data, handleConnectService }: TabsProps) => {
       dataIndex: "emailsCount",
     },
     {
-      title: "Ultima sincronizacion",
+      title: "Sincronizacion",
       key: "lastSync",
       dataIndex: "lastSync",
       render: (_, record) =>
-        record.lastSync === "Sin sincronizar"
-          ? "Sin sincronizar"
-          : formatoDeFecha(record.lastSync as Date),
+        record.lastSync === "Sin sincronizar" ? (
+          <Button
+            color="default"
+            variant="text"
+            onClick={() => handleSync(record.id)}
+          >
+            {formatoDeFechaYHora(record.createdAt as Date)}
+          </Button>
+        ) : (
+          <Button
+            color="default"
+            variant="text"
+            onClick={() => handleSync(record.id)}
+          >
+            {formatoDeFechaYHora(record.lastSync as Date)}
+          </Button>
+        ),
     },
     {
       title: "Activo",
@@ -67,7 +82,6 @@ const TabsTest = ({ data, handleConnectService }: TabsProps) => {
           >
             Ver emails
           </Button>
-          
         </div>
       ),
     },

@@ -2,7 +2,7 @@ import { MS_ORCHES_URL } from "@/services/emails/emails";
 import axios from "axios";
 
 export const register = async (
-  name: string,
+  nombre: string,
   email: string,
   password: string
 ) => {
@@ -10,11 +10,18 @@ export const register = async (
     const response = await axios.post(`${MS_ORCHES_URL}/auth/register`, {
       email,
       password,
-      name,
+      nombre,
     });
     return response.data;
   } catch (error) {
-    alert(error);
+    console.log("❌ Error registrando usuario:", error);
+    if (axios.isAxiosError(error)) {
+      if (error.response) {
+        alert(`Error: ${error.response.data.message}`);
+      } else {
+        alert("Error: No se pudo conectar con el servidor.");
+      }
+    }
   }
 };
 
@@ -26,7 +33,13 @@ export const login = async (email: string, password: string) => {
     });
     return response.data;
   } catch (error) {
-    alert(error);
+    if (axios.isAxiosError(error)) {
+      if (error.response) {
+        alert(`Error: ${error.response.data.message}`);
+      } else {
+        alert("Error: No se pudo conectar con el servidor.");
+      }
+    }
   }
 };
 
@@ -39,7 +52,13 @@ export const getUserData = async (token: string) => {
     });
     return response.data;
   } catch (error) {
-    console.log(error);
+    if (axios.isAxiosError(error)) {
+      if (error.response) {
+        alert(`Error: ${error.response.data.message}`);
+      } else {
+        alert("Error: No se pudo conectar con el servidor.");
+      }
+    }
   }
 };
 
@@ -52,7 +71,13 @@ export const getGmailCuentas = async (token: string) => {
     });
     return response.data;
   } catch (error) {
-    console.log(error);
+    if (axios.isAxiosError(error)) {
+      if (error.response) {
+        alert(`Error: ${error.response.data.message}`);
+      } else {
+        alert("Error: No se pudo conectar con el servidor.");
+      }
+    }
   }
 };
 
@@ -61,6 +86,12 @@ export const logOut = async () => {
     const response = await axios.get(`${MS_ORCHES_URL}/auth/logout`);
     return response.data;
   } catch (error) {
-    alert(error);
+    if (axios.isAxiosError(error)) {
+      if (error.response) {
+        alert(`Error: ${error.response.data.message}`);
+      } else {
+        alert("Error: No se pudo conectar con el servidor.");
+      }
+    }
   }
 };
