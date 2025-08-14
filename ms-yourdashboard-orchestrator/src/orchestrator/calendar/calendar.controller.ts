@@ -1,6 +1,5 @@
 // ms-yourdashboard-orchestrator/src/orchestrator/calendar/calendar.controller.ts
 
-
 import { 
   Controller, 
   Get, 
@@ -10,6 +9,7 @@ import {
   UnauthorizedException,
   BadRequestException,
   Logger,
+  Req,
 } from '@nestjs/common';
 import { 
   ApiTags, 
@@ -18,15 +18,13 @@ import {
   ApiBearerAuth,
   ApiOkResponse,
   ApiUnauthorizedResponse,
-  ApiParam
 } from '@nestjs/swagger';
 import { CalendarOrchestratorService } from './calendar.service';
-// import { AuthGuard } from '../../guards/auth.guard'; // ← Comentar temporalmente
+import { Request } from 'express';
 
 @ApiTags('Calendar')
 @Controller('calendar')
-// @UseGuards(AuthGuard) // ← Comentar temporalmente
-@ApiBearerAuth()
+@ApiBearerAuth('JWT-auth')
 export class CalendarOrchestratorController {
   private readonly logger = new Logger(CalendarOrchestratorController.name);
   
@@ -48,26 +46,10 @@ export class CalendarOrchestratorController {
   @ApiQuery({ name: 'page', description: 'Número de página', example: 1, required: false })
   @ApiQuery({ name: 'limit', description: 'Eventos por página (máx 50)', example: 10, required: false })
   @ApiOkResponse({ 
-    description: 'Eventos obtenidos exitosamente',
-    schema: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean', example: true },
-        source: { type: 'string', example: 'orchestrator' },
-        data: {
-          type: 'object',
-          properties: {
-            events: { type: 'array' },
-            total: { type: 'number' },
-            page: { type: 'number' },
-            limit: { type: 'number' }
-          }
-        }
-      }
-    }
+    description: 'Eventos obtenidos exitosamente'
   })
   async getEvents(
-    @Headers('authorization') authHeader: string,
+    @Req() req: Request,
     @Query('cuentaGmailId') cuentaGmailId: string,
     @Query('timeMin') timeMin: string,
     @Query('timeMax') timeMax?: string,
@@ -76,7 +58,9 @@ export class CalendarOrchestratorController {
   ) {
     this.logger.log(`📅 Obteniendo eventos para cuenta Gmail ${cuentaGmailId} - Página ${page || 1}`);
 
-    // Validaciones
+    // OBTENER AUTH HEADER DEL REQUEST
+    const authHeader = req.headers?.authorization;
+
     if (!authHeader) {
       throw new UnauthorizedException('Authorization header requerido');
     }
@@ -94,7 +78,7 @@ export class CalendarOrchestratorController {
 
     try {
       const result = await this.calendarService.getEventsPorCuenta(
-        authHeader, // ✅ Pasar el JWT al service
+        authHeader,
         cuentaGmailId,
         timeMin,
         timeMax,
@@ -114,7 +98,7 @@ export class CalendarOrchestratorController {
   }
 
   /**
-   * 📅 GET /calendar/events-all-accounts - Eventos unificados de todas las cuentas
+   * 📅 GET /calendar/events-all-accounts - Eventos unificados (NO requiere auth header)
    */
   @Get('events-all-accounts')
   @ApiOperation({ 
@@ -138,7 +122,6 @@ export class CalendarOrchestratorController {
   ) {
     this.logger.log(`📅 🎯 EVENTOS UNIFICADOS para usuario ${userId} - Página ${page || 1}`);
 
-    // Validaciones
     if (!userId) {
       throw new BadRequestException('userId es requerido');
     }
@@ -187,7 +170,7 @@ export class CalendarOrchestratorController {
     description: 'Búsqueda de eventos completada exitosamente'
   })
   async searchEvents(
-    @Headers('authorization') authHeader: string,
+    @Req() req: Request,
     @Query('cuentaGmailId') cuentaGmailId: string,
     @Query('timeMin') timeMin: string,
     @Query('q') searchTerm: string,
@@ -196,7 +179,13 @@ export class CalendarOrchestratorController {
   ) {
     this.logger.log(`🔍 Buscando eventos para cuenta Gmail ${cuentaGmailId}: "${searchTerm}"`);
 
-    // Validaciones
+    // OBTENER AUTH HEADER DEL REQUEST
+    const authHeader = req.headers?.authorization;
+
+    if (!authHeader) {
+      throw new UnauthorizedException('Authorization header requerido');
+    }
+
     if (!cuentaGmailId) {
       throw new BadRequestException('cuentaGmailId es requerido');
     }
@@ -214,7 +203,7 @@ export class CalendarOrchestratorController {
 
     try {
       const result = await this.calendarService.buscarEventosPorCuenta(
-        authHeader, // ✅ Pasar JWT
+        authHeader,
         cuentaGmailId,
         timeMin,
         searchTerm.trim(),
@@ -234,7 +223,7 @@ export class CalendarOrchestratorController {
   }
 
   /**
-   * 🔍 GET /calendar/search-all-accounts - Búsqueda global de eventos
+   * 🔍 GET /calendar/search-all-accounts - Búsqueda global (NO requiere auth header)
    */
   @Get('search-all-accounts')
   @ApiOperation({ 
@@ -258,7 +247,6 @@ export class CalendarOrchestratorController {
   ) {
     this.logger.log(`🌍 BÚSQUEDA GLOBAL de eventos para usuario ${userId}: "${searchTerm}"`);
 
-    // Validaciones
     if (!userId) {
       throw new BadRequestException('userId es requerido');
     }
@@ -307,10 +295,17 @@ export class CalendarOrchestratorController {
     description: 'Estadísticas obtenidas exitosamente'
   })
   async getCalendarStats(
-    @Headers('authorization') authHeader: string,
+    @Req() req: Request,
     @Query('cuentaGmailId') cuentaGmailId: string
   ) {
     this.logger.log(`📊 Obteniendo estadísticas para cuenta Gmail ${cuentaGmailId}`);
+
+    // OBTENER AUTH HEADER DEL REQUEST
+    const authHeader = req.headers?.authorization;
+
+    if (!authHeader) {
+      throw new UnauthorizedException('Authorization header requerido');
+    }
 
     if (!cuentaGmailId) {
       throw new BadRequestException('cuentaGmailId es requerido');
@@ -341,40 +336,21 @@ export class CalendarOrchestratorController {
   @ApiQuery({ name: 'cuentaGmailId', description: 'ID de la cuenta Gmail específica', example: '36' })
   @ApiQuery({ name: 'maxEvents', description: 'Máximo eventos a sincronizar', example: 50, required: false })
   @ApiOkResponse({ 
-    description: 'Sincronización completada exitosamente',
-    schema: {
-      type: 'object',
-      properties: {
-        success: { type: 'boolean', example: true },
-        source: { type: 'string', example: 'orchestrator' },
-        data: {
-          type: 'object',
-          properties: {
-            success: { type: 'boolean', example: true },
-            message: { type: 'string', example: 'Sincronización completada exitosamente' },
-            stats: {
-              type: 'object',
-              properties: {
-                cuenta_gmail_id: { type: 'number', example: 36 },
-                events_nuevos: { type: 'number', example: 8 },
-                events_actualizados: { type: 'number', example: 3 },
-                tiempo_total_ms: { type: 'number', example: 1500 }
-              }
-            }
-          }
-        }
-      }
-    }
-  })
-  @ApiUnauthorizedResponse({ 
-    description: 'Usuario no tiene tokens configurados para Calendar'
+    description: 'Sincronización completada exitosamente'
   })
   async syncEvents(
-    @Headers('authorization') authHeader: string,
+    @Req() req: Request,
     @Query('cuentaGmailId') cuentaGmailId: string,
     @Query('maxEvents') maxEvents?: string
   ) {
     this.logger.log(`🔄 Iniciando sync de eventos para cuenta Gmail ${cuentaGmailId}`);
+
+    // OBTENER AUTH HEADER DEL REQUEST
+    const authHeader = req.headers?.authorization;
+
+    if (!authHeader) {
+      throw new UnauthorizedException('Authorization header requerido');
+    }
 
     if (!cuentaGmailId) {
       throw new BadRequestException('cuentaGmailId es requerido');
