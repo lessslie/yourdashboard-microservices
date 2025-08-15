@@ -7,6 +7,7 @@ import { EmailsOrchestratorModule } from './emails/emails.module';
 import { AuthOrchestratorModule } from './auth/auth.module';
 import { CacheModule } from './cache/cache.module';
 import { SearchModule } from './search/search.module';
+import { CalendarOrchestratorModule } from './calendar/calendar.module';
 @Module({
   imports: [
     ConfigModule,//acceso a variables de entorno
@@ -14,7 +15,7 @@ import { SearchModule } from './search/search.module';
     EmailsOrchestratorModule,// Módulo para manejar la lógica de emails + coordinación con MS-Auth y MS-Email
     AuthOrchestratorModule,// Módulo para manejar la lógica de autenticación + coordinación con MS-Auth
     SearchModule,// Módulo para manejar la lógica de búsqueda global
-    // CalendarModule,
+    CalendarOrchestratorModule,// Módulo para manejar la lógica de Google Calendar + coordinación con MS-Auth y MS-Calendar
     // WhatsappModule,
   ],
   controllers: [OrchestratorController],//rutas del microservicio

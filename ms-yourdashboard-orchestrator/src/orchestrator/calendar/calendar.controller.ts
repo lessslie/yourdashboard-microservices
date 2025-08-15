@@ -1,26 +1,45 @@
-// ms-yourdashboard-orchestrator/src/orchestrator/calendar/calendar.controller.ts
 
 import { 
   Controller, 
   Get, 
-  Post, 
+  Post,
+  Patch,
+  Delete,
   Query, 
-  Headers,
-  UnauthorizedException,
+  Param, 
+  Body,
+  Req,           
+  UnauthorizedException, 
   BadRequestException,
+  NotFoundException,   
   Logger,
-  Req,
+  HttpCode,
+  HttpStatus
 } from '@nestjs/common';
+
 import { 
   ApiTags, 
   ApiOperation, 
   ApiQuery,
-  ApiBearerAuth,
+  ApiParam,
+  ApiBody,
   ApiOkResponse,
+  ApiCreatedResponse,    
+  ApiNoContentResponse,  
+  ApiBadRequestResponse,
   ApiUnauthorizedResponse,
+  ApiNotFoundResponse,   
+  ApiBearerAuth
 } from '@nestjs/swagger';
+import { Request } from 'express';  
 import { CalendarOrchestratorService } from './calendar.service';
-import { Request } from 'express';
+import {
+  CalendarEventDto,
+} from './dto/calendar-response.dto';
+import { 
+  CreateEventDto, 
+  UpdateEventDto,
+} from './dto';
 
 @ApiTags('Calendar')
 @Controller('calendar')
@@ -32,6 +51,7 @@ export class CalendarOrchestratorController {
     private readonly calendarService: CalendarOrchestratorService
   ) {}
 
+  
   /**
    * 📅 GET /calendar/events - Eventos de cuenta específica
    */
@@ -77,7 +97,8 @@ export class CalendarOrchestratorController {
     const limitNum = limit ? parseInt(limit, 10) : 10;
 
     try {
-      const result = await this.calendarService.getEventsPorCuenta(
+      // ✅ TIPADO CORRECTO: resultado del service
+      const result: unknown = await this.calendarService.getEventsPorCuenta(
         authHeader,
         cuentaGmailId,
         timeMin,
@@ -91,11 +112,14 @@ export class CalendarOrchestratorController {
         source: 'orchestrator',
         data: result
       };
-    } catch (error: any) {
-      this.logger.error(`❌ Error obteniendo eventos:`, error.message);
-      throw new BadRequestException(`Error obteniendo eventos: ${error.message}`);
+    } catch (error: unknown) {
+      // ✅ MANEJO SEGURO DE ERRORES
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error obteniendo eventos:`, errorMessage);
+      throw new BadRequestException(`Error obteniendo eventos: ${errorMessage}`);
     }
   }
+
 
   /**
    * 📅 GET /calendar/events-all-accounts - Eventos unificados (NO requiere auth header)
@@ -113,7 +137,7 @@ export class CalendarOrchestratorController {
   @ApiOkResponse({ 
     description: 'Eventos unificados obtenidos exitosamente'
   })
-  async getAllAccountsEvents(
+ async getAllAccountsEvents(
     @Query('userId') userId: string,
     @Query('timeMin') timeMin: string,
     @Query('timeMax') timeMax?: string,
@@ -134,7 +158,8 @@ export class CalendarOrchestratorController {
     const limitNum = limit ? parseInt(limit, 10) : 10;
 
     try {
-      const result = await this.calendarService.getEventosUnificados(
+      // ✅ TIPADO CORRECTO: resultado del service
+      const result: unknown = await this.calendarService.getEventosUnificados(
         userId,
         timeMin,
         timeMax,
@@ -147,9 +172,11 @@ export class CalendarOrchestratorController {
         source: 'orchestrator',
         data: result
       };
-    } catch (error: any) {
-      this.logger.error(`❌ Error en eventos unificados:`, error.message);
-      throw new BadRequestException(`Error en eventos unificados: ${error.message}`);
+    } catch (error: unknown) {
+      // ✅ MANEJO SEGURO DE ERRORES
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error en eventos unificados:`, errorMessage);
+      throw new BadRequestException(`Error en eventos unificados: ${errorMessage}`);
     }
   }
 
@@ -169,7 +196,7 @@ export class CalendarOrchestratorController {
   @ApiOkResponse({ 
     description: 'Búsqueda de eventos completada exitosamente'
   })
-  async searchEvents(
+ async searchEvents(
     @Req() req: Request,
     @Query('cuentaGmailId') cuentaGmailId: string,
     @Query('timeMin') timeMin: string,
@@ -202,7 +229,8 @@ export class CalendarOrchestratorController {
     const limitNum = limit ? parseInt(limit, 10) : 10;
 
     try {
-      const result = await this.calendarService.buscarEventosPorCuenta(
+      // ✅ TIPADO CORRECTO: resultado del service
+      const result: unknown = await this.calendarService.buscarEventosPorCuenta(
         authHeader,
         cuentaGmailId,
         timeMin,
@@ -216,9 +244,11 @@ export class CalendarOrchestratorController {
         source: 'orchestrator',
         data: result
       };
-    } catch (error: any) {
-      this.logger.error(`❌ Error buscando eventos:`, error.message);
-      throw new BadRequestException(`Error buscando eventos: ${error.message}`);
+    } catch (error: unknown) {
+      // ✅ MANEJO SEGURO DE ERRORES
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error buscando eventos:`, errorMessage);
+      throw new BadRequestException(`Error buscando eventos: ${errorMessage}`);
     }
   }
 
@@ -238,7 +268,7 @@ export class CalendarOrchestratorController {
   @ApiOkResponse({ 
     description: 'Búsqueda global completada exitosamente'
   })
-  async searchAllAccountsEvents(
+ async searchAllAccountsEvents(
     @Query('userId') userId: string,
     @Query('timeMin') timeMin: string,
     @Query('q') searchTerm: string,
@@ -263,7 +293,8 @@ export class CalendarOrchestratorController {
     const limitNum = limit ? parseInt(limit, 10) : 10;
 
     try {
-      const result = await this.calendarService.buscarEventosGlobal(
+      // ✅ TIPADO CORRECTO: resultado del service
+      const result: unknown = await this.calendarService.buscarEventosGlobal(
         userId,
         timeMin,
         searchTerm.trim(),
@@ -276,9 +307,11 @@ export class CalendarOrchestratorController {
         source: 'orchestrator',
         data: result
       };
-    } catch (error: any) {
-      this.logger.error(`❌ Error en búsqueda global de eventos:`, error.message);
-      throw new BadRequestException(`Error en búsqueda global: ${error.message}`);
+    } catch (error: unknown) {
+      // ✅ MANEJO SEGURO DE ERRORES
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error en búsqueda global de eventos:`, errorMessage);
+      throw new BadRequestException(`Error en búsqueda global: ${errorMessage}`);
     }
   }
 
@@ -294,7 +327,7 @@ export class CalendarOrchestratorController {
   @ApiOkResponse({ 
     description: 'Estadísticas obtenidas exitosamente'
   })
-  async getCalendarStats(
+async getCalendarStats(
     @Req() req: Request,
     @Query('cuentaGmailId') cuentaGmailId: string
   ) {
@@ -312,16 +345,19 @@ export class CalendarOrchestratorController {
     }
 
     try {
-      const result = await this.calendarService.getEstadisticasCalendario(authHeader, cuentaGmailId);
+      // ✅ TIPADO CORRECTO: resultado del service
+      const result: unknown = await this.calendarService.getEstadisticasCalendario(authHeader, cuentaGmailId);
 
       return {
         success: true,
         source: 'orchestrator',
         data: result
       };
-    } catch (error: any) {
-      this.logger.error(`❌ Error obteniendo estadísticas:`, error.message);
-      throw new BadRequestException(`Error obteniendo estadísticas: ${error.message}`);
+    } catch (error: unknown) {
+      // ✅ MANEJO SEGURO DE ERRORES
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error obteniendo estadísticas:`, errorMessage);
+      throw new BadRequestException(`Error obteniendo estadísticas: ${errorMessage}`);
     }
   }
 
@@ -338,6 +374,7 @@ export class CalendarOrchestratorController {
   @ApiOkResponse({ 
     description: 'Sincronización completada exitosamente'
   })
+ 
   async syncEvents(
     @Req() req: Request,
     @Query('cuentaGmailId') cuentaGmailId: string,
@@ -359,16 +396,372 @@ export class CalendarOrchestratorController {
     const maxEventsNum = maxEvents ? parseInt(maxEvents, 10) : 100;
 
     try {
-      const result = await this.calendarService.sincronizarEventos(authHeader, cuentaGmailId, maxEventsNum);
+      // ✅ TIPADO CORRECTO: resultado del service
+      const result: unknown = await this.calendarService.sincronizarEventos(authHeader, cuentaGmailId, maxEventsNum);
 
       return {
         success: true,
         source: 'orchestrator',
         data: result
       };
-    } catch (error: any) {
-      this.logger.error(`❌ Error en sync de eventos:`, error.message);
-      throw new BadRequestException(`Error sincronizando eventos: ${error.message}`);
+    } catch (error: unknown) {
+      // ✅ MANEJO SEGURO DE ERRORES
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error en sync de eventos:`, errorMessage);
+      throw new BadRequestException(`Error sincronizando eventos: ${errorMessage}`);
+    }
+  }
+
+
+  /**
+   * 📋 GET /calendar/events/:eventId - Obtener evento específico
+   */
+  @Get('events/:eventId')
+  @ApiOperation({ 
+    summary: 'Obtener evento específico por ID',
+    description: 'Obtiene los detalles de un evento específico por su ID de Google Calendar.'
+  })
+  @ApiParam({ 
+    name: 'eventId', 
+    description: 'ID del evento en Google Calendar', 
+    example: 'abc123def456ghi789' 
+  })
+  @ApiQuery({ 
+    name: 'cuentaGmailId', 
+    description: 'ID de la cuenta Gmail específica', 
+    example: '36' 
+  })
+  @ApiOkResponse({ 
+    description: 'Evento obtenido exitosamente',
+    type: CalendarEventDto
+  })
+  @ApiBadRequestResponse({ description: 'Parámetros inválidos' })
+  @ApiUnauthorizedResponse({ description: 'Token de autorización inválido' })
+  @ApiNotFoundResponse({ description: 'Evento no encontrado' })
+ async getEventById(
+    @Req() req: Request,
+    @Param('eventId') eventId: string,
+    @Query('cuentaGmailId') cuentaGmailId: string
+  ) {
+    this.logger.log(`📋 Obteniendo evento específico ${eventId} para cuenta Gmail ${cuentaGmailId}`);
+
+    // ✅ OBTENER AUTH HEADER DEL REQUEST (patrón correcto)
+    const authHeader = req.headers?.authorization;
+
+    if (!authHeader) {
+      throw new UnauthorizedException('Authorization header requerido');
+    }
+
+    if (!eventId || eventId.trim() === '') {
+      throw new BadRequestException('eventId es requerido');
+    }
+
+    if (!cuentaGmailId) {
+      throw new BadRequestException('cuentaGmailId es requerido');
+    }
+
+    try {
+      // ✅ TIPADO CORRECTO: resultado del service
+      const event: unknown = await this.calendarService.getEventByIdWithToken(
+        authHeader,
+        cuentaGmailId,
+        eventId
+      );
+
+      return {
+        success: true,
+        source: 'orchestrator',
+        data: event
+      };
+    } catch (error: unknown) {
+      // ✅ MANEJO SEGURO DE ERRORES
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error obteniendo evento ${eventId}:`, errorMessage);
+      
+      // ✅ VERIFICACIÓN SEGURA PARA 'not found'
+      if (errorMessage.includes('not found')) {
+        throw new NotFoundException(`Evento ${eventId} no encontrado`);
+      }
+      
+      throw new BadRequestException(`Error obteniendo evento: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * ➕ POST /calendar/events - Crear nuevo evento
+   */
+  @Post('events')
+  @ApiOperation({ 
+    summary: 'Crear nuevo evento',
+    description: 'Crea un nuevo evento en Google Calendar.'
+  })
+  @ApiQuery({ 
+    name: 'cuentaGmailId', 
+    description: 'ID de la cuenta Gmail específica', 
+    example: '36' 
+  })
+  @ApiQuery({ 
+    name: 'private', 
+    description: 'Si el evento debe ser privado (opcional)', 
+    example: 'false',
+    required: false 
+  })
+  @ApiBody({ 
+    type: CreateEventDto,
+    description: 'Datos del nuevo evento'
+  })
+  @ApiCreatedResponse({ 
+    description: 'Evento creado exitosamente',
+    type: CalendarEventDto
+  })
+  @ApiBadRequestResponse({ description: 'Datos del evento inválidos' })
+  @ApiUnauthorizedResponse({ description: 'Token de autorización inválido' })
+ async createEvent(
+    @Req() req: Request,
+    @Query('cuentaGmailId') cuentaGmailId: string,
+    @Body() createEventDto: CreateEventDto,
+    @Query('private') isPrivate?: string
+  ) {
+    this.logger.log(`➕ Creando evento "${createEventDto.summary}" para cuenta Gmail ${cuentaGmailId}`);
+
+    // ✅ OBTENER AUTH HEADER DEL REQUEST (patrón correcto)
+    const authHeader = req.headers?.authorization;
+
+    if (!authHeader) {
+      throw new UnauthorizedException('Authorization header requerido');
+    }
+
+    if (!cuentaGmailId) {
+      throw new BadRequestException('cuentaGmailId es requerido');
+    }
+
+    // Validar datos básicos del evento
+    if (!createEventDto.summary || createEventDto.summary.trim() === '') {
+      throw new BadRequestException('summary (título) es requerido');
+    }
+
+    if (!createEventDto.startDateTime) {
+      throw new BadRequestException('startDateTime es requerido');
+    }
+
+    if (!createEventDto.endDateTime) {
+      throw new BadRequestException('endDateTime es requerido');
+    }
+
+    try {
+      const isEventPrivate = isPrivate === 'true';
+      // ✅ TIPADO CORRECTO: resultado del service
+      let newEvent: unknown;
+
+      if (isEventPrivate) {
+        newEvent = await this.calendarService.createPrivateEventWithToken(
+          authHeader,
+          cuentaGmailId,
+          createEventDto
+        );
+      } else {
+        newEvent = await this.calendarService.createEventWithToken(
+          authHeader,
+          cuentaGmailId,
+          createEventDto
+        );
+      }
+
+      return {
+        success: true,
+        source: 'orchestrator',
+        data: newEvent,
+        message: `Evento "${createEventDto.summary}" creado exitosamente`
+      };
+    } catch (error: unknown) {
+      // ✅ MANEJO SEGURO DE ERRORES
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error creando evento:`, errorMessage);
+      throw new BadRequestException(`Error creando evento: ${errorMessage}`);
+    }
+  }
+
+
+  /**
+   * ✏️ PATCH /calendar/events/:eventId - Actualizar evento existente
+   */
+  @Patch('events/:eventId')
+  @ApiOperation({ 
+    summary: 'Actualizar evento existente',
+    description: 'Actualiza los datos de un evento existente en Google Calendar.'
+  })
+  @ApiParam({ 
+    name: 'eventId', 
+    description: 'ID del evento en Google Calendar', 
+    example: 'abc123def456ghi789' 
+  })
+  @ApiQuery({ 
+    name: 'cuentaGmailId', 
+    description: 'ID de la cuenta Gmail específica', 
+    example: '36' 
+  })
+  @ApiBody({ 
+    type: UpdateEventDto,
+    description: 'Datos a actualizar del evento (campos opcionales)',
+    examples: {
+      actualizacionParcial: {
+        summary: 'Actualizar solo título y ubicación',
+        value: {
+          summary: 'Reunión de equipo - Backend (ACTUALIZADA)',
+          location: 'Sala Virtual - Zoom',
+        }
+      },
+      actualizacionCompleta: {
+        summary: 'Actualizar múltiples campos',
+        value: {
+          summary: 'Sprint Review - Q3 2025',
+          location: 'Auditorio Principal',
+          description: 'Presentación de resultados del trimestre',
+          startDateTime: '2025-08-25T14:00:00-05:00',
+          endDateTime: '2025-08-25T16:00:00-05:00',
+          attendees: ['manager@empresa.com', 'team@empresa.com']
+        }
+      }
+    }
+  })
+  @ApiOkResponse({ 
+    description: 'Evento actualizado exitosamente',
+    type: CalendarEventDto
+  })
+  @ApiBadRequestResponse({ description: 'Datos de actualización inválidos' })
+  @ApiUnauthorizedResponse({ description: 'Token de autorización inválido' })
+  @ApiNotFoundResponse({ description: 'Evento no encontrado' })
+ async updateEvent(
+    @Req() req: Request,
+    @Param('eventId') eventId: string,
+    @Query('cuentaGmailId') cuentaGmailId: string,
+    @Body() updateEventDto: UpdateEventDto
+  ) {
+    this.logger.log(`✏️ Actualizando evento ${eventId} para cuenta Gmail ${cuentaGmailId}`);
+
+    // ✅ OBTENER AUTH HEADER DEL REQUEST (patrón correcto)
+    const authHeader = req.headers?.authorization;
+
+    if (!authHeader) {
+      throw new UnauthorizedException('Authorization header requerido');
+    }
+
+    if (!eventId || eventId.trim() === '') {
+      throw new BadRequestException('eventId es requerido');
+    }
+
+    if (!cuentaGmailId) {
+      throw new BadRequestException('cuentaGmailId es requerido');
+    }
+
+    // Validar que al menos un campo viene para actualizar
+    const hasUpdates = Object.keys(updateEventDto).some(key => 
+      updateEventDto[key as keyof UpdateEventDto] !== undefined && 
+      updateEventDto[key as keyof UpdateEventDto] !== null
+    );
+
+    if (!hasUpdates) {
+      throw new BadRequestException('Debe proporcionar al menos un campo para actualizar');
+    }
+
+    try {
+      // ✅ TIPADO CORRECTO: resultado del service
+      const updatedEvent: unknown = await this.calendarService.updateEventWithToken(
+        authHeader,
+        cuentaGmailId,
+        eventId,
+        updateEventDto
+      );
+
+      return {
+        success: true,
+        source: 'orchestrator',
+        data: updatedEvent,
+        message: `Evento ${eventId} actualizado exitosamente`
+      };
+    } catch (error: unknown) {
+      // ✅ MANEJO SEGURO DE ERRORES
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error actualizando evento ${eventId}:`, errorMessage);
+      
+      // ✅ VERIFICACIÓN SEGURA PARA 'not found'
+      if (errorMessage.includes('not found')) {
+        throw new NotFoundException(`Evento ${eventId} no encontrado`);
+      }
+      
+      throw new BadRequestException(`Error actualizando evento: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * 🗑️ DELETE /calendar/events/:eventId - Eliminar evento
+   */
+  @Delete('events/:eventId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ 
+    summary: 'Eliminar evento',
+    description: 'Elimina un evento específico de Google Calendar de forma permanente.'
+  })
+  @ApiParam({ 
+    name: 'eventId', 
+    description: 'ID del evento en Google Calendar', 
+    example: 'abc123def456ghi789' 
+  })
+  @ApiQuery({ 
+    name: 'cuentaGmailId', 
+    description: 'ID de la cuenta Gmail específica', 
+    example: '36' 
+  })
+  @ApiNoContentResponse({ 
+    description: 'Evento eliminado exitosamente (sin contenido)' 
+  })
+  @ApiBadRequestResponse({ description: 'Parámetros inválidos' })
+  @ApiUnauthorizedResponse({ description: 'Token de autorización inválido' })
+  @ApiNotFoundResponse({ description: 'Evento no encontrado' })
+  async deleteEvent(
+    @Req() req: Request,
+    @Param('eventId') eventId: string,
+    @Query('cuentaGmailId') cuentaGmailId: string
+  ) {
+    this.logger.log(`🗑️ Eliminando evento ${eventId} para cuenta Gmail ${cuentaGmailId}`);
+
+    // ✅ OBTENER AUTH HEADER DEL REQUEST (patrón correcto)
+    const authHeader = req.headers?.authorization;
+
+    if (!authHeader) {
+      throw new UnauthorizedException('Authorization header requerido');
+    }
+
+    if (!eventId || eventId.trim() === '') {
+      throw new BadRequestException('eventId es requerido');
+    }
+
+    if (!cuentaGmailId) {
+      throw new BadRequestException('cuentaGmailId es requerido');
+    }
+
+    try {
+      await this.calendarService.deleteEventWithToken(
+        authHeader,
+        cuentaGmailId,
+        eventId
+      );
+
+      // ✅ DELETE endpoints devuelven 204 No Content (sin body)
+      this.logger.log(`✅ Evento ${eventId} eliminado exitosamente`);
+      
+      // No return - HTTP 204 No Content
+    } catch (error: unknown) {
+      // ✅ MANEJO SEGURO DE ERRORES
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error eliminando evento ${eventId}:`, errorMessage);
+      
+      // ✅ VERIFICACIÓN SEGURA PARA 'not found'
+      if (errorMessage.includes('not found')) {
+        throw new NotFoundException(`Evento ${eventId} no encontrado`);
+      }
+      
+      throw new BadRequestException(`Error eliminando evento: ${errorMessage}`);
     }
   }
 }

@@ -134,8 +134,7 @@ export class CalendarController {
       limitNum
     );
   }
-
-  /**
+/**
    * 🔍 GET /calendar/events/search - Buscar eventos
    */
   @Get('events/search')
@@ -203,6 +202,57 @@ export class CalendarController {
       limitNum
     );
   }
+  /**
+   * 📋 GET /calendar/events/:eventId - Obtener evento específico
+   */
+  @Get('events/:eventId')
+  @ApiBearerAuth('Calendar-Token')
+  @ApiOperation({ 
+    summary: 'Obtener evento específico por ID',
+    description: 'Obtiene los detalles de un evento específico por su ID de Google Calendar.'
+  })
+  @ApiParam({ 
+    name: 'eventId', 
+    description: 'ID del evento en Google Calendar', 
+    example: 'abc123def456ghi789' 
+  })
+  @ApiQuery({ 
+    name: 'cuentaGmailId', 
+    description: 'ID de la cuenta Gmail específica', 
+    example: '4' 
+  })
+  @ApiOkResponse({ 
+    description: 'Evento obtenido exitosamente'
+  })
+  @ApiUnauthorizedResponse({ 
+    description: 'Token de Calendar inválido o expirado'
+  })
+  async getEventById(
+    @Headers('authorization') authHeader: string,
+    @Param('eventId') eventId: string,
+    @Query('cuentaGmailId') cuentaGmailId: string
+  ) {
+    if (!cuentaGmailId) {
+      throw new BadRequestException('cuentaGmailId is required');
+    }
+
+    if (!authHeader) {
+      throw new UnauthorizedException('Authorization header is required');
+    }
+    
+    const accessToken = authHeader.replace('Bearer ', '');
+    
+    if (!accessToken) {
+      throw new UnauthorizedException('Valid Bearer token is required');
+    }
+
+    if (!eventId || eventId.trim() === '') {
+      throw new BadRequestException('eventId is required');
+    }
+
+    return this.calendarService.getEventByIdWithToken(accessToken, cuentaGmailId, eventId);
+  }
+  
 
   /**
    * ➕ POST /calendar/events - Crear evento

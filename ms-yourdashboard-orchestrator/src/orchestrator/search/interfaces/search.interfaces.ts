@@ -1,4 +1,4 @@
-// src/orchestrator/search/interfaces/search.interfaces.ts
+// ms-yourdashboard-orchestrator/src/orchestrator/search/interfaces/search.interfaces.ts
 
 export interface EmailSearchResponse {
   success?: boolean;
@@ -27,18 +27,33 @@ export interface EmailResult {
   sourceAccountId: number;
 }
 
+// 📅 NUEVAS INTERFACES PARA CALENDAR
 export interface CalendarSearchResponse {
-  results: CalendarResult[];
+  success?: boolean;
+  source?: string;
+  events: CalendarResult[];
   total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+  searchTerm: string;
+  accountsSearched: string[];
 }
 
 export interface CalendarResult {
   id: string;
-  title: string;
-  start: string;
-  end: string;
-  description?: string;
+  summary: string;
   location?: string;
+  description?: string;
+  startTime: string;
+  endTime: string;
+  attendees?: string[];
+  isAllDay: boolean;
+  status: string;
+  sourceAccount: string;
+  sourceAccountId: number;
 }
 
 export interface WhatsappSearchResponse {

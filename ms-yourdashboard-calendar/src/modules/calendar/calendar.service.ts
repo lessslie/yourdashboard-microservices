@@ -76,7 +76,7 @@ export class CalendarService {
   /**
    * 📅 Listar eventos con token - PATRÓN MS-EMAIL
    */
-  async listEventsWithToken(
+ async listEventsWithToken(
     accessToken: string, 
     cuentaGmailId: string,
     timeMin: string,
@@ -85,10 +85,9 @@ export class CalendarService {
     limit: number = 10
   ): Promise<CalendarListResponse> {
     try {
-      this.logger.log(`📅 🎯 LISTANDO eventos para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`📅 Listando eventos para cuenta Gmail ${cuentaGmailId} - Página ${page}`);
 
       const cuentaGmailIdNum = parseInt(cuentaGmailId);
-      
       if (isNaN(cuentaGmailIdNum)) {
         throw new Error('cuentaGmailId debe ser un número válido');
       }
@@ -97,19 +96,60 @@ export class CalendarService {
       try {
         this.logger.log(`📡 Obteniendo eventos desde Google Calendar API`);
         
+        // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
+        const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+        
+        if (!validAccessToken) {
+          throw new Error('No se pudo obtener token válido');
+        }
+
+        const oauth2Client = new google.auth.OAuth2();
+        oauth2Client.setCredentials({ access_token: validAccessToken });
+        const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
         // ✅ CORRECCIÓN: Convertir timeMax y asegurar tipos
         const maxTime = timeMax ? 
           (typeof timeMax === 'string' ? timeMax : new Date(timeMax).toISOString()) 
           : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+        // 🎯 Para paginación en Calendar API, usamos pageToken en lugar de skip/limit
+        const maxResults = Math.min(limit * page, 250); // Calendar API limit
         
-        return await this.getEventsFromCalendarAPI(accessToken, cuentaGmailId, timeMin, maxTime, page, limit);
+        const response = await calendar.events.list({
+          calendarId: 'primary',
+          timeMin,
+          timeMax: maxTime,
+          maxResults,
+          singleEvents: true,
+          orderBy: 'startTime'
+        });
+
+        const allEvents = response.data.items || [];
         
-      } catch (apiError) {
-        this.logger.error(`❌ Error en Calendar API:`, apiError);
+        // Simular paginación manualmente
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
+        const paginatedEvents = allEvents.slice(startIndex, endIndex);
+        
+        const events = paginatedEvents.map(this.convertAPIToEventMetadata);
+        const totalPages = Math.ceil(allEvents.length / limit);
+
+        this.logger.log(`✅ Eventos obtenidos: ${allEvents.length} total, ${events.length} en página ${page}`);
+
+        return {
+          events,
+          total: allEvents.length,
+          page,
+          limit,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1
+        };
+        
+      } catch (apiError: any) {
+        this.logger.error(`❌ Error en Calendar API, usando BD como fallback:`, apiError.message);
         
         // 🎯 FALLBACK: BD local si falla API
-        this.logger.warn(`⚠️ Google Calendar API falló, usando BD como fallback`);
-        
         const dbResult = await this.databaseService.getEventsPaginated(
           cuentaGmailIdNum, 
           page, 
@@ -137,17 +177,20 @@ export class CalendarService {
         throw apiError; // Si tampoco hay BD, lanzar error original
       }
 
-    } catch (error) {
-      this.logger.error('❌ Error obteniendo eventos:', error);
-      const calendarError = error as CalendarServiceError;
-      throw new Error('Error al consultar eventos: ' + calendarError.message);
+    } catch (error: any) {
+      this.logger.error('❌ Error obteniendo eventos:', {
+        message: error.message,
+        cuentaGmailId
+      });
+      
+      throw new Error('Error al consultar eventos: ' + error.message);
     }
   }
 
   /**
    * 🔍 Buscar eventos con token - PATRÓN MS-EMAIL
    */
-  async searchEventsWithToken(
+ async searchEventsWithToken(
     accessToken: string,
     cuentaGmailId: string,
     timeMin: string,
@@ -156,10 +199,23 @@ export class CalendarService {
     limit: number = 10
   ): Promise<CalendarListResponse> {
     try {
-      this.logger.log(`🔍 🎯 BÚSQUEDA eventos "${searchTerm}" para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`🔍 Buscando eventos "${searchTerm}" para cuenta Gmail ${cuentaGmailId}`);
+
+      // 🔍 Validaciones básicas
+      if (!searchTerm || searchTerm.trim() === '') {
+        return {
+          events: [],
+          total: 0,
+          page,
+          limit,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPreviousPage: false,
+          searchTerm: searchTerm || ''
+        };
+      }
 
       const cuentaGmailIdNum = parseInt(cuentaGmailId);
-
       if (isNaN(cuentaGmailIdNum)) {
         throw new Error('cuentaGmailId debe ser un número válido');
       }
@@ -168,13 +224,56 @@ export class CalendarService {
       try {
         this.logger.log(`🌐 Buscando en Google Calendar API`);
         
-        // ✅ CORRECCIÓN: Asegurar que page sea number
-        return await this.searchEventsFromCalendarAPI(accessToken, cuentaGmailId, timeMin, searchTerm, Number(page), limit);
+        // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
+        const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
         
-      } catch {
-        this.logger.warn(`⚠️ Calendar API falló, intentando BD como fallback`);
+        if (!validAccessToken) {
+          throw new Error('No se pudo obtener token válido');
+        }
+
+        const oauth2Client = new google.auth.OAuth2();
+        oauth2Client.setCredentials({ access_token: validAccessToken });
+        const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+        // 🔍 BUSCAR EVENTOS
+        const maxResults = Math.min(limit * page, 250);
+
+        const response = await calendar.events.list({
+          calendarId: 'primary',
+          timeMin,
+          q: searchTerm.trim(),
+          maxResults,
+          singleEvents: true,
+          orderBy: 'startTime'
+        });
+
+        const allEvents = response.data.items || [];
         
-        // Fallback a BD
+        // Paginación manual
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
+        const paginatedEvents = allEvents.slice(startIndex, endIndex);
+        
+        const events = paginatedEvents.map(this.convertAPIToEventMetadata);
+        const totalPages = Math.ceil(allEvents.length / limit);
+
+        this.logger.log(`✅ Búsqueda completada: ${allEvents.length} eventos encontrados, ${events.length} en página ${page}`);
+
+        return {
+          events,
+          total: allEvents.length,
+          page,
+          limit,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+          searchTerm: searchTerm.trim()
+        };
+        
+      } catch (apiError: any) {
+        this.logger.warn(`⚠️ Calendar API falló para búsqueda, intentando BD como fallback:`, apiError.message);
+        
+        // 🎯 FALLBACK: BD local
         const filters: EventSearchFilters = {
           search_text: searchTerm.trim(),
           start_date: new Date(timeMin)
@@ -190,6 +289,8 @@ export class CalendarService {
         const events = searchResult.events.map(this.convertDBToEventMetadata);
         const totalPages = Math.ceil(searchResult.total / limit);
 
+        this.logger.log(`💾 Fallback BD exitoso: ${searchResult.total} eventos encontrados`);
+
         return {
           events,
           total: searchResult.total,
@@ -198,17 +299,114 @@ export class CalendarService {
           totalPages,
           hasNextPage: page < totalPages,
           hasPreviousPage: page > 1,
-          searchTerm
+          searchTerm: searchTerm.trim()
         };
       }
 
-    } catch (error) {
-      this.logger.error('❌ Error en búsqueda de eventos:', error);
-      const calendarError = error as CalendarServiceError;
-      throw new Error('Error al buscar eventos: ' + calendarError.message);
+    } catch (error: any) {
+      this.logger.error('❌ Error en búsqueda de eventos:', {
+        message: error.message,
+        searchTerm,
+        cuentaGmailId
+      });
+      
+      throw new Error(`Error al buscar eventos: ${error.message}`);
     }
   }
 
+  
+  /**
+   * 📋 Obtener evento específico por ID con token (CON AUTO-REFRESH)
+   */
+  async getEventByIdWithToken(
+    accessToken: string,
+    cuentaGmailId: string,
+    eventId: string
+  ) {
+    try {
+      this.logger.log(`📋 Obteniendo evento ${eventId} para cuenta Gmail ${cuentaGmailId}`);
+
+      const cuentaGmailIdNum = parseInt(cuentaGmailId);
+      
+      if (isNaN(cuentaGmailIdNum)) {
+        throw new Error('cuentaGmailId debe ser un número válido');
+      }
+
+      if (!eventId || eventId.trim() === '') {
+        throw new Error('eventId es requerido');
+      }
+
+      // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
+      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+      
+      const oauth2Client = new google.auth.OAuth2();
+      oauth2Client.setCredentials({ access_token: validAccessToken });
+      const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+      // 🎯 OBTENER EVENTO ESPECÍFICO POR ID
+      const response = await calendar.events.get({
+        calendarId: 'primary',
+        eventId: eventId
+      });
+
+      if (!response.data) {
+        throw new Error(`Evento ${eventId} not found`);
+      }
+
+      const event = response.data;
+
+      // 🔄 FORMATEAR RESPUESTA CONSISTENTE CON OTROS MÉTODOS
+      const formattedEvent = {
+        id: event.id,
+        summary: event.summary || 'Sin título',
+        location: event.location || '',
+        description: event.description || '',
+        startTime: event.start?.dateTime || event.start?.date || '',
+        endTime: event.end?.dateTime || event.end?.date || '',
+        attendees: event.attendees?.map((attendee: any) => attendee.email).filter(Boolean) || [],
+        isAllDay: !event.start?.dateTime, // Si no tiene dateTime, es todo el día
+        status: event.status || 'confirmed',
+        sourceAccount: undefined, // Solo se usa en búsquedas unificadas
+        sourceAccountId: cuentaGmailIdNum,
+        
+        // 🆕 CAMPOS ADICIONALES ÚTILES
+        creator: event.creator?.email || '',
+        organizer: event.organizer?.email || '',
+        htmlLink: event.htmlLink || '',
+        created: event.created || '',
+        updated: event.updated || '',
+        transparency: event.transparency || 'opaque',
+        visibility: event.visibility || 'default',
+        recurrence: event.recurrence || [],
+        recurringEventId: event.recurringEventId || null
+      };
+
+      this.logger.log(`✅ Evento ${eventId} obtenido exitosamente`);
+      return formattedEvent;
+
+    } catch (error: any) {
+      this.logger.error(`❌ Error obteniendo evento ${eventId}:`, error);
+      
+      // 🎯 MANEJO ESPECÍFICO DE ERRORES DE GOOGLE API
+      if (error.code === 404 || error.message?.includes('Not Found') || error.message?.includes('not found')) {
+        throw new Error(`Evento ${eventId} no encontrado`);
+      }
+      
+      if (error.code === 403) {
+        throw new Error('No tienes permisos para acceder a este evento');
+      }
+      
+      if (error.code === 401) {
+        throw new Error('Token de autorización inválido o expirado');
+      }
+      
+      if (error.code === 410) {
+        throw new Error('El evento ha sido eliminado');
+      }
+      
+      throw new Error(`Error obteniendo evento: ${error.message || 'Error desconocido'}`);
+    }
+  }
   /**
    * ➕ Crear evento con token (CON AUTO-REFRESH)
    */
@@ -218,40 +416,121 @@ export class CalendarService {
     eventBody: any
   ) {
     try {
-      this.logger.log(`➕ Creando evento para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`➕ Creando evento "${eventBody.summary || 'Sin título'}" para cuenta Gmail ${cuentaGmailId}`);
+
+      // 🔍 Validaciones básicas
+      if (!eventBody || !eventBody.summary) {
+        throw new Error('El campo summary es requerido');
+      }
+
+      if (!eventBody.startDateTime || !eventBody.endDateTime) {
+        throw new Error('Los campos startDateTime y endDateTime son requeridos');
+      }
 
       const cuentaGmailIdNum = parseInt(cuentaGmailId);
-      
       if (isNaN(cuentaGmailIdNum)) {
         throw new Error('cuentaGmailId debe ser un número válido');
       }
 
       // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
       const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+      
+      if (!validAccessToken) {
+        throw new Error('No se pudo obtener token válido para la cuenta');
+      }
 
+      // Configurar Google Calendar API
       const oauth2Client = new google.auth.OAuth2();
       oauth2Client.setCredentials({ access_token: validAccessToken });
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
-      const response = await calendar.events.insert({
-        calendarId: 'primary',
-        sendUpdates: 'all',
-        requestBody: eventBody
-      });
+      // 🔧 CONSTRUIR OBJETO PARA GOOGLE CALENDAR API
+      const googleEvent: any = {
+        summary: eventBody.summary,
+        start: {
+          dateTime: eventBody.startDateTime
+        },
+        end: {
+          dateTime: eventBody.endDateTime
+        }
+      };
 
-      // 🎯 GUARDAR EN BD EN BACKGROUND (como MS-Email)
-      if (!isNaN(cuentaGmailIdNum)) {
-        this.saveEventToDB(response.data, cuentaGmailIdNum).catch(err => {
-          this.logger.debug(`Background save error (ignorado):`, err);
-        });
+      // ➕ CAMPOS OPCIONALES
+      if (eventBody.location && eventBody.location.trim()) {
+        googleEvent.location = eventBody.location.trim();
       }
 
-      this.logger.log(`✅ Evento creado: ${response.data.id}`);
+      if (eventBody.description && eventBody.description.trim()) {
+        googleEvent.description = eventBody.description.trim();
+      }
+
+      // ➕ ASISTENTES (si existen y son válidos)
+      if (eventBody.attendees && Array.isArray(eventBody.attendees) && eventBody.attendees.length > 0) {
+        const validAttendees = eventBody.attendees
+          .filter((email: string) => email && email.trim() && email.includes('@'))
+          .map((email: string) => ({ email: email.trim() }));
+        
+        if (validAttendees.length > 0) {
+          googleEvent.attendees = validAttendees;
+        }
+      }
+
+      this.logger.debug(`🔧 Evento a crear en Google Calendar:`, {
+        summary: googleEvent.summary,
+        start: googleEvent.start,
+        end: googleEvent.end,
+        hasLocation: !!googleEvent.location,
+        hasDescription: !!googleEvent.description,
+        attendeesCount: googleEvent.attendees?.length || 0
+      });
+
+      // 🎯 CREAR EVENTO EN GOOGLE CALENDAR
+      const response = await calendar.events.insert({
+        calendarId: 'primary',
+        sendUpdates: googleEvent.attendees ? 'all' : 'none', // Solo enviar updates si hay asistentes
+        requestBody: googleEvent
+      });
+
+      if (!response.data || !response.data.id) {
+        throw new Error('Google Calendar no devolvió un evento válido');
+      }
+
+      // 🎯 GUARDAR EN BD EN BACKGROUND (como MS-Email)
+      this.saveEventToDB(response.data, cuentaGmailIdNum).catch(err => {
+        this.logger.debug(`Background save error (ignorado):`, err);
+      });
+
+      this.logger.log(`✅ Evento creado exitosamente: ${response.data.id}`);
+      this.logger.log(`🔗 Link del evento: ${response.data.htmlLink}`);
+
       return response.data;
 
-    } catch (error) {
-      this.logger.error('❌ Error creando evento:', error);
-      throw new Error('Error al crear evento');
+    } catch (error: any) {
+      this.logger.error(`❌ Error creando evento:`, {
+        message: error.message,
+        code: error.code,
+        eventSummary: eventBody?.summary || 'N/A'
+      });
+      
+      // 🎯 MANEJO ESPECÍFICO DE ERRORES
+      if (error.message?.includes('Invalid dateTime')) {
+        throw new Error('Formato de fecha inválido. Use formato ISO 8601 (ej: 2025-08-20T15:00:00.000Z)');
+      }
+      
+      if (error.code === 400) {
+        const errorDetail = error.response?.data?.error?.message || error.message;
+        throw new Error(`Error de validación: ${errorDetail}`);
+      }
+      
+      if (error.code === 401 || error.code === 403) {
+        throw new Error('Error de autenticación: Token inválido o permisos insuficientes');
+      }
+      
+      if (error.code === 429) {
+        throw new Error('Límite de API alcanzado. Intenta de nuevo en unos minutos');
+      }
+      
+      throw new Error(`Error al crear evento: ${error.message}`);
     }
   }
 

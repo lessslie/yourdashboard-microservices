@@ -2,8 +2,21 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import axios, { AxiosResponse } from 'axios';
 import { CacheService } from '../cache/cache.service';
+
+// ================================
+// 🔧 INTERFACES DE TIPADO SEGURO
+// ================================
+
+interface AuthTokenResponse {
+  success: boolean;
+  accessToken: string;
+}
+
+interface CalendarApiResponse {
+  data: unknown;
+}
 
 @Injectable()
 export class CalendarOrchestratorService {
@@ -28,22 +41,26 @@ export class CalendarOrchestratorService {
       this.logger.debug(`🔑 Solicitando token para cuenta Gmail ${cuentaGmailId} (Calendar)`);
 
       // 🎯 USAR EL ENDPOINT CORRECTO QUE FUNCIONA
-      const response = await axios.get(`${this.msAuthUrl}/tokens/gmail/${cuentaGmailId}`, {
+      const response: AxiosResponse<AuthTokenResponse> = await axios.get(`${this.msAuthUrl}/tokens/gmail/${cuentaGmailId}`, {
         headers: {
           'Authorization': authHeader // ✅ Pasar el JWT del usuario
         },
         timeout: 10000
       });
 
-      if (response.data?.success && response.data?.accessToken) {
+      // ✅ VALIDACIÓN TIPADA SEGURA
+      const responseData = response.data;
+      if (responseData && responseData.success && responseData.accessToken) {
         this.logger.debug(`✅ Token obtenido para cuenta Gmail ${cuentaGmailId} (Calendar)`);
-        return response.data.accessToken;
+        return responseData.accessToken;
       }
 
       throw new Error('Token no válido recibido de MS-Auth');
-    } catch (error: any) {
-      this.logger.error(`❌ Error obteniendo token para Calendar:`, error.message);
-      throw new Error(`Error obteniendo token para Calendar: ${error.message}`);
+    } catch (error: unknown) {
+      // ✅ MANEJO SEGURO DE ERRORES
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error obteniendo token para Calendar:`, errorMessage);
+      throw new Error(`Error obteniendo token para Calendar: ${errorMessage}`);
     }
   }
 
@@ -58,7 +75,7 @@ export class CalendarOrchestratorService {
     timeMax?: string,
     page: number = 1,
     limit: number = 10
-  ) {
+  ): Promise<unknown> {
     try {
       this.logger.log(`📅 Obteniendo eventos para cuenta Gmail ${cuentaGmailId} - Página ${page}`);
 
@@ -79,7 +96,7 @@ export class CalendarOrchestratorService {
       const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
 
       // 📅 Llamar a MS-Calendar con token OAuth
-      const response = await axios.get(`${this.msCalendarUrl}/calendar/events`, {
+      const response: AxiosResponse<CalendarApiResponse> = await axios.get(`${this.msCalendarUrl}/calendar/events`, {
         headers: {
           'Authorization': `Bearer ${accessToken}` // ✅ Usar token OAuth
         },
@@ -102,9 +119,10 @@ export class CalendarOrchestratorService {
 
       throw new Error('Respuesta vacía de MS-Calendar');
 
-    } catch (error: any) {
-      this.logger.error(`❌ Error obteniendo eventos:`, error.message);
-      throw new Error(`Error obteniendo eventos: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error obteniendo eventos:`, errorMessage);
+      throw new Error(`Error obteniendo eventos: ${errorMessage}`);
     }
   }
 
@@ -118,7 +136,7 @@ export class CalendarOrchestratorService {
     timeMax?: string,
     page: number = 1,
     limit: number = 10
-  ) {
+  ): Promise<unknown> {
     try {
       this.logger.log(`📅 🎯 EVENTOS UNIFICADOS para usuario ${userId} - Página ${page}`);
 
@@ -136,7 +154,7 @@ export class CalendarOrchestratorService {
       this.logger.log(`📡 CACHE MISS - Eventos unificados desde MS-Calendar para usuario ${userId}`);
 
       // 📅 Llamar directamente a MS-Calendar con userId
-      const response = await axios.get(`${this.msCalendarUrl}/calendar/events-unified`, {
+      const response: AxiosResponse<CalendarApiResponse> = await axios.get(`${this.msCalendarUrl}/calendar/events-unified`, {
         params: {
           userId,
           timeMin,
@@ -156,9 +174,10 @@ export class CalendarOrchestratorService {
 
       throw new Error('Respuesta vacía de MS-Calendar para eventos unificados');
 
-    } catch (error: any) {
-      this.logger.error(`❌ Error en eventos unificados:`, error.message);
-      throw new Error(`Error en eventos unificados: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error en eventos unificados:`, errorMessage);
+      throw new Error(`Error en eventos unificados: ${errorMessage}`);
     }
   }
 
@@ -173,7 +192,7 @@ export class CalendarOrchestratorService {
     searchTerm: string,
     page: number = 1,
     limit: number = 10
-  ) {
+  ): Promise<unknown> {
     try {
       this.logger.log(`🔍 Buscando eventos para cuenta Gmail ${cuentaGmailId}: "${searchTerm}"`);
 
@@ -194,7 +213,7 @@ export class CalendarOrchestratorService {
       const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
 
       // 🔍 Llamar a MS-Calendar
-      const response = await axios.get(`${this.msCalendarUrl}/calendar/events/search`, {
+      const response: AxiosResponse<CalendarApiResponse> = await axios.get(`${this.msCalendarUrl}/calendar/events/search`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`
         },
@@ -217,9 +236,10 @@ export class CalendarOrchestratorService {
 
       throw new Error('Respuesta vacía de MS-Calendar para búsqueda');
 
-    } catch (error: any) {
-      this.logger.error(`❌ Error buscando eventos:`, error.message);
-      throw new Error(`Error buscando eventos: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error buscando eventos:`, errorMessage);
+      throw new Error(`Error buscando eventos: ${errorMessage}`);
     }
   }
 
@@ -233,7 +253,7 @@ export class CalendarOrchestratorService {
     searchTerm: string,
     page: number = 1,
     limit: number = 10
-  ) {
+  ): Promise<unknown> {
     try {
       this.logger.log(`🌍 BÚSQUEDA GLOBAL de eventos para usuario ${userId}: "${searchTerm}"`);
 
@@ -251,7 +271,7 @@ export class CalendarOrchestratorService {
       this.logger.log(`📡 CACHE MISS - Búsqueda global de eventos desde MS-Calendar para usuario ${userId}`);
 
       // 🔍 Llamar directamente a MS-Calendar con userId para búsqueda global
-      const response = await axios.get(`${this.msCalendarUrl}/calendar/search-global`, {
+      const response: AxiosResponse<CalendarApiResponse> = await axios.get(`${this.msCalendarUrl}/calendar/search-global`, {
         params: {
           userId,
           timeMin,
@@ -271,9 +291,10 @@ export class CalendarOrchestratorService {
 
       throw new Error('Respuesta vacía de MS-Calendar para búsqueda global');
 
-    } catch (error: any) {
-      this.logger.error(`❌ Error en búsqueda global de eventos:`, error.message);
-      throw new Error(`Error en búsqueda global: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error en búsqueda global de eventos:`, errorMessage);
+      throw new Error(`Error en búsqueda global: ${errorMessage}`);
     }
   }
 
@@ -281,7 +302,7 @@ export class CalendarOrchestratorService {
   // 📊 ESTADÍSTICAS DE CALENDARIO
   // ================================
 
-  async getEstadisticasCalendario(authHeader: string, cuentaGmailId: string) {
+  async getEstadisticasCalendario(authHeader: string, cuentaGmailId: string): Promise<unknown> {
     try {
       this.logger.log(`📊 Obteniendo estadísticas para cuenta Gmail ${cuentaGmailId}`);
 
@@ -302,7 +323,7 @@ export class CalendarOrchestratorService {
       const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
 
       // 📊 Llamar a MS-Calendar
-      const response = await axios.get(`${this.msCalendarUrl}/calendar/stats`, {
+      const response: AxiosResponse<CalendarApiResponse> = await axios.get(`${this.msCalendarUrl}/calendar/stats`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`
         },
@@ -321,9 +342,10 @@ export class CalendarOrchestratorService {
 
       throw new Error('Respuesta vacía de MS-Calendar para estadísticas');
 
-    } catch (error: any) {
-      this.logger.error(`❌ Error obteniendo estadísticas:`, error.message);
-      throw new Error(`Error obteniendo estadísticas: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error obteniendo estadísticas:`, errorMessage);
+      throw new Error(`Error obteniendo estadísticas: ${errorMessage}`);
     }
   }
 
@@ -331,7 +353,7 @@ export class CalendarOrchestratorService {
   // 🔄 SINCRONIZACIÓN DE EVENTOS
   // ================================
 
-  async sincronizarEventos(authHeader: string, cuentaGmailId: string, maxEvents: number = 100) {
+  async sincronizarEventos(authHeader: string, cuentaGmailId: string, maxEvents: number = 100): Promise<unknown> {
     try {
       this.logger.log(`🔄 Iniciando sync de eventos para cuenta Gmail ${cuentaGmailId}`);
 
@@ -339,7 +361,7 @@ export class CalendarOrchestratorService {
       const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
 
       // 🔄 Llamar a MS-Calendar
-      const response = await axios.post(`${this.msCalendarUrl}/calendar/sync`, null, {
+      const response: AxiosResponse<CalendarApiResponse> = await axios.post(`${this.msCalendarUrl}/calendar/sync`, null, {
         headers: {
           'Authorization': `Bearer ${accessToken}`
         },
@@ -361,9 +383,10 @@ export class CalendarOrchestratorService {
 
       throw new Error('Respuesta vacía de MS-Calendar para sync');
 
-    } catch (error: any) {
-      this.logger.error(`❌ Error en sync de eventos:`, error.message);
-      throw new Error(`Error sincronizando eventos: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error en sync de eventos:`, errorMessage);
+      throw new Error(`Error sincronizando eventos: ${errorMessage}`);
     }
   }
 
@@ -371,7 +394,7 @@ export class CalendarOrchestratorService {
   // 🧹 UTILIDADES DE CACHE
   // ================================
 
-  private async limpiarCacheCalendar(cuentaGmailId: string) {
+  private async limpiarCacheCalendar(cuentaGmailId: string): Promise<void> {
     try {
       // Limpiar cache relacionado con esta cuenta
       const keysToDelete = [
@@ -385,8 +408,9 @@ export class CalendarOrchestratorService {
       }
 
       this.logger.debug(`🧹 Cache de calendario limpiado para cuenta ${cuentaGmailId}`);
-    } catch (error: any) {
-      this.logger.debug(`⚠️ No se pudo limpiar cache:`, error.message);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.debug(`⚠️ No se pudo limpiar cache:`, errorMessage);
     }
   }
 
@@ -394,8 +418,8 @@ export class CalendarOrchestratorService {
   // 🔧 MÉTODOS LEGACY (MANTENER COMPATIBILIDAD)
   // ================================
 
-  // Estos métodos pueden existir en tu archivo original, los mantengo para compatibilidad
-  async healthCheck() {
+  // Estos métodos pueden existir en tu archivo original, mantenerlos para compatibilidad
+  healthCheck(): Record<string, unknown> {
     return {
       service: 'calendar-orchestrator',
       status: 'OK',
@@ -405,5 +429,209 @@ export class CalendarOrchestratorService {
         msCalendar: this.msCalendarUrl
       }
     };
+  }
+
+  // ================================
+  // 📋 OBTENER EVENTO ESPECÍFICO POR ID
+  // ================================
+
+  async getEventByIdWithToken(
+    authHeader: string,
+    cuentaGmailId: string,
+    eventId: string
+  ): Promise<unknown> {
+    try {
+      this.logger.log(`📋 Obteniendo evento ${eventId} para cuenta Gmail ${cuentaGmailId}`);
+
+      if (!eventId || eventId.trim() === '') {
+        throw new Error('eventId es requerido');
+      }
+
+      // Obtener token válido para la cuenta
+      const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
+
+      // Llamar al MS-Calendar
+      const response: AxiosResponse<CalendarApiResponse> = await axios.get(`${this.msCalendarUrl}/calendar/events/${eventId}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        },
+        params: {
+          cuentaGmailId
+        },
+        timeout: 15000
+      });
+
+      this.logger.log(`✅ Evento ${eventId} obtenido exitosamente`);
+      return response.data;
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error obteniendo evento ${eventId}:`, errorMessage);
+      throw new Error(`Error obteniendo evento: ${errorMessage}`);
+    }
+  }
+
+  // ================================
+  // ➕ CREAR NUEVO EVENTO
+  // ================================
+
+  async createEventWithToken(
+    authHeader: string,
+    cuentaGmailId: string,
+    createEventDto: unknown
+  ): Promise<unknown> {
+    try {
+      // ✅ VALIDACIÓN SEGURA DE PROPIEDADES
+      const eventData = createEventDto as { summary?: string };
+      const eventTitle = eventData?.summary || 'Evento sin título';
+      
+      this.logger.log(`➕ Creando evento "${eventTitle}" para cuenta Gmail ${cuentaGmailId}`);
+
+      // Obtener token válido para la cuenta
+      const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
+
+      // Llamar al MS-Calendar
+      const response: AxiosResponse<CalendarApiResponse> = await axios.post(`${this.msCalendarUrl}/calendar/events`, 
+        createEventDto,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          params: {
+            cuentaGmailId
+          },
+          timeout: 15000
+        }
+      );
+
+      this.logger.log(`✅ Evento "${eventTitle}" creado exitosamente`);
+      return response.data;
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error creando evento:`, errorMessage);
+      throw new Error(`Error creando evento: ${errorMessage}`);
+    }
+  }
+
+  // ================================
+  // ➕ CREAR EVENTO PRIVADO
+  // ================================
+
+  async createPrivateEventWithToken(
+    authHeader: string,
+    cuentaGmailId: string,
+    createEventDto: unknown
+  ): Promise<unknown> {
+    try {
+      const eventData = createEventDto as { summary?: string };
+      const eventTitle = eventData?.summary || 'Evento privado sin título';
+      
+      this.logger.log(`➕ Creando evento PRIVADO "${eventTitle}" para cuenta Gmail ${cuentaGmailId}`);
+
+      // Obtener token válido para la cuenta
+      const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
+
+      // Llamar al MS-Calendar
+      const response: AxiosResponse<CalendarApiResponse> = await axios.post(`${this.msCalendarUrl}/calendar/events/private`, 
+        createEventDto,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          params: {
+            cuentaGmailId
+          },
+          timeout: 15000
+        }
+      );
+
+      this.logger.log(`✅ Evento privado "${eventTitle}" creado exitosamente`);
+      return response.data;
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error creando evento privado:`, errorMessage);
+      throw new Error(`Error creando evento privado: ${errorMessage}`);
+    }
+  }
+
+  // ================================
+  // ✏️ ACTUALIZAR EVENTO EXISTENTE
+  // ================================
+
+  async updateEventWithToken(
+    authHeader: string,
+    cuentaGmailId: string,
+    eventId: string,
+    updateEventDto: unknown
+  ): Promise<unknown> {
+    try {
+      this.logger.log(`✏️ Actualizando evento ${eventId} para cuenta Gmail ${cuentaGmailId}`);
+
+      // Obtener token válido para la cuenta
+      const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
+
+      // Llamar al MS-Calendar
+      const response: AxiosResponse<CalendarApiResponse> = await axios.patch(`${this.msCalendarUrl}/calendar/events/${eventId}`, 
+        updateEventDto,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          params: {
+            cuentaGmailId
+          },
+          timeout: 15000
+        }
+      );
+
+      this.logger.log(`✅ Evento ${eventId} actualizado exitosamente`);
+      return response.data;
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error actualizando evento ${eventId}:`, errorMessage);
+      throw new Error(`Error actualizando evento: ${errorMessage}`);
+    }
+  }
+
+  // ================================
+  // 🗑️ ELIMINAR EVENTO
+  // ================================
+
+  async deleteEventWithToken(
+    authHeader: string,
+    cuentaGmailId: string,
+    eventId: string
+  ): Promise<unknown> {
+    try {
+      this.logger.log(`🗑️ Eliminando evento ${eventId} para cuenta Gmail ${cuentaGmailId}`);
+
+      // Obtener token válido para la cuenta
+      const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
+
+      // Llamar al MS-Calendar
+      const response: AxiosResponse<CalendarApiResponse> = await axios.delete(`${this.msCalendarUrl}/calendar/events/${eventId}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        },
+        params: {
+          cuentaGmailId
+        },
+        timeout: 15000
+      });
+
+      this.logger.log(`✅ Evento ${eventId} eliminado exitosamente`);
+      return response.data;
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error eliminando evento ${eventId}:`, errorMessage);
+      throw new Error(`Error eliminando evento: ${errorMessage}`);
+    }
   }
 }
