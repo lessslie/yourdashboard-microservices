@@ -1,7 +1,19 @@
 -- =====================================
--- NUEVA ARQUITECTURA - YOURDASHBOARD
+-- YOURDASHBOARD - ESTRUCTURA COMPLETA BD
+-- =====================================
+-- Archivo: init_ms_auth.sql
+
+-- =====================================
+-- PASO 1: CREAR BASE DE DATOS
 -- =====================================
 CREATE DATABASE ms_yourdashboard_auth;
+
+-- Conectar a la base de datos recién creada
+\c ms_yourdashboard_auth;
+
+-- =====================================
+-- PASO 2: TABLAS PRINCIPALES
+-- =====================================
 
 -- 📋 TABLA 1: usuarios_principales
 -- Un registro por usuario que se registra con email/password
@@ -30,10 +42,12 @@ CREATE TABLE cuentas_gmail_asociadas (
   fecha_conexion TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
   ultima_sincronizacion TIMESTAMP WITHOUT TIME ZONE,
   esta_activa BOOLEAN DEFAULT TRUE,
+  consecutive_zero_syncs INTEGER DEFAULT 0, -- Contador de sincronizaciones sin emails nuevos
   alias_personalizado VARCHAR(100), -- "Gmail Personal", "Trabajo", etc.
+  backfill_checkpoint_date DATE, -- Checkpoint para sincronización por fechas (deprecado)
+  backfill_page_token VARCHAR(255), -- Token de paginación para sincronización masiva
   UNIQUE(usuario_principal_id, email_gmail)
 );
-  -- Constraint: Un usuario no puede conectar la misma cuenta Gmail dos veces
 
 -- 📨 TABLA 3: emails_sincronizados
 -- Metadata de emails para listas rápidas (NO contenido completo)
@@ -44,12 +58,12 @@ CREATE TABLE emails_sincronizados (
   asunto TEXT,
   remitente_email TEXT,
   remitente_nombre TEXT,
-  destinatario_email TEXT,
+  destinatario_email TEXT, -- Email del destinatario principal
   fecha_recibido TIMESTAMP WITHOUT TIME ZONE,
   esta_leido BOOLEAN DEFAULT FALSE,
   tiene_adjuntos BOOLEAN DEFAULT FALSE,
   etiquetas_gmail TEXT[], -- Array de labels de Gmail
-  tamano_bytes INTEGER, 
+  tamano_bytes INTEGER, -- Tamaño del email en bytes
   fecha_sincronizado TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
   -- Constraint: Un mensaje de Gmail no se puede duplicar por cuenta
   UNIQUE(cuenta_gmail_id, gmail_message_id)
@@ -66,6 +80,17 @@ CREATE TABLE sesiones_jwt (
   esta_activa BOOLEAN DEFAULT TRUE,
   ip_origen INET,
   user_agent TEXT
+);
+
+-- 📊 TABLA 5: audit_eliminaciones
+-- Auditoría de eliminaciones para tracking
+CREATE TABLE audit_eliminaciones (
+  id SERIAL PRIMARY KEY,
+  tabla VARCHAR(50),
+  registro_id INTEGER,
+  datos_eliminados JSONB,
+  usuario_bd VARCHAR(50),
+  fecha_eliminacion TIMESTAMP DEFAULT NOW()
 );
 
 -- =====================================
@@ -106,13 +131,38 @@ CREATE INDEX idx_cuentas_gmail_usuario_principal ON cuentas_gmail_asociadas(usua
 CREATE INDEX idx_cuentas_gmail_email ON cuentas_gmail_asociadas(email_gmail);
 CREATE INDEX idx_cuentas_gmail_google_id ON cuentas_gmail_asociadas(google_id);
 CREATE INDEX idx_cuentas_gmail_activa ON cuentas_gmail_asociadas(esta_activa);
+CREATE INDEX idx_cuentas_gmail_sync_status ON cuentas_gmail_asociadas(consecutive_zero_syncs) WHERE consecutive_zero_syncs < 2;
 
--- Índices para emails_sincronizados  
+-- Índices básicos para emails_sincronizados  
 CREATE INDEX idx_emails_cuenta_gmail ON emails_sincronizados(cuenta_gmail_id);
 CREATE INDEX idx_emails_fecha_recibido ON emails_sincronizados(fecha_recibido DESC);
 CREATE INDEX idx_emails_gmail_message_id ON emails_sincronizados(gmail_message_id);
 CREATE INDEX idx_emails_esta_leido ON emails_sincronizados(esta_leido);
 CREATE INDEX idx_emails_remitente ON emails_sincronizados(remitente_email);
+
+-- Índices optimizados para búsquedas
+CREATE INDEX idx_emails_search_text 
+ON emails_sincronizados 
+USING gin(to_tsvector('spanish', 
+  COALESCE(asunto, '') || ' ' || 
+  COALESCE(remitente_email, '') || ' ' || 
+  COALESCE(remitente_nombre, '') || ' ' || 
+  COALESCE(destinatario_email, '')
+));
+
+-- Índice compuesto para filtros comunes
+CREATE INDEX idx_emails_filters 
+ON emails_sincronizados(cuenta_gmail_id, esta_leido, tiene_adjuntos, fecha_recibido DESC);
+
+-- Índice para búsqueda por remitente específico
+CREATE INDEX idx_emails_remitente_specific 
+ON emails_sincronizados(cuenta_gmail_id, remitente_email) 
+WHERE remitente_email IS NOT NULL;
+
+-- Índice para emails no leídos (consulta frecuente)
+CREATE INDEX idx_emails_unread 
+ON emails_sincronizados(cuenta_gmail_id, fecha_recibido DESC) 
+WHERE esta_leido = FALSE;
 
 -- Índices para sesiones_jwt
 CREATE INDEX idx_sesiones_usuario_principal ON sesiones_jwt(usuario_principal_id);
@@ -191,79 +241,40 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- =====================================
+-- Función: Eliminar cuenta Gmail de forma segura
+CREATE OR REPLACE FUNCTION eliminar_cuenta_gmail_segura(p_cuenta_id INTEGER)
+RETURNS JSON AS $$
+DECLARE
+    cuenta_info RECORD;
+    emails_count INTEGER;
+BEGIN
+    -- Obtener info antes de borrar
+    SELECT email_gmail, usuario_principal_id 
+    INTO cuenta_info
+    FROM cuentas_gmail_asociadas 
+    WHERE id = p_cuenta_id;
+    
+    IF NOT FOUND THEN
+        RETURN json_build_object('error', 'Cuenta no encontrada');
+    END IF;
+    
+    -- Contar emails que se van a borrar
+    SELECT COUNT(*) INTO emails_count 
+    FROM emails_sincronizados 
+    WHERE cuenta_gmail_id = p_cuenta_id;
+    
+    -- Borrar (CASCADE hace la magia)
+    DELETE FROM cuentas_gmail_asociadas WHERE id = p_cuenta_id;
+    
+    RETURN json_build_object(
+        'success', true,
+        'cuenta_eliminada', cuenta_info.email_gmail,
+        'emails_eliminados', emails_count
+    );
+END;
+$$ LANGUAGE plpgsql;
 
--- =====================================
--- PASO 6: VERIFICACIÓN
--- =====================================
-
--- Mostrar todas las tablas
-\dt
-
--- Mostrar estadísticas del sistema
-SELECT * FROM obtener_estadisticas_sistema();
-
--- Mostrar cuentas Gmail del usuario Alonso (ID=1)
-SELECT * FROM obtener_cuentas_gmail_usuario(1);
-
--- Verificar estructura de las tablas principales
-\d usuarios_principales
-\d cuentas_gmail_asociadas  
-\d emails_sincronizados
-\d sesiones_jwt
-
--- =====================================
--- PASO 7: COMANDOS ÚTILES
--- =====================================
-
--- Limpiar sesiones expiradas
--- SELECT limpiar_sesiones_expiradas();
-
--- Ver relaciones entre tablas
--- SELECT 
---     tc.table_name, 
---     kcu.column_name, 
---     ccu.table_name AS foreign_table_name,
---     ccu.column_name AS foreign_column_name 
--- FROM information_schema.table_constraints AS tc 
--- JOIN information_schema.key_column_usage AS kcu ON tc.constraint_name = kcu.constraint_name
--- JOIN information_schema.constraint_column_usage AS ccu ON ccu.constraint_name = tc.constraint_name
--- WHERE constraint_type = 'FOREIGN KEY';
--- =====================================
--- OPTIMIZACIONES PARA METADATA DE EMAILS
--- =====================================
-
--- 🔍 Índices optimizados para búsqueda rápida
-
--- Índice para búsqueda por texto (asunto, remitente, destinatario)
-CREATE INDEX idx_emails_search_text 
-ON emails_sincronizados 
-USING gin(to_tsvector('spanish', 
-  COALESCE(asunto, '') || ' ' || 
-  COALESCE(remitente_email, '') || ' ' || 
-  COALESCE(remitente_nombre, '') || ' ' || 
-  COALESCE(destinatario_email, '')
-));
-
--- Índice compuesto para filtros comunes
-CREATE INDEX idx_emails_filters 
-ON emails_sincronizados(cuenta_gmail_id, esta_leido, tiene_adjuntos, fecha_recibido DESC);
-
--- Índice para búsqueda por remitente específico
-CREATE INDEX idx_emails_remitente_specific 
-ON emails_sincronizados(cuenta_gmail_id, remitente_email) 
-WHERE remitente_email IS NOT NULL;
-
--- Índice para emails no leídos (consulta frecuente)
-CREATE INDEX idx_emails_unread 
-ON emails_sincronizados(cuenta_gmail_id, fecha_recibido DESC) 
-WHERE esta_leido = FALSE;
-
--- =====================================
--- 📊 FUNCIONES DE ESTADÍSTICAS Y BÚSQUEDA
--- =====================================
-
--- Función para estadísticas rápidas por cuenta
+-- Función: Obtener estadísticas rápidas por cuenta
 CREATE OR REPLACE FUNCTION obtener_stats_emails_cuenta(p_cuenta_id INTEGER)
 RETURNS TABLE (
     total_emails BIGINT,
@@ -307,30 +318,117 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Función para limpieza automática (GDPR compliance)
-CREATE OR REPLACE FUNCTION limpiar_emails_viejos(
-    p_dias_antiguedad INTEGER DEFAULT 90
+-- Función: Obtener reporte de emails por antigüedad (solo consulta, no borra)
+CREATE OR REPLACE FUNCTION obtener_reporte_emails_antiguos(
+    p_dias_antiguedad INTEGER DEFAULT 365
 )
 RETURNS TABLE (
     cuenta_gmail_id INTEGER,
-    emails_eliminados BIGINT
-) AS $$
+    email_gmail VARCHAR,
+    emails_antiguos BIGINT,
+    fecha_mas_antigua TIMESTAMP
+) AS $
 BEGIN
     RETURN QUERY
-    WITH deleted AS (
-        DELETE FROM emails_sincronizados 
-        WHERE fecha_recibido < NOW() - INTERVAL '1 day' * p_dias_antiguedad
-        RETURNING cuenta_gmail_id
-    )
     SELECT 
-        d.cuenta_gmail_id,
-        COUNT(*) as emails_eliminados
-    FROM deleted d
-    GROUP BY d.cuenta_gmail_id;
-    
-    RAISE NOTICE 'Limpieza completada para emails anteriores a % días', p_dias_antiguedad;
+        es.cuenta_gmail_id,
+        cga.email_gmail,
+        COUNT(*) as emails_antiguos,
+        MIN(es.fecha_recibido) as fecha_mas_antigua
+    FROM emails_sincronizados es
+    JOIN cuentas_gmail_asociadas cga ON es.cuenta_gmail_id = cga.id
+    WHERE es.fecha_recibido < NOW() - INTERVAL '1 day' * p_dias_antiguedad
+    GROUP BY es.cuenta_gmail_id, cga.email_gmail
+    ORDER BY emails_antiguos DESC;
+END;
+$ LANGUAGE plpgsql;
+
+-- =====================================
+-- PASO 6: TRIGGERS
+-- =====================================
+
+-- Trigger: Auditar eliminaciones de cuentas
+CREATE OR REPLACE FUNCTION audit_eliminacion_cuenta()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO audit_eliminaciones (tabla, registro_id, datos_eliminados, usuario_bd)
+    VALUES (
+        'cuentas_gmail_asociadas',
+        OLD.id,
+        row_to_json(OLD)::jsonb,
+        current_user
+    );
+    RETURN OLD;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tr_audit_cuenta_eliminada
+BEFORE DELETE ON cuentas_gmail_asociadas
+FOR EACH ROW EXECUTE FUNCTION audit_eliminacion_cuenta();
+
+-- =====================================
+-- PASO 7: COMENTARIOS DE DOCUMENTACIÓN
+-- =====================================
+
+COMMENT ON TABLE usuarios_principales IS 'Usuarios que se registran con email/contraseña en el sistema';
+COMMENT ON TABLE cuentas_gmail_asociadas IS 'Cuentas Gmail conectadas via OAuth por cada usuario';
+COMMENT ON TABLE emails_sincronizados IS 'Cache de metadata de emails - NO contiene contenido sensible completo';
+COMMENT ON TABLE sesiones_jwt IS 'Sesiones activas de usuarios autenticados';
+COMMENT ON TABLE audit_eliminaciones IS 'Auditoría de eliminaciones para compliance y debugging';
+
+COMMENT ON COLUMN cuentas_gmail_asociadas.consecutive_zero_syncs IS 'Contador para detectar cuando termina el backfill (0-2)';
+COMMENT ON COLUMN cuentas_gmail_asociadas.backfill_page_token IS 'Token de paginación para continuar sincronización masiva';
+COMMENT ON COLUMN cuentas_gmail_asociadas.backfill_checkpoint_date IS 'Checkpoint de fecha para backfill (DEPRECADO - usar page_token)';
+COMMENT ON COLUMN emails_sincronizados.destinatario_email IS 'Email del destinatario principal (primer TO)';
+COMMENT ON COLUMN emails_sincronizados.tamano_bytes IS 'Tamaño del email en bytes (incluye adjuntos)';
+
+-- =====================================
+-- PASO 8: DATOS DE EJEMPLO (OPCIONAL)
+-- =====================================
+
+-- Usuario de prueba (descomenta si necesitas datos de ejemplo)
+/*
+INSERT INTO usuarios_principales (email, password_hash, nombre, email_verificado) 
+VALUES ('test@example.com', '$2b$10$example_hash', 'Usuario de Prueba', true);
+*/
+
+-- =====================================
+-- PASO 9: VERIFICACIÓN FINAL
+-- =====================================
+
+-- Mostrar todas las tablas creadas
+\dt
+
+-- Mostrar estadísticas del sistema recién creado
+SELECT * FROM obtener_estadisticas_sistema();
+
+-- Verificar estructura de las tablas principales
+SELECT 
+    table_name,
+    column_name,
+    data_type,
+    is_nullable,
+    column_default
+FROM information_schema.columns
+WHERE table_name IN ('usuarios_principales','sesiones_jwt','audit_eliminaciones', 'cuentas_gmail_asociadas', 'emails_sincronizados')
+ORDER BY table_name, ordinal_position;
+
+-- Verificar índices creados
+SELECT 
+    tablename,
+    indexname,
+    indexdef
+FROM pg_indexes 
+WHERE schemaname = 'public'
+ORDER BY tablename, indexname;
+
+-- Verificar funciones creadas
+SELECT 
+    routine_name,
+    routine_type
+FROM information_schema.routines
+WHERE routine_schema = 'public'
+ORDER BY routine_name;
 
 -- INTEGRACIÓN WHATSAPP MULTICUENTA
 -- =====================================
@@ -395,20 +493,65 @@ CREATE INDEX idx_messages_conversation ON messages(conversation_id);
 CREATE INDEX idx_messages_account ON messages(whatsapp_account_id);
 
 -- =====================================
--- 📝 DOCUMENTACIÓN
--- =====================================
 
-COMMENT ON TABLE emails_sincronizados IS 'Cache de metadata de emails - NO contiene contenido sensible';
-COMMENT ON COLUMN emails_sincronizados.destinatario_email IS 'Email del destinatario principal (primer TO)';
-COMMENT ON COLUMN emails_sincronizados.tamano_bytes IS 'Tamaño del email en bytes (incluye adjuntos)';
-COMMENT ON FUNCTION obtener_stats_emails_cuenta IS 'Estadísticas rápidas por cuenta Gmail';
-COMMENT ON FUNCTION limpiar_emails_viejos IS 'Limpieza automática de emails antiguos (GDPR compliance)';
 -- =====================================
--- ✅ MENSAJE DE ÉXITO
+-- 🎉 MENSAJE DE ÉXITO
 -- =====================================
-SELECT '🎯 Nueva arquitectura implementada exitosamente! 
-📋 Usuarios principales: Registro tradicional
-📧 Cuentas Gmail: Múltiples por usuario  
-📨 Emails sincronizados: Metadata para listas
-🔐 Sesiones JWT: Autenticación del usuario principal
-✅ Tablas de WhatsApp multicuenta creadas correctamente!' as estado;
+SELECT 
+    '🎯 YourDashboard BD creada exitosamente!' as resultado,
+    NOW() as timestamp,
+    '✅ Todas las tablas, índices, funciones y triggers están listos' as estado,
+    'El CRON de sincronización puede ejecutarse sin problemas' as nota_importante;
+
+-- =====================================
+-- 📋 COMANDOS ÚTILES POST-INSTALACIÓN
+-- =====================================
+-- 
+-- Comandos que puedes usar después de la instalación:
+--
+-- 🔍 Ver cuentas pendientes de backfill:
+-- SELECT * FROM cuentas_gmail_asociadas WHERE consecutive_zero_syncs < 2;
+--
+-- 📊 Estadísticas generales del sistema:
+-- SELECT * FROM obtener_estadisticas_sistema();
+--
+-- 📧 Estadísticas de una cuenta específica:
+-- SELECT * FROM obtener_stats_emails_cuenta(1);
+--
+-- 📊 Ver reporte de emails antiguos (sin borrar nada):
+-- SELECT * FROM obtener_reporte_emails_antiguos(365);
+--
+-- 🗑️ Eliminar emails específicos MANUALMENTE (ejemplo):
+-- DELETE FROM emails_sincronizados 
+-- WHERE cuenta_gmail_id = 1 AND fecha_recibido < '2023-01-01';
+--
+-- 🗑️ Ver eliminaciones auditadas:
+-- SELECT * FROM audit_eliminaciones ORDER BY fecha_eliminacion DESC;
+--
+-- 🔧 Obtener cuentas Gmail de un usuario:
+-- SELECT * FROM obtener_cuentas_gmail_usuario(1);
+--
+-- =====================================
+-- 📝 NOTAS IMPORTANTES
+-- =====================================
+--
+-- 1. Esta estructura está optimizada para:
+--    - ✅ Sincronización automática con CRON
+--    - ✅ Búsquedas rápidas de emails
+--    - ✅ Gestión de múltiples cuentas Gmail por usuario
+--    - ✅ Auditoría de cambios importantes
+--    - ✅ Compliance y limpieza automática
+--
+-- 2. Las columnas críticas para el CRON:
+--    - consecutive_zero_syncs: Controla cuándo parar el backfill
+--    - backfill_page_token: Permite continuar sincronizaciones masivas
+--    - destinatario_email: Optimiza búsquedas por destinatario
+--
+-- 3. Los índices GIN permiten búsquedas de texto completo super rápidas
+--
+-- 4. Las funciones incluyen reportes para analizar datos históricos
+--
+-- 5. El trigger de auditoría rastrea eliminaciones automáticamente
+--
+-- 6. ELIMINACIONES: Se hacen manualmente cuando sea necesario, no automáticamente
+--

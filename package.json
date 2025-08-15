@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "@nestjs/config": "^4.0.2",
+    "@nestjs/schedule": "^6.0.0",
+    "@nestjs/swagger": "^11.2.0",
+    "@types/node": "^24.2.1",
+    "googleapis": "^155.0.1",
+    "pg": "^8.16.3"
+  }
+}

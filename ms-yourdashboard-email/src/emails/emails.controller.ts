@@ -6,7 +6,8 @@ import {
   Param, 
   Headers,
   UnauthorizedException, 
-  BadRequestException
+  BadRequestException,
+  Logger
 } from '@nestjs/common';
 import { 
   ApiTags, 
@@ -28,13 +29,16 @@ import {
   EmailErrorResponseDto,
   EmailHealthResponseDto
 } from './dto';
+import { ConfigService } from '@nestjs/config';
 
 @ApiTags('Emails')
 @Controller('emails')
 export class EmailsController {
-  constructor(private readonly emailsService: EmailsService) {}
-
-
+  private readonly logger = new Logger(EmailsController.name);
+  constructor(
+    private readonly emailsService: EmailsService,
+    private readonly configService: ConfigService
+  ) {}
 
     /**
    * 🔧 GET /emails/health - Health check
@@ -49,7 +53,9 @@ export class EmailsController {
     description: 'Servicio funcionando correctamente',
     type: EmailHealthResponseDto 
   })
-  getHealth(): EmailHealthResponseDto {
+
+
+  getHealth() : EmailHealthResponseDto {
     return {
       service: 'ms-yourdashboard-email',
       status: 'OK',
@@ -83,7 +89,8 @@ export class EmailsController {
   async syncEmails(
     @Headers('authorization') authHeader: string,
     @Query('cuentaGmailId') cuentaGmailId: string,
-    @Query('maxEmails') maxEmails?: string
+    @Query('maxEmails') maxEmails?: string,
+    @Query('fullsync') fullsync?:string
   ) {
     if (!cuentaGmailId) {
       throw new UnauthorizedException('cuentaGmailId is required');
@@ -103,7 +110,7 @@ export class EmailsController {
     
     return this.emailsService.syncEmailsWithToken(accessToken, cuentaGmailId, {
       maxEmails: maxEmailsNum,
-      fullSync: false
+      fullSync: fullsync === 'true' // Convertir a booleano
     });
   }
 
@@ -149,7 +156,7 @@ export class EmailsController {
   }
 
   // ================================
-  // 📧 ENDPOINTS PRINCIPALES - ACTUALIZADOS
+  // 📧 ENDPOINTS PRINCIPALES
   // ================================
 
   /**
@@ -604,36 +611,81 @@ async getInboxAllAccounts(
     description: 'Email no encontrado',
     type: EmailErrorResponseDto 
   })
-  async getEmailById(
-    @Headers('authorization') authHeader: string,
-    @Param('id') emailId: string,
-    @Query('cuentaGmailId') cuentaGmailId: string
-  ): Promise<EmailDetailDto> {
-    if (!cuentaGmailId) {
-      throw new UnauthorizedException('cuentaGmailId is required');
-    }
 
-    if (!authHeader) {
-      throw new UnauthorizedException('Authorization header is required');
-    }
-    
-    if (!emailId) {
-      throw new UnauthorizedException('Message ID is required');
-    }
-    
-    const accessToken = authHeader.replace('Bearer ', '');
-    
-    if (!accessToken) {
-      throw new UnauthorizedException('Valid Bearer token is required');
-    }
-    
-    // 🎯 OBTENER DATOS DEL SERVICIO
-    const result = await this.emailsService.getEmailByIdWithToken(accessToken, cuentaGmailId, emailId);
 
-    // 🎯 CONVERTIR Date → string PARA EL DTO
-    return {
-      ...result,
-      receivedDate: result.receivedDate.toISOString() // Date → string
-    };
+
+  /**
+   * 🔍 GET /emails/cron-status - Ver estado del CRON
+   */
+  @Get('cron-status')
+  @ApiOperation({ 
+    summary: '📊 Ver estado del servicio CRON',
+    description: 'Muestra información sobre la configuración y estado del CRON sync.'
+  })
+  @ApiOkResponse({ 
+    description: 'Estado del CRON',
+    schema: {
+      type: 'object',
+      properties: {
+        enabled: { type: 'boolean', example: true },
+        weekdaySchedule: { type: 'string', example: '*/10 * * * 1-5' },
+        weekendSchedule: { type: 'string', example: '0 */4 * * 0,6' },
+        maxEmailsPerAccount: { type: 'number', example: 30 },
+        maxAccountsPerRun: { type: 'number', example: 100 },
+        nextWeekdayRun: { type: 'string', example: 'en 7 minutos' },
+        nextWeekendRun: { type: 'string', example: 'Sábado a las 00:00' }
+      }
+    }
+  })
+
+
+  //************************************************ */
+
+
+@Get(':id')
+@ApiOperation({ 
+  summary: 'Obtener email por ID',
+  description: 'Obtiene el contenido completo de un email específico usando JWT token para identificar al usuario.'
+})
+@ApiParam({ 
+  name: 'id', 
+  description: 'ID del mensaje en Gmail', 
+  example: '1847a8e123456789' 
+})
+@ApiBearerAuth('Gmail-Token') //  Ahora requiere JWT token
+@ApiOkResponse({ 
+  description: 'Email obtenido exitosamente',
+  type: EmailDetailDto 
+})
+@ApiUnauthorizedResponse({ 
+  description: 'Token JWT inválido o expirado',
+  type: EmailErrorResponseDto 
+})
+@ApiNotFoundResponse({ 
+  description: 'Email no encontrado en ninguna cuenta del usuario',
+  type: EmailErrorResponseDto 
+})
+async getEmailById(
+  @Headers('authorization') authHeader: string,
+  @Param('id') emailId: string
+): Promise<EmailDetailDto> {
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido en Authorization header');
   }
+
+  if (!emailId) {
+    throw new BadRequestException('ID del mensaje es requerido');
+  }
+
+  console.log(`📧  Obteniendo email ${emailId} por JWT token`);
+  
+  // 🎯 LLAMAR AL NUEVO MÉTODO DEL SERVICE
+  const result = await this.emailsService.getEmailByIdWithJWT(authHeader, emailId);
+
+  return {
+    ...result,
+    receivedDate: result.receivedDate.toISOString()
+  };
+}
+
 }

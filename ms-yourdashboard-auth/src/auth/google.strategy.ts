@@ -21,7 +21,8 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       scope: [
         'email',
         'profile',
-        'https://www.googleapis.com/auth/gmail.readonly'
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/calendar' // Aseguramos que tenemos acceso a Google Calendar
       ],
       // 🎯 PERMITIR PASAR EL STATE
       passReqToCallback: false, // No necesitamos req en este caso

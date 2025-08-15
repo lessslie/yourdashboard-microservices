@@ -62,6 +62,43 @@ export class DatabaseService implements OnModuleDestroy {
     await this.pool.end();
     this.logger.log('🔌 Pool de conexiones cerrado');
   }
+// ================================
+// 📨 MÉTODOS DE CONSULTA A LA BASE DE DATOS
+// ================================
+async getActiveGmailAccounts(
+  activeDays: number = 7, 
+  limit: number = 100
+): Promise<Array<{
+  id: number;
+  email_gmail: string;
+  access_token: string;
+  usuario_principal_id: number;
+}>> {
+  try {
+    const query = `
+      SELECT 
+        cga.id,
+        cga.email_gmail,
+        cga.access_token,
+        cga.usuario_principal_id
+      FROM cuentas_gmail_asociadas cga
+      INNER JOIN usuarios_principales u ON cga.usuario_principal_id = u.id
+      WHERE 
+        cga.esta_activa = true
+        AND cga.access_token IS NOT NULL
+      ORDER BY cga.ultima_sincronizacion ASC NULLS FIRST
+      LIMIT $1
+    `;
+
+    const result = await this.pool.query(query, [limit]);
+    this.logger.log(`✅ Encontradas ${result.rows.length} cuentas Gmail activas`);
+    return result.rows;
+    
+  } catch (error) {
+    this.logger.error('Error obteniendo cuentas activas:', error);
+    throw error;
+  }
+}
 
   // ================================
   // 🔧 MÉTODO GENÉRICO PARA QUERIES
@@ -478,4 +515,98 @@ async obtenerCuentasGmailUsuario(usuarioId: number): Promise<Array<{
       return { connected: false, query_time_ms: 0 };
     }
   }
+
+
+
+
+// ================================
+// 🔄 REFRESH TOKEN DE GOOGLE
+// ================================
+
+async refreshGoogleToken(cuentaGmailId: number): Promise<string> {
+  try {
+    // 1. Obtener el refresh token de la BD
+    const query = `
+      SELECT refresh_token, email_gmail 
+      FROM cuentas_gmail_asociadas 
+      WHERE id = $1
+    `;
+    const result = await this.query<{refresh_token: string; email_gmail: string}>(
+      query, 
+      [cuentaGmailId]
+    );
+    
+    if (!result.rows[0]?.refresh_token) {
+      throw new Error('No hay refresh token para esta cuenta');
+    }
+
+    const refreshToken = result.rows[0].refresh_token;
+    this.logger.log(`🔑 Renovando token para cuenta ${result.rows[0].email_gmail}...`);
+    
+    // 2. Importar googleapis dinámicamente
+    const { google } = await import('googleapis');
+    
+    // 3. Configurar OAuth2Client
+    const oauth2Client = new google.auth.OAuth2(
+      this.configService.get('GOOGLE_CLIENT_ID'),
+      this.configService.get('GOOGLE_CLIENT_SECRET'),
+      'http://localhost:3001/auth/google/callback' // O la URL que uses
+    );
+
+    oauth2Client.setCredentials({
+      refresh_token: refreshToken
+    });
+
+    // 4. Obtener nuevo access token
+    const { credentials } = await oauth2Client.refreshAccessToken();
+    const newAccessToken = credentials.access_token;
+    
+    if (!newAccessToken) {
+      throw new Error('No se pudo obtener nuevo access token');
+    }
+
+    // 5. Actualizar en la BD
+    const updateQuery = `
+      UPDATE cuentas_gmail_asociadas 
+      SET 
+        access_token = $1,
+        token_expira_en = $2,
+        ultima_sincronizacion = NOW()
+      WHERE id = $3
+    `;
+    
+    const expiresAt = new Date(Date.now() + 3600000); // 1 hora
+    await this.query(updateQuery, [
+      newAccessToken, 
+      expiresAt, 
+      cuentaGmailId
+    ]);
+    
+    this.logger.log(`✅ Token renovado exitosamente para cuenta ${cuentaGmailId}`);
+    return newAccessToken;
+    
+  } catch (error) {
+    this.logger.error('❌ Error renovando token:', error);
+    throw error;
+  }
+}
+/**
+ * 🕐 Actualizar timestamp de última sincronización después de sync exitoso
+ */
+async updateLastSyncTime(cuentaGmailId: number): Promise<void> {
+  try {
+    const query = `
+      UPDATE cuentas_gmail_asociadas 
+      SET ultima_sincronizacion = NOW()
+      WHERE id = $1
+    `;
+    
+    await this.query(query, [cuentaGmailId]);
+    this.logger.log(`🕐 Timestamp actualizado para cuenta Gmail ID: ${cuentaGmailId}`);
+    
+  } catch (error) {
+    this.logger.error(`❌ Error actualizando timestamp para cuenta ${cuentaGmailId}:`, error);
+    throw error;
+  }
+}
 }

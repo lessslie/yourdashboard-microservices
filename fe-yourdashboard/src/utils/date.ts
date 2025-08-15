@@ -23,7 +23,7 @@ export const formatoDeFechaCorta = (dateStr: Date): string => {
   return date.toLocaleDateString("es-ES", optionsDate);
 };
 
-export const formatoDeFechaYHora = (dateStr: Date): string => {
+export const formatoDeFechaYHoraCorta = (dateStr: Date): string => {
   const date = new Date(dateStr);
 
   const optionsDateTime: Intl.DateTimeFormatOptions = {
@@ -36,4 +36,20 @@ export const formatoDeFechaYHora = (dateStr: Date): string => {
   };
 
   return date.toLocaleDateString("es-ES", optionsDateTime);
+};
+
+export const formatoDeFechaYHora = (dateStr: Date) => {
+  const date = new Date(dateStr);
+
+  const optionsDate: Intl.DateTimeFormatOptions = {
+    day: "numeric",
+    year: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  };
+  const formattedDate = date.toLocaleDateString("es-ES", optionsDate);
+
+  return `${formattedDate}`;
 };

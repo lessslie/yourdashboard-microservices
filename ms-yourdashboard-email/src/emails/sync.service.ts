@@ -14,6 +14,8 @@ export interface SyncOptions {
   onlyUnread?: boolean;      // Solo emails no leídos (default: false)  
   sinceDate?: Date;          // Solo emails desde esta fecha
   fullSync?: boolean;        // Sincronización completa (default: false)
+  endDate?: Date;            // Fecha final para sincronización (opcional)
+  pageToken?: string;        // Token de paginación (opcional)
 }
 
 export interface SyncStats {
@@ -24,6 +26,7 @@ export interface SyncStats {
   tiempo_total_ms: number;
   errores: string[];
   ultimo_email_fecha?: Date;
+  nextPageToken?: string; // Token para la siguiente página (opcional)
 }
 
 @Injectable()
@@ -59,7 +62,12 @@ export class SyncService {
       this.logger.log(`🔍 Query Gmail: "${gmailQuery}"`);
 
       // 3️⃣ Obtener lista de mensajes de Gmail
-      const messagesList = await this.getGmailMessagesList(gmail, gmailQuery, options.maxEmails || 10000);
+      const { messages: messagesList, nextPageToken } = await this.getGmailMessagesList(
+  gmail, 
+  gmailQuery, 
+  options.maxEmails || 500,
+  options.pageToken  // 👈 PASAR EL TOKEN
+);
       this.logger.log(`📧 ¡Encontrados ${messagesList.length} emails en Gmail!`);
 
       if (messagesList.length === 0) {
@@ -70,12 +78,13 @@ export class SyncService {
           emails_nuevos: 0,
           emails_actualizados: 0,
           tiempo_total_ms: Date.now() - startTime,
-          errores: []
+          errores: [],
+          nextPageToken:undefined // No hay más páginas
         };
       }
 
       // 4️⃣ Procesar emails en lotes (para no saturar)
-      const BATCH_SIZE = 25; // Procesar de a 10 emails
+      const BATCH_SIZE = 25; // Procesar de a 25 emails
       const emailsMetadata: EmailMetadataDB[] = [];
       let ultimaFechaEmail: Date | undefined;
 
@@ -115,7 +124,7 @@ export class SyncService {
 
       this.logger.log(`✅ Procesados ${emailsMetadata.length} emails, guardando en BD...`);
 
-      // 5️⃣ Guardar tod en base de datos (UPSERT masivo)
+      // 5️⃣ Guardar todo en base de datos (UPSERT masivo)
       const syncResult = await this.databaseService.syncEmailsMetadata(emailsMetadata);
 
       const tiempoTotal = Date.now() - startTime;
@@ -126,7 +135,8 @@ export class SyncService {
         emails_actualizados: syncResult.emails_actualizados,
         tiempo_total_ms: tiempoTotal,
         errores,
-        ultimo_email_fecha: ultimaFechaEmail
+        ultimo_email_fecha: ultimaFechaEmail,
+        nextPageToken: nextPageToken
       };
 
       this.logger.log(`🎉 🔥 SYNC COMPLETADO! ${stats.emails_nuevos} nuevos, ${stats.emails_actualizados} actualizados (${tiempoTotal}ms)`);
@@ -134,17 +144,20 @@ export class SyncService {
       return stats;
 
     } catch (error) {
-      const emailError = error as EmailServiceError;
-      this.logger.error(`❌ Error crítico en sincronización:`, emailError);
+      const emailError = error as any; // Cambio: usar 'any' para manejar diferentes tipos de error
       
-      return {
-        cuenta_gmail_id: cuentaGmailId,
-        emails_procesados: 0,
-        emails_nuevos: 0,
-        emails_actualizados: 0,
-        tiempo_total_ms: Date.now() - startTime,
-        errores: [`Error crítico: ${emailError.message}`]
-      };
+      // 🚨 CAMBIO CLAVE: No loguear el error completo para errores 401
+      if (emailError.code === 401 || emailError.status === 401 || 
+          emailError.response?.status === 401 || emailError.message?.includes('401')) {
+        // Solo un mensaje simple para 401
+        this.logger.debug(`🔑 Token expirado detectado en syncEmailsFromGmail`);
+      } else {
+        // Para otros errores, sí mostrar más detalle
+        this.logger.error(`❌ Error crítico en sincronización: ${emailError.message || 'Error desconocido'}`);
+      }
+      
+      // Siempre relanzar el error para que el cron lo maneje
+      throw error;
     }
   }
 
@@ -154,6 +167,11 @@ export class SyncService {
   private buildGmailQuery(options: SyncOptions): string {
     const queryParts: string[] = ['in:inbox'];
 
+     // Si es fullSync, solo retornar inbox sin restricciones
+  if (options.fullSync) {
+    return 'in:inbox';  // 🔄 Sin restricciones adicionales
+  }
+
     if (options.onlyUnread) {
       queryParts.push('is:unread');
     }
@@ -162,65 +180,59 @@ export class SyncService {
       const dateStr = options.sinceDate.toISOString().split('T')[0]; // YYYY-MM-DD
       queryParts.push(`after:${dateStr}`);
     }
-
-    // Si es fullSync, no agregamos limitaciones adicionales
-  if (!options.fullSync) {
-  // Emails de los últimos 6 meses (balance entre rendimiento y cantidad real)
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-  const defaultSinceDate = sixMonthsAgo.toISOString().split('T')[0];
-  
-  if (!options.sinceDate) {
-    queryParts.push(`after:${defaultSinceDate}`);
+    if (options.endDate) {
+  const dateStr = options.endDate.toISOString().split('T')[0];
+  queryParts.push(`before:${dateStr}`);
   }
-}
+
 
     const finalQuery = queryParts.join(' ');
     return finalQuery;
   }
 
-  /**
-   * 📧 Obtener lista de mensajes de Gmail
-   */
-  private async getGmailMessagesList(
-    gmail: gmail_v1.Gmail,
-    query: string,
-    maxResults: number
-  ): Promise<{ id: string }[]> {
-    try {
-      const messages: { id: string }[] = [];
-      let nextPageToken: string | undefined = undefined;
+ /**
+ * 📧 Obtener lista de mensajes de Gmail con soporte de paginación
+ */
+private async getGmailMessagesList(
+  gmail: gmail_v1.Gmail,
+  query: string,
+  maxResults: number,
+  pageToken?: string  // 👈 AGREGAR PARÁMETRO
+): Promise<{ messages: { id: string }[], nextPageToken?: string }> {  // 👈 CAMBIAR RETURN TYPE
+  try {
+    this.logger.log(`📡 Consultando Gmail API con query: "${query}"`);
+    
+    const response = await gmail.users.messages.list({
+      userId: 'me',
+      q: query,
+      maxResults: Math.min(500, maxResults), // Gmail API limit es 500
+      pageToken: pageToken  // 👈 USAR EL TOKEN SI EXISTE
+    });
 
-      this.logger.log(`📡 Consultando Gmail API con query: "${query}"`);
+    const messages = response.data.messages || [];
+    const validMessages = messages.filter(msg => msg.id) as { id: string }[];
+    
+    this.logger.debug(`📄 Página obtenida: ${validMessages.length} emails`);
+    
+    // 👇 RETORNAR MENSAJES Y NEXT TOKEN
+    return {
+      messages: validMessages,
+      nextPageToken: response.data.nextPageToken || undefined
+    };
 
-      do {
-        const response = await gmail.users.messages.list({
-          userId: 'me',
-          q: query,
-          maxResults: Math.min(500, maxResults - messages.length), // Gmail API limit es 500
-          pageToken: nextPageToken
-        });
-
-        const pageMessages = response.data.messages || [];
-        
-        // Filtrar solo los que tienen ID válido
-        const validMessages = pageMessages.filter(msg => msg.id) as { id: string }[];
-        messages.push(...validMessages);
-
-        nextPageToken = response.data.nextPageToken || undefined;
-
-        this.logger.debug(`📄 Página obtenida: ${pageMessages.length} emails (total: ${messages.length}/${maxResults})`);
-
-      } while (nextPageToken && messages.length < maxResults);
-
-      return messages.slice(0, maxResults);
-
-    } catch (error) {
-      this.logger.error(`❌ Error obteniendo lista de Gmail:`, error);
-      throw error;
+  } catch (error) {
+    const emailError = error as any;
+    if (emailError.code === 401 || emailError.status === 401) {
+      this.logger.debug(`🔑 Token expirado en getGmailMessagesList`);
+    } else if (emailError.code === 404) {
+      // No hay mensajes
+      return { messages: [], nextPageToken: undefined };
+    } else {
+      this.logger.error(`❌ Error obteniendo lista de Gmail: ${emailError.message}`);
     }
+    throw error;
   }
-
+}
   /**
    * 📝 Extraer metadata de un email específico
    */
@@ -233,7 +245,7 @@ export class SyncService {
       const emailDetail = await gmail.users.messages.get({
         userId: 'me',
         id: messageId,
-        format: 'metadata', // Obtener todos los datos del email
+        format: 'metadata', // Obtener solo metadata del email
         metadataHeaders: ['Subject', 'From', 'To', 'Date']
       });
 
@@ -320,7 +332,13 @@ export class SyncService {
       return await this.syncEmailsFromGmail(accessToken, cuentaGmailId, options);
 
     } catch (error) {
-      this.logger.error(`❌ Error en sync incremental:`, error);
+      // 🚨 CAMBIO CLAVE: No loguear el error completo
+      const emailError = error as any;
+      if (emailError.code === 401 || emailError.status === 401) {
+        this.logger.debug(`🔑 Token expirado en syncIncrementalEmails`);
+      } else {
+        this.logger.error(`❌ Error en sync incremental: ${emailError.message}`);
+      }
       throw error;
     }
   }

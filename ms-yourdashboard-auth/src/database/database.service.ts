@@ -1,3 +1,4 @@
+//
 import { Injectable, OnModuleDestroy, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
@@ -13,7 +14,7 @@ import {
   CrearSesionDto,
   EstadisticasUsuario,
   CuentaGmailResponse,
-  UserTokens,
+  // UserTokens,
 
 } from '../auth/interfaces/auth.interfaces';
 
@@ -292,20 +293,35 @@ export class DatabaseService implements OnModuleDestroy {
     await this.query(query, [cuentaId, accessToken, refreshToken || null, expiresAt || null]);
     this.logger.log(`🔄 Tokens actualizados para cuenta Gmail ID: ${cuentaId}`);
   }
-
-  async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void> {
-    const query = `
-      UPDATE cuentas_gmail_asociadas 
-      SET esta_activa = FALSE 
-      WHERE id = $1 AND usuario_principal_id = $2
-    `;
-    await this.query(query, [cuentaId, usuarioId]);
-    this.logger.log(`📧 Cuenta Gmail desconectada: ID ${cuentaId}`);
-  }
+//*************
+// este desconectarCuentaGmail solo la update activa=false
+// ********************** */
+  // async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void> {
+  //   const query = `
+  //     UPDATE cuentas_gmail_asociadas 
+  //     SET esta_activa = FALSE 
+  //     WHERE id = $1 AND usuario_principal_id = $2
+  //   `;
+  //   await this.query(query, [cuentaId, usuarioId]);
+  //   this.logger.log(`📧 Cuenta Gmail desconectada: ID ${cuentaId}`);
+  // }
 
   // ================================
   // 📨 EMAILS SINCRONIZADOS
   // ================================
+
+async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void> {
+  const query = `
+    DELETE FROM cuentas_gmail_asociadas 
+    WHERE id = $1 AND usuario_principal_id = $2
+  `;
+  
+  const result = await this.query(query, [cuentaId, usuarioId]);
+  
+  this.logger.log(`🗑️ Cuenta Gmail ELIMINADA: ID ${cuentaId} (${result.rowCount} filas afectadas)`);
+  
+  // El CASCADE automáticamente borrará todos los emails_sincronizados
+}
 
   async sincronizarEmails(emails: Omit<EmailSincronizado, 'id' | 'fecha_sincronizado'>[]): Promise<number> {
     if (emails.length === 0) return 0;
@@ -434,30 +450,30 @@ export class DatabaseService implements OnModuleDestroy {
 
   // ================================
   // 🔑 TOKENS DE USUARIO
- // TokensService
-async saveUserTokens(userId: number, tokens: UserTokens ): Promise<void> {
-  const query = `
-    INSERT INTO user_tokens (user_id, access_token, refresh_token, expires_at, created_at)
-    VALUES ($1, $2, $3, $4, NOW())
-    ON CONFLICT (user_id) 
-    DO UPDATE SET 
-      access_token = $2,
-      refresh_token = $3,
-      expires_at = $4,
-      updated_at = NOW()
-  `;
+ // TokensService(CODIGO MUERTOO?????)
+// async saveUserTokens(userId: number, tokens: UserTokens ): Promise<void> {
+//   const query = `
+//     INSERT INTO user_tokens (user_id, access_token, refresh_token, expires_at, created_at)
+//     VALUES ($1, $2, $3, $4, NOW())
+//     ON CONFLICT (user_id) 
+//     DO UPDATE SET 
+//       access_token = $2,
+//       refresh_token = $3,
+//       expires_at = $4,
+//       updated_at = NOW()
+//   `;
 
-  const expiresAt = (typeof tokens.expiry_date === 'string' || typeof tokens.expiry_date === 'number' || tokens.expiry_date instanceof Date)
-    ? new Date(tokens.expiry_date)
-    : new Date(Date.now() + 86400000); // 24 horas por defecto
+//   const expiresAt = (typeof tokens.expiry_date === 'string' || typeof tokens.expiry_date === 'number' || tokens.expiry_date instanceof Date)
+//     ? new Date(tokens.expiry_date)
+//     : new Date(Date.now() + 86400000); // 24 horas por defecto
 
-  await this.query(query, [
-    userId,
-    tokens.access_token,
-    tokens.refresh_token || null,
-    expiresAt
-  ]);
-}
+//   await this.query(query, [
+//     userId,
+//     tokens.access_token,
+//     tokens.refresh_token || null,
+//     expiresAt
+//   ]);
+// }
 
 
   // ================================
