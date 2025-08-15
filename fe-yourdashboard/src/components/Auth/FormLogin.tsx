@@ -5,16 +5,12 @@ import { Button, Form, Input } from "antd";
 import { login } from "../../services/auth/auth";
 import { useAuth } from "./hooks/useAuth";
 import { useRouter } from "next/navigation";
+import { FormView, IFormLogin } from "@/interfaces/interfacesAuth";
 
-interface FormLogin {
-  email: string;
-  password: string;
-}
-
-const FormLogin = () => {
+const FormLogin = ({ setChangeForm }: FormView) => {
   const router = useRouter();
   const { saveToken } = useAuth();
-  const onFinish = async (values: FormLogin) => {
+  const onFinish = async (values: IFormLogin) => {
     const response = await login(values.email, values.password);
     if (response) {
       console.log("response", response);
@@ -51,7 +47,22 @@ const FormLogin = () => {
         <Button block type="primary" htmlType="submit">
           Iniciar Sesión
         </Button>
-        Si no tienes una cuenta, <a href="">registrate aqui</a>
+        <div style={{ marginTop: "12px", textAlign: "center" }}>
+          Si no tienes una cuenta,{" "}
+          <span
+            style={{ cursor: "pointer", color: "blue" }}
+            onClick={() => setChangeForm(true)}
+          >
+            registrate aquí
+          </span>
+        </div>
+        {/* 
+        <span
+          
+          onClick={() => setChangeForm(true)}
+        >
+          registrate aqui
+        </span> */}
       </Form.Item>
     </Form>
   );
