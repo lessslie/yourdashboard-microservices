@@ -332,6 +332,68 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- INTEGRACIÓN WHATSAPP MULTICUENTA
+-- =====================================
+
+-- 📱 TABLA: whatsapp_accounts
+-- Cada cuenta de WhatsApp conectada por un usuario
+CREATE TABLE whatsapp_accounts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  usuario_principal_id INTEGER NOT NULL, -- Referencia al usuario principal
+  phone VARCHAR(20) UNIQUE NOT NULL,
+  nombre_cuenta VARCHAR(100),
+  token TEXT,
+  fecha_conexion TIMESTAMP DEFAULT NOW(),
+  esta_activa BOOLEAN DEFAULT TRUE,
+  alias_personalizado VARCHAR(100), -- Ej: "Soporte", "Ventas", etc.
+  CONSTRAINT fk_whatsapp_usuario FOREIGN KEY (usuario_principal_id) 
+    REFERENCES usuarios_principales(id)
+    ON DELETE CASCADE
+);
+
+ALTER TABLE whatsapp_accounts
+ADD COLUMN phone_number_id VARCHAR(100) UNIQUE; -- Asegura que cada cuenta de WhatsApp tenga un ID de número único
+
+-- 💬 TABLA: conversations
+-- Conversaciones por cuenta de WhatsApp
+CREATE TABLE conversations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  whatsapp_account_id UUID NOT NULL,
+  phone VARCHAR(20),
+  name VARCHAR(100),
+  last_message TEXT,
+  last_message_date TIMESTAMP,
+  CONSTRAINT fk_conversation_whatsapp FOREIGN KEY (whatsapp_account_id) -- Referencia a la cuenta de WhatsApp 
+    REFERENCES whatsapp_accounts(id) 
+    ON DELETE CASCADE -- Asegura que si se elimina la cuenta, se eliminan las conversaciones
+);
+
+-- 💬 TABLA: messages
+-- Mensajes de cada conversación
+CREATE TABLE messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL,
+  whatsapp_account_id UUID NOT NULL,
+  phone VARCHAR(20),
+  message TEXT,
+  timestamp TIMESTAMP,
+  CONSTRAINT fk_message_conversation FOREIGN KEY (conversation_id)
+    REFERENCES conversations(id)
+    ON DELETE CASCADE, -- Asegura que si se elimina la conversación, se eliminan los mensajes
+  CONSTRAINT fk_message_whatsapp FOREIGN KEY (whatsapp_account_id)
+    REFERENCES whatsapp_accounts(id)
+    ON DELETE CASCADE
+);
+
+-- =====================================
+-- ÍNDICES PARA WHATSAPP
+-- =====================================
+
+CREATE INDEX idx_whatsapp_accounts_usuario ON whatsapp_accounts(usuario_principal_id);
+CREATE INDEX idx_conversations_account ON conversations(whatsapp_account_id);
+CREATE INDEX idx_messages_conversation ON messages(conversation_id);
+CREATE INDEX idx_messages_account ON messages(whatsapp_account_id);
+
 -- =====================================
 -- 📝 DOCUMENTACIÓN
 -- =====================================
@@ -348,4 +410,5 @@ SELECT '🎯 Nueva arquitectura implementada exitosamente!
 📋 Usuarios principales: Registro tradicional
 📧 Cuentas Gmail: Múltiples por usuario  
 📨 Emails sincronizados: Metadata para listas
-🔐 Sesiones JWT: Autenticación del usuario principal' as estado;
+🔐 Sesiones JWT: Autenticación del usuario principal
+✅ Tablas de WhatsApp multicuenta creadas correctamente!' as estado;
