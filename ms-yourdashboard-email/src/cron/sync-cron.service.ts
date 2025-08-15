@@ -82,7 +82,7 @@ async syncWeekends() {
   // CRON para backfill de emails históricos("viejos")
   //********************************* */
 
-@Cron('*/1 * * * *')  // Cada minuto (ajustar según necesites)
+@Cron('*/2 * * * *')  // Cada 2 minuto (ajustar según necesites)
 async backfillHistoricalEmails() {
   if (!this.isEnabled) return;
 
@@ -318,6 +318,9 @@ async backfillHistoricalEmails() {
           if (syncResult) {
             results.successfulSyncs++;
             results.totalEmailsSynced += syncResult.emails_nuevos || 0;
+
+             // esta linea actualiza la hora de última sincronización
+  await this.databaseService.updateLastSyncTime(account.id);
             
             this.logger.debug(
               `✅ Cuenta ${account.email_gmail}: ${syncResult.emails_nuevos || 0} emails nuevos`

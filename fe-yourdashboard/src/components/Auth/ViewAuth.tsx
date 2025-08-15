@@ -1,10 +1,13 @@
-import React from "react";
+"use client";
+import React, { useState } from "react";
 import { Layout } from "antd";
 import Image from "next/image";
 import { Footer } from "antd/es/layout/layout";
 import FormLogin from "./FormLogin";
+import FormRegister from "./FormRegister";
 
 const ViewAuth = () => {
+  const [changeForm, setChangeForm] = useState(false);
   return (
     <Layout
       style={{
@@ -26,7 +29,11 @@ const ViewAuth = () => {
         height={106}
         style={{ margin: "0 auto" }}
       />
-      <FormLogin />
+      {changeForm ? (
+        <FormRegister setChangeForm={setChangeForm} />
+      ) : (
+        <FormLogin setChangeForm={setChangeForm} />
+      )}
       <Footer style={{ textAlign: "center" }}>
         Inspiration Factory Copyright ©{new Date().getFullYear()}
       </Footer>
