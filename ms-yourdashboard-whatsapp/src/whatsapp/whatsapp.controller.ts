@@ -1,10 +1,28 @@
-import { Controller, Post, Body, Res, Query, Get } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Res,
+  Query,
+  Get,
+  Put,
+  Param,
+} from '@nestjs/common';
 import { Response } from 'express';
 import { ConversationsService } from 'src/controlador-conversaciones/conversations/conversations.service';
 import { WhatsAppWebhookPayload } from './whatsapp-webhook.dto';
 import { MessagesGateway } from 'src/messages/messages.gateway';
 import { WhatsappService } from './whatsapp.service';
 import { WhatsappAccountsService } from './whatsapp-accounts.service';
+
+interface CreateAccountDTO {
+  usuario_principal_id: number;
+  phone: string;
+  nombre_cuenta: string;
+  token: string;
+  alias_personalizado?: string | null;
+  phone_number_id: string;
+}
 
 @Controller('webhook')
 export class WebhookController {
@@ -13,7 +31,7 @@ export class WebhookController {
     private readonly gateway: MessagesGateway,
     private readonly whatsappService: WhatsappService,
     private readonly whatsappAccountsService: WhatsappAccountsService,
-  ) { }
+  ) {}
 
   @Get()
   verifyWebhook(
@@ -58,14 +76,16 @@ export class WebhookController {
         return res.sendStatus(200);
       }
 
-      // Usuario principal fijo para prueba
+      // hardcodeamos el usuario, pero en un principio seria el access token
       const usuarioPrincipalId = 1;
 
-      // Buscar cuenta en la tabla whatsapp_accounts
-      let cuenta = await this.whatsappAccountsService.findByPhoneNumberId(phoneNumberId);
+      let cuenta =
+        await this.whatsappAccountsService.findByPhoneNumberId(phoneNumberId);
 
       if (!cuenta) {
-        console.log('No existe cuenta, insertando nueva cuenta en whatsapp_accounts');
+        console.log(
+          'No existe cuenta, insertando nueva cuenta en whatsapp_accounts',
+        );
         cuenta = await this.whatsappAccountsService.createAccount({
           usuario_principal_id: usuarioPrincipalId,
           phone: displayPhoneNumber,
@@ -89,14 +109,14 @@ export class WebhookController {
 
         console.log(`Mensaje de ${from}: ${msgBody}`);
 
-        // Guardar la conversación con referencia a la cuenta
-        const conversationId = await this.conversationsService.upsertConversation(
-          from,
-          name,
-          msgBody,
-          new Date(timestamp),
-          cuenta.id, // ID de la cuenta de whatsapp_accounts
-        );
+        const conversationId =
+          await this.conversationsService.upsertConversation(
+            from,
+            name,
+            msgBody,
+            new Date(timestamp),
+            cuenta.id,
+          );
 
         await this.conversationsService.insertMessage(
           conversationId,
@@ -121,7 +141,6 @@ export class WebhookController {
     }
   }
 
-
   @Post('/send')
   async sendMessage(
     @Body() body: { to: string; message: string; cuentaId: string },
@@ -131,19 +150,27 @@ export class WebhookController {
       const { to, message, cuentaId } = body;
 
       if (!to || !message || !cuentaId) {
-        return res.status(400).json({ error: 'Faltan parámetros: to, message o cuentaId' });
+        return res
+          .status(400)
+          .json({ error: 'Faltan parámetros: to, message o cuentaId' });
       }
 
-      console.log(`Enviando mensaje a ${to} desde la cuenta ${cuentaId}: "${message}"`);
+      console.log(
+        `Enviando mensaje a ${to} desde la cuenta ${cuentaId}: "${message}"`,
+      );
 
-      // Buscar la cuenta para obtener token y phone_number_id
-      const cuenta = await this.whatsappAccountsService.findByPhoneNumberId(cuentaId);
+      const cuenta = await this.whatsappAccountsService.findById(cuentaId);
+
       if (!cuenta) {
         console.warn(`No se encontró cuenta para cuentaId: ${cuentaId}`);
         return res.status(404).json({ error: 'Cuenta no encontrada' });
       }
 
-      const response = await this.whatsappService.sendMessageWithCuenta(cuenta, to, message);
+      const response = await this.whatsappService.sendMessageWithCuenta(
+        cuenta,
+        to,
+        message,
+      );
 
       console.log('Mensaje enviado correctamente:', response);
 
@@ -152,5 +179,59 @@ export class WebhookController {
       console.error('Error enviando mensaje:', error);
       return res.status(500).json({ error: 'No se pudo enviar el mensaje' });
     }
+  }
+
+  @Get('/cuentas')
+  async getAllAccounts(@Res() res: Response) {
+    try {
+      const cuentas = await this.whatsappAccountsService.findAll();
+      return res.status(200).json(cuentas);
+    } catch (error) {
+      console.error('Error obteniendo cuentas:', error);
+      return res.status(500).json({ error: 'Error obteniendo cuentas' });
+    }
+  }
+
+  @Post('/cuentas')
+  async createAccount(@Body() body: CreateAccountDTO, @Res() res: Response) {
+    try {
+      console.log('Body recibido en /cuentas:', body); // <-- Agregá esto
+
+      const cuenta = await this.whatsappAccountsService.createAccount(body);
+      return res.status(201).json(cuenta);
+    } catch (error) {
+      console.error('Error creando cuenta:', error);
+      return res.status(500).json({ error: 'No se pudo crear la cuenta' });
+    }
+  }
+
+  @Put('/cuentas/:id')
+  async updateAccount(
+    @Param('id') id: string,
+    @Body() body: Partial<CreateAccountDTO>,
+    @Res() res: Response,
+  ) {
+    try {
+      const cuenta = await this.whatsappAccountsService.updateAccount(
+        Number(id),
+        body,
+      );
+
+      if (!cuenta) {
+        return res
+          .status(404)
+          .json({ error: 'Cuenta no encontrada o sin cambios' });
+      }
+
+      return res.status(200).json(cuenta);
+    } catch (error) {
+      console.error('Error actualizando cuenta:', error);
+      return res.status(500).json({ error: 'No se pudo actualizar la cuenta' });
+    }
+  }
+
+  @Get('refresh-token/:id')
+  async refresh(@Param('id') id: string) {
+    return this.whatsappAccountsService.refreshToken(id);
   }
 }
