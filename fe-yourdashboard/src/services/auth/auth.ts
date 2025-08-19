@@ -1,4 +1,4 @@
-import { MS_ORCHES_URL } from "@/components/Emails/lib/email";
+import { MS_ORCHES_URL } from "@/services/emails/emails";
 import axios from "axios";
 
 export const register = async (

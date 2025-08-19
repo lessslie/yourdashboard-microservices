@@ -11,10 +11,19 @@ function isValidUUID(uuid: string): boolean {
 export class ConversationsController {
   constructor(private readonly conversationsService: ConversationsService) { }
 
+
   @Get('/conversations')
-  async getConversations(@Res() res: Response) {
+  async getConversations(
+    @Query('whatsappAccountId') whatsappAccountId: string,
+    @Res() res: Response,
+  ) {
     try {
-      const conversations = await this.conversationsService.getRecentConversations();
+      let conversations;
+      if (whatsappAccountId) {
+        conversations = await this.conversationsService.getRecentConversationsByAccount(whatsappAccountId);
+      } else {
+        conversations = await this.conversationsService.getRecentConversations();
+      }
       return res.status(200).json(conversations);
     } catch (error) {
       console.error('Error obteniendo conversaciones:', error);
@@ -22,10 +31,10 @@ export class ConversationsController {
     }
   }
 
-
   @Get('/messages')
   async getConversationById(
     @Query('conversationId') conversationId: string,
+    @Query('whatsappAccountId') whatsappAccountId: string, // nuevo filtro opcional
     @Res() res: Response,
   ) {
     if (!conversationId) {
@@ -37,7 +46,7 @@ export class ConversationsController {
     }
 
     try {
-      const messages = await this.conversationsService.getMessageById(conversationId);
+      const messages = await this.conversationsService.getMessageByIdAndAccount(conversationId, whatsappAccountId);
 
       if (!messages || messages.length === 0) {
         return res.status(404).json({ message: 'No se encontraron mensajes para esa conversación.' });
@@ -46,13 +55,14 @@ export class ConversationsController {
       return res.status(200).json(messages);
     } catch (error) {
       console.error('Error obteniendo mensajes:', error);
-      return res.status(500).json({ error: 'la sintaxis de entrada no es válida para tipo uuid' });
+      return res.status(500).json({ error: 'Error interno del servidor' });
     }
   }
 
   @Get('/search')
   async getConversationsSearched(
     @Query('q') contentMessage: string,
+    @Query('whatsappAccountId') whatsappAccountId: string, // nuevo filtro opcional
     @Res() res: Response,
   ) {
     if (!contentMessage || contentMessage.trim() === '') {
@@ -60,10 +70,10 @@ export class ConversationsController {
     }
 
     try {
-      const result = await this.conversationsService.searchMessages(contentMessage);
+      const result = await this.conversationsService.searchMessagesByAccount(contentMessage, whatsappAccountId);
 
-      if(!result || result.length === 0) {
-        return res.status(404).json({ message: 'No se encontraron conversacions que coincidan con lo búsqueda.'})
+      if (!result || result.length === 0) {
+        return res.status(404).json({ message: 'No se encontraron conversaciones que coincidan con la búsqueda.' });
       }
 
       return res.status(200).json(result);

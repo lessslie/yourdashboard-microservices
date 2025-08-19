@@ -68,9 +68,12 @@ async function bootstrap() {
   await app.listen(process.env.PORT ?? 3002);
 
   console.log(`📧 MS-EMAIL running on: ${await app.getUrl()}`);
-  console.log(`📚 Swagger API: http://localhost:3002/api`);
-  console.log(`🎭 Recommended: Use via MS-Orchestrator (port 3003)`);
-  console.log(`📊 Health check: http://localhost:3002/emails/health`);
+  console.log(`📚 Swagger API: http://localhost:3003/api`);
+  console.log(`  - MS-Frontend: http://localhost:3000/auth`);
+  console.log(`  - MS-Auth: http://localhost:3001`);
+  console.log(`  - MS-Email: http://localhost:3002`);
+  console.log(`  - MS-Orchestrator: http://localhost:3003`);
+  console.log('  - MS-WhatsApp: http://localhost:3004');
   console.log('='.repeat(60));
 }
 

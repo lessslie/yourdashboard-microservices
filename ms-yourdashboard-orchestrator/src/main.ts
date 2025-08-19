@@ -20,7 +20,6 @@ async function bootstrap() {
     .setDescription('Backend For Frontend (BFF) - Coordina todos los microservicios de YourDashboard')
     .setVersion('1.0')
     .addTag('Emails', 'Endpoints de emails (coordina MS-Auth + MS-Email)')
-    .addTag('Dashboard', 'Endpoints de dashboard y resúmenes')
     .addTag('Authentication', 'Endpoints de autenticación')
     .addTag('Health', 'Estado del servicio')
     .addBearerAuth(
@@ -96,11 +95,13 @@ async function bootstrap() {
   // LOGS INFORMATIVOS
   console.log(`🎭 MS-ORCHESTRATOR running on: ${await app.getUrl()}`);
   console.log(`📚 Swagger API: http://localhost:3003/api`);
-  console.log(`🔗 Main endpoint: http://localhost:3003/emails/inbox?userId=X`);
   console.log(`📊 Health check: http://localhost:3003/health`);
   console.log(`🔗 Connected to:`);
+  console.log(`  - MS-Frontend: http://localhost:3000/auth`);
   console.log(`  - MS-Auth: http://localhost:3001`);
   console.log(`  - MS-Email: http://localhost:3002`);
+  console.log(`  - MS-Orchestrator: http://localhost:3003`);
+  console.log('  - MS-WhatsApp: http://localhost:3004');
   console.log('='.repeat(70));
 }
 
