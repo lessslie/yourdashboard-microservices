@@ -18,9 +18,11 @@ export default function SearchResult({
       dataSource={conversations}
       renderItem={(chat) => (
         <List.Item
-          className={`cursor-pointer ${
-            selectedChatId === chat.conversation_id ? "bg-gray-200" : ""
-          }`}
+          style={{
+            backgroundColor: selectedChatId === chat.conversation_id ? "#188fff44" : "transparent",
+            padding: "10px 16px",
+            cursor: "pointer"
+          }}
           onClick={() => onSelectChat(chat.conversation_id)}
         >
           <List.Item.Meta title={chat.name} description={chat.last_message} />

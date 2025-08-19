@@ -63,7 +63,6 @@ export default function ConversationsPage() {
                 overflowY: "auto",
                 minHeight: 0,
                 paddingTop: 30,
-                paddingLeft: 30,
               }}
             >
               <SearchBar 
@@ -87,6 +86,7 @@ export default function ConversationsPage() {
                   />
                 ) : (
                   <ConversationList
+                    accountId={accountId}
                     selectedChatId={selectedChatId}
                     onSelectChat={setSelectedChatId}
                     conversations={allConversations}

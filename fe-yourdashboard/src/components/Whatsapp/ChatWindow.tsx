@@ -5,6 +5,7 @@ import { Avatar, List, Typography, Layout } from "antd";
 import ChatInput from "./ChatInput";
 import { getMessagesByConversationId } from "@/services/whatsapp/whatsapp";
 import { Message, UIMessage } from "@/interfaces/interfacesWhatsapp";
+import { mockMessages } from "@/components/Whatsapp/utils/data";
 
 const { Header, Content, Footer } = Layout;
 
@@ -18,7 +19,7 @@ export default function ChatWindow({
   contact: initialContact,
 }: ChatWindowProps) {
   const [messages, setMessages] = useState<UIMessage[]>([]);
-  const [contact, setContact] = useState(initialContact); // 🔹 Ahora manejamos un estado local para el contacto
+  const [contact, setContact] = useState(initialContact);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const myPhone =
@@ -29,18 +30,21 @@ export default function ChatWindow({
 
     const fetchMessages = async () => {
       try {
+        // Obtener mensajes del backend
         const data: Message[] = await getMessagesByConversationId(chatId);
 
-        // Si hay mensajes, tomar el último para actualizar el contacto
-        if (data.length > 0) {
-          const lastMsg = data[data.length - 1];
+        // Usar backend o fallback a mock si no hay datos
+        const source = data.length > 0 ? data : mockMessages[chatId] || [];
+
+        if (source.length > 0) {
+          const lastMsg = source[source.length - 1];
           setContact({
             name: lastMsg.name,
             phone: lastMsg.phone,
           });
         }
 
-        const formatted: UIMessage[] = data.map((msg) => ({
+        const formatted: UIMessage[] = source.map((msg) => ({
           from: msg.phone === myPhone ? "me" : "other",
           name: msg.phone === myPhone ? "Yo" : msg.name,
           phone: msg.phone,
@@ -54,6 +58,28 @@ export default function ChatWindow({
         setMessages(formatted);
       } catch (error) {
         console.error("Error fetching messages:", error);
+
+        // fallback a mock en caso de error
+        const fallback = mockMessages[chatId] || [];
+        if (fallback.length > 0) {
+          const lastMsg = fallback[fallback.length - 1];
+          setContact({
+            name: lastMsg.name,
+            phone: lastMsg.phone,
+          });
+        }
+        setMessages(
+          fallback.map((msg) => ({
+            from: msg.phone === myPhone ? "me" : "other",
+            name: msg.phone === myPhone ? "Yo" : msg.name,
+            phone: msg.phone,
+            text: msg.message,
+            time: new Date(msg.timestamp).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          }))
+        );
       }
     };
 
@@ -94,7 +120,7 @@ export default function ChatWindow({
         </div>
       </Header>
 
-      {/* Lista de mensajes */}
+      {/* Contenido: mensajes */}
       <Content
         style={{
           overflowY: "auto",

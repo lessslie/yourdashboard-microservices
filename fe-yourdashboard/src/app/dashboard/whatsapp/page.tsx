@@ -41,6 +41,7 @@ export default function Home() {
               style={{
                 textAlign: "center",
                 minHeight: 100,
+                marginTop: 45,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",

@@ -102,7 +102,6 @@ export default function WhatsappLayout({
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  paddingTop: 10,
                 },
               })),
               {
