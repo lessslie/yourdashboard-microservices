@@ -4,6 +4,7 @@ import {
   getAllSearchEmails,
   getEmails,
   getSearchEmails,
+  postEmailSync,
 } from "../../../services/emails/emails";
 import { IDataEmail, IEmail, IEmailBack } from "@/interfaces/interfacesEmails";
 import { ICuentaGmail } from "@/interfaces/interfacesAuth";
@@ -32,6 +33,22 @@ export const useEmails = (cuentasGmail: ICuentaGmail[], userId: number) => {
     setViewAll(false);
     setPage(1);
   };
+
+  const handleSync = async (cuentaGmailId: string) => {
+    setInitLoading(true);
+    const token = localStorage.getItem("token");
+    if (!token || !cuentaGmailId) return;
+
+    try {
+      await postEmailSync(token, cuentaGmailId);
+      console.log("Sincronización iniciada");
+      setInitLoading(false);
+    } catch (error) {
+      console.error("❌ Error al iniciar la sincronización:", error);
+      setInitLoading(false);
+    }
+  };
+
   const handleViewAll = () => {
     setViewAll(true);
     setSelectedCuentaGmailId(null);
@@ -124,7 +141,6 @@ export const useEmails = (cuentasGmail: ICuentaGmail[], userId: number) => {
               subject: email.subject,
               date: email.receivedDate,
               read: email.isRead,
-              
             })
           ),
           hasNextPage: dataEmails.hasNextPage,
@@ -173,6 +189,7 @@ export const useEmails = (cuentasGmail: ICuentaGmail[], userId: number) => {
     limit,
     setLimit,
     handleAccountChange,
+    handleSync,
     selectedCuentaGmailId,
     setSelectedCuentaGmailId,
     handleSearchTermChange,

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Enviar mensaje WhatsApp</title>
+</head>
+<body>
+  <h1>Enviar mensaje por WhatsApp</h1>
+
+  <form id="formulario">
+    <label for="to">Número destinatario (EJ: 5493811234567):</label><br />
+    <input type="text" id="to" name="to" required /><br /><br />
+
+    <label for="message">Mensaje:</label><br />
+    <textarea id="message" name="message" required></textarea><br /><br />
+
+    <label for="cuentaId">ID de cuenta (WhatsApp):</label><br />
+    <input type="text" id="cuentaId" name="cuentaId" required /><br /><br />
+
+    <button type="submit">Enviar</button>
+  </form>
+
+  <p id="resultado"></p>
+
+  <script>
+    document.getElementById('formulario').addEventListener('submit', async function (e) {
+      e.preventDefault();
+
+      const to = document.getElementById('to').value;
+      const message = document.getElementById('message').value;
+      const cuentaId = document.getElementById('cuentaId').value;
+
+      const respuesta = await fetch('http://localhost:3004/webhook/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, message, cuentaId })
+      });
+
+      const data = await respuesta.json();
+
+      if (respuesta.ok) {
+        document.getElementById('resultado').textContent = '✅ Mensaje enviado correctamente';
+      } else {
+        document.getElementById('resultado').textContent = '❌ Error: ' + (data.error || 'desconocido');
+      }
+    });
+  </script>
+</body>
+</html>

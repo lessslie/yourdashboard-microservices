@@ -590,4 +590,23 @@ async refreshGoogleToken(cuentaGmailId: number): Promise<string> {
     throw error;
   }
 }
+/**
+ * 🕐 Actualizar timestamp de última sincronización después de sync exitoso
+ */
+async updateLastSyncTime(cuentaGmailId: number): Promise<void> {
+  try {
+    const query = `
+      UPDATE cuentas_gmail_asociadas 
+      SET ultima_sincronizacion = NOW()
+      WHERE id = $1
+    `;
+    
+    await this.query(query, [cuentaGmailId]);
+    this.logger.log(`🕐 Timestamp actualizado para cuenta Gmail ID: ${cuentaGmailId}`);
+    
+  } catch (error) {
+    this.logger.error(`❌ Error actualizando timestamp para cuenta ${cuentaGmailId}:`, error);
+    throw error;
+  }
+}
 }
