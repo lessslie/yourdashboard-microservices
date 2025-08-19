@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Avatar, List, Typography, Layout } from "antd";
 import ChatInput from "./ChatInput";
-import { getMessagesByConversationId } from "@/server/whatsapp/whatsapp";
+import { getMessagesByConversationId } from "@/services/whatsapp/whatsapp";
 import { Message, UIMessage } from "@/interfaces/interfacesWhatsapp";
 
 const { Header, Content, Footer } = Layout;

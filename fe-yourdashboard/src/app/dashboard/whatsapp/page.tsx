@@ -32,7 +32,6 @@ export default function Home() {
           bottom: 0,
           zIndex: 1000,
           overflowY: "auto",
-          paddingTop: 20,
         }}
       >
         <Menu mode="inline" selectable={false}>
@@ -45,7 +44,6 @@ export default function Home() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                marginTop: 40,
               }}
             >
               <Link href={`whatsapp/${account.id}/conversations`}>

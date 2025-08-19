@@ -3,11 +3,12 @@
 import { Input } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import { useState } from "react";
-import { searchMessages } from "@/server/whatsapp/whatsapp";
+import { searchMessages } from "@/services/whatsapp/whatsapp";
 import { Conversation } from "@/interfaces/interfacesWhatsapp";
 
 interface SearchBarProps {
   onResults: (results: Conversation[]) => void;
+  onError: () => void;
 }
 
 export default function SearchBar({ onResults }: SearchBarProps) {

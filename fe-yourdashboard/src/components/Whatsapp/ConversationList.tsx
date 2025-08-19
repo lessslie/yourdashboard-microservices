@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { List } from "antd";
-import { getConversations } from "@/server/whatsapp/whatsapp";
+import { getConversations } from "@/services/whatsapp/whatsapp";
 import { ConversationListItem } from "@/interfaces/interfacesWhatsapp";
 
 interface ConversationListProps {

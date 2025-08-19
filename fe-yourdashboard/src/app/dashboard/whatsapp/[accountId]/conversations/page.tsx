@@ -5,7 +5,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Row, Col, Empty, Layout } from "antd";
 import ChatWindow from "@/components/Whatsapp/ChatWindow";
 import { Conversation, ConversationListItem } from "@/interfaces/interfacesWhatsapp";
-import { getConversations } from "@/server/whatsapp/whatsapp";
+import { getConversations } from "@/services/whatsapp/whatsapp";
 import ConversationList from "@/components/Whatsapp/ConversationList";
 import SearchBar from "@/components/Whatsapp/SearchBar";
 import SearchResult from "@/components/Whatsapp/SearchResult";
@@ -17,6 +17,7 @@ export default function ConversationsPage() {
   const accountId = params?.accountId as string;
 
   const [searchResults, setSearchResults] = useState<Conversation[]>([]);
+  const [searchError, setSearchError] = useState(false);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [allConversations, setAllConversations] = useState<ConversationListItem[]>([]);
 
@@ -61,25 +62,36 @@ export default function ConversationsPage() {
                 flex: 1,
                 overflowY: "auto",
                 minHeight: 0,
-                paddingTop: 50,
+                paddingTop: 30,
                 paddingLeft: 30,
               }}
             >
-              <SearchBar onResults={setSearchResults} />
+              <SearchBar 
+                onResults={(results) => {
+                  setSearchResults(results);
+                  setSearchError(false); // si hay resultados, limpio el error
+                }} 
+                onError={() => {
+                  setSearchResults([]); // limpio resultados
+                  setSearchError(true); // marco error
+                }} 
+              />
 
-              {searchResults.length > 0 ? (
-                <SearchResult
-                  conversations={searchResults}
-                  selectedChatId={selectedChatId}
-                  onSelectChat={setSelectedChatId}
-                />
-              ) : (
-                <ConversationList
-                  selectedChatId={selectedChatId}
-                  onSelectChat={setSelectedChatId}
-                  conversations={allConversations}
-                />
-              )}
+              {searchError ? (
+                  <Empty description="No hay resultados encontrados" />
+                ) : searchResults.length > 0 ? (
+                  <SearchResult
+                    conversations={searchResults}
+                    selectedChatId={selectedChatId}
+                    onSelectChat={setSelectedChatId}
+                  />
+                ) : (
+                  <ConversationList
+                    selectedChatId={selectedChatId}
+                    onSelectChat={setSelectedChatId}
+                    conversations={allConversations}
+                  />
+                )}
             </div>
           </Col>
 
@@ -90,7 +102,7 @@ export default function ConversationsPage() {
               display: "flex",
               flexDirection: "column",
               overflow: "hidden",
-              paddingTop: 20,
+              paddingTop: 10,
             }}
           >
             {selectedChatId ? (
