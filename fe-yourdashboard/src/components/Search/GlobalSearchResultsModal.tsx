@@ -1,5 +1,5 @@
 import React from "react";
-import { Modal, Tabs, List, Empty, Tag, Spin, Typography } from "antd";
+import { Modal, Tabs, List, Empty, Tag, Spin, Typography, Button } from "antd";
 import {
   MailOutlined,
   CalendarOutlined,
@@ -12,6 +12,7 @@ import {
 } from "@/interfaces/interfacesSearch";
 import dayjs from "dayjs";
 import "dayjs/locale/es";
+import { useRouter } from "next/navigation";
 dayjs.locale("es");
 
 const { TabPane } = Tabs;
@@ -32,6 +33,7 @@ const GlobalSearchResultsModal: React.FC<GlobalSearchResultsModalProps> = ({
   results,
   onCancel,
 }) => {
+  const router = useRouter();
   const renderEmailItem = (item: any) => (
     <List.Item>
       <List.Item.Meta
@@ -44,6 +46,14 @@ const GlobalSearchResultsModal: React.FC<GlobalSearchResultsModalProps> = ({
             <Text type="secondary">
               {dayjs(item.receivedDate).format("DD MMMM YYYY, HH:mm")}
             </Text>
+            <Button
+              type="link"
+              onClick={() => {
+                router.push(`/dashboard/email/${item.id}`);
+              }}
+            >
+              Ver correo
+            </Button>
           </>
         }
       />
