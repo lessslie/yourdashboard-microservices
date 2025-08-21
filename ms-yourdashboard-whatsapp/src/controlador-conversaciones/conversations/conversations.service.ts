@@ -83,17 +83,6 @@ export class ConversationsService {
     }
   }
 
-
-  async getRecentConversations() {
-    const result = await this.pool.query(`
-      SELECT id, phone, name, last_message, last_message_date
-      FROM conversations
-      ORDER BY last_message_date DESC
-      LIMIT 50
-    `);
-    return result.rows;
-  }
-
   async getMessageById(conversationId: string) {
     const result = await this.pool.query(
       ` SELECT messages.*, conversations.name
@@ -128,63 +117,92 @@ export class ConversationsService {
     return result.rows;
   }
 
+  // ✅ Obtener todas las conversaciones, filtradas por cuenta opcionalmente
   async getRecentConversationsByAccount(whatsappAccountId: string) {
-    const result = await this.pool.query(`
-    SELECT id, phone, name, last_message, last_message_date
-    FROM conversations
-    WHERE whatsapp_account_id = $1
-    ORDER BY last_message_date DESC
-    LIMIT 50
-  `, [whatsappAccountId]);
+    const query = `
+    SELECT 
+      c.id AS conversation_id,
+      c.name,
+      c.phone,
+      c.last_message,
+      c.last_message_date,
+      c.whatsapp_account_id
+    FROM conversations c
+    WHERE c.whatsapp_account_id = $1
+    ORDER BY c.last_message_date DESC
+  `;
+    const result = await this.pool.query(query, [whatsappAccountId]);
     return result.rows;
   }
 
+  async getRecentConversations() {
+    const query = `
+    SELECT 
+      c.id AS conversation_id,
+      c.name,
+      c.phone,
+      c.last_message,
+      c.last_message_date,
+      c.whatsapp_account_id
+    FROM conversations c
+    ORDER BY c.whatsapp_account_id, c.last_message_date DESC
+  `;
+    const result = await this.pool.query(query);
+    return result.rows;
+  }
+
+  // ✅ Obtener mensajes de una conversación
   async getMessageByIdAndAccount(conversationId: string, whatsappAccountId?: string) {
     let query = `
-    SELECT messages.*, conversations.name
-    FROM messages
-    JOIN conversations ON messages.conversation_id = conversations.id
-    WHERE messages.conversation_id = $1
+    SELECT 
+      m.id AS message_id,
+      m.message,
+      m.timestamp,
+      m.conversation_id,
+      c.whatsapp_account_id
+    FROM messages m
+    JOIN conversations c ON c.id = m.conversation_id
+    WHERE m.conversation_id = $1
   `;
-    const params = [conversationId];
+    const params: any[] = [conversationId];
 
     if (whatsappAccountId) {
-      query += ' AND messages.whatsapp_account_id = $2';
+      query += ' AND c.whatsapp_account_id = $2';
       params.push(whatsappAccountId);
     }
 
-    query += ' ORDER BY messages.timestamp ASC';
+    query += ' ORDER BY m.timestamp ASC';
 
     const result = await this.pool.query(query, params);
     return result.rows;
   }
 
+  // ✅ Búsqueda: ahora devuelve el mensaje que coincide (no solo el último)
   async searchMessagesByAccount(queryText: string, whatsappAccountId?: string) {
     let query = `
-    SELECT DISTINCT ON (conversations.id)
-      conversations.id AS conversation_id,
-      conversations.name,
-      conversations.phone,
-      conversations.last_message,
-      conversations.last_message_date
-    FROM conversations
-    LEFT JOIN messages ON messages.conversation_id = conversations.id
-    WHERE
-      (messages.message ILIKE '%' || $1 || '%' OR
-       conversations.name ILIKE '%' || $1 || '%' OR
-       conversations.phone ILIKE '%' || $1 || '%')
+    SELECT 
+      c.id AS conversation_id,
+      c.name,
+      c.phone,
+      c.last_message,
+      c.last_message_date,
+      c.whatsapp_account_id,
+      m.id AS matched_message_id,
+      m.message AS matched_message,
+      m.timestamp AS matched_timestamp
+    FROM conversations c
+    JOIN messages m ON m.conversation_id = c.id
+    WHERE m.message ILIKE '%' || $1 || '%'
   `;
 
-    const params = [queryText];
+    const params: any[] = [queryText];
 
     if (whatsappAccountId) {
-      query += ' AND conversations.whatsapp_account_id = $2';
+      query += ' AND c.whatsapp_account_id = $2';
       params.push(whatsappAccountId);
     }
 
-    query += `
-    ORDER BY conversations.id, messages.timestamp DESC
-  `;
+    query += ' ORDER BY c.whatsapp_account_id, m.timestamp DESC';
 
     const result = await this.pool.query(query, params);
     return result.rows;

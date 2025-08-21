@@ -19,3 +19,31 @@
 //     }
 //   }
 // }
+
+import { Injectable, Logger } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { WhatsappAccountsService } from 'src/whatsapp/whatsapp-accounts.service';
+
+@Injectable()
+export class TokenScheduler {
+  private readonly logger = new Logger(TokenScheduler.name);
+
+  constructor(private readonly accountsSvc: WhatsappAccountsService) {}
+
+  // Corre todos los días a la 01:00 AM
+  @Cron(CronExpression.EVERY_DAY_AT_1AM)
+  async handleCron() {
+    this.logger.log('⏳ Iniciando refresco automático de tokens...');
+    try {
+      const result = await this.accountsSvc.refreshAllDueTokens(7); // refresca si faltan ≤ 7 días
+      this.logger.log(
+        `✅ Refrescados: ${result.refreshed.length}, Omitidos: ${result.skipped.length}`,
+      );
+      if (Object.keys(result.errors).length) {
+        this.logger.error(`❌ Errores: ${JSON.stringify(result.errors)}`);
+      }
+    } catch (e: any) {
+      this.logger.error(`Error general en cron de tokens: ${e.message}`);
+    }
+  }
+}

@@ -19,20 +19,21 @@ export class WhatsappAccountsService {
 
   constructor() {
     const dbUrl = process.env.DATABASE_URL;
+    if (!dbUrl) throw new Error('DATABASE_URL is not defined in .env');
 
-    if (!dbUrl) {
-      throw new Error('DATABASE_URL is not defined in .env');
-    }
+    this.pool = new Pool({ connectionString: dbUrl });
+  }
 
-    this.pool = new Pool({
-      connectionString: dbUrl,
-    });
+  async findAll(): Promise<any[]> {
+    const result = await this.pool.query('SELECT * FROM whatsapp_accounts');
+    return result.rows;
   }
 
   async findByPhoneNumberId(phoneNumberId: string): Promise<any> {
-    const query = 'SELECT * FROM whatsapp_accounts WHERE phone_number_id = $1';
-    const values = [phoneNumberId];
-    const result = await this.pool.query(query, values);
+    const result = await this.pool.query(
+      'SELECT * FROM whatsapp_accounts WHERE phone_number_id = $1',
+      [phoneNumberId],
+    );
     return result.rows?.[0] || null;
   }
 
@@ -42,11 +43,6 @@ export class WhatsappAccountsService {
       [id],
     );
     return result.rows[0] || null;
-  }
-
-  async findAll(): Promise<any[]> {
-    const result = await this.pool.query('SELECT * FROM whatsapp_accounts');
-    return result.rows;
   }
 
   async createAccount(data: CreateAccountDTO): Promise<any> {
@@ -67,17 +63,17 @@ export class WhatsappAccountsService {
   }
 
   async updateAccount(
-    id: number,
+    id: string,
     update: Partial<CreateAccountDTO>,
   ): Promise<any> {
     const fields: string[] = [];
-    const values: (string | number | boolean | null)[] = [];
-
+    const values: any[] = [];
     let i = 1;
+
     for (const key in update) {
       if (Object.prototype.hasOwnProperty.call(update, key)) {
         fields.push(`${key} = $${i}`);
-        values.push(update[key as keyof CreateAccountDTO]!);
+        values.push((update as any)[key]);
         i++;
       }
     }
@@ -90,19 +86,60 @@ export class WhatsappAccountsService {
     return result.rows[0];
   }
 
-  async updateTokenAccount(id: string, newToken: string): Promise<any> {
-    const query = `UPDATE whatsapp_accounts SET token = $1 WHERE id = $2 RETURNING *`;
-    const values = [newToken, id];
+  async updateTokenAccount(
+    id: string,
+    newToken: string,
+    expiresInSeconds?: number, // opcional
+  ): Promise<any> {
+    let query: string;
+    let values: any[];
+
+    if (typeof expiresInSeconds === 'number') {
+      query = `
+        UPDATE whatsapp_accounts
+        SET token = $1,
+            token_updated_at = NOW(),
+            token_expires_at = NOW() + ($2 || ' seconds')::interval
+        WHERE id = $3
+        RETURNING *`;
+      values = [newToken, String(expiresInSeconds), id];
+    } else {
+      query = `
+        UPDATE whatsapp_accounts
+        SET token = $1,
+            token_updated_at = NOW()
+        WHERE id = $2
+        RETURNING *`;
+      values = [newToken, id];
+    }
+
     const result = await this.pool.query(query, values);
     return result.rows[0];
   }
 
-  // 🔹 Nuevo método para refrescar token
-  async refreshToken(id: string): Promise<any> {
-    const cuenta = await this.findById(id); // findById ahora recibe string
-    if (!cuenta) {
-      throw new Error(`Cuenta con ID ${id} no encontrada`);
+  private isDate(value: any): value is Date {
+    return value instanceof Date && !isNaN(value.getTime());
+  }
+
+  /** Devuelve true si faltan <= daysThreshold días para expirar o ya expiró. */
+  shouldRefresh(account: any, daysThreshold = 7): boolean {
+    const expiresAtRaw = account.token_expires_at;
+    if (!expiresAtRaw) {
+      // Si no tenemos expiración guardada, conviene refrescar para obtenerla.
+      return true;
     }
+    const expiresAt =
+      this.isDate(expiresAtRaw) ? expiresAtRaw : new Date(expiresAtRaw);
+    const now = new Date();
+    const msLeft = expiresAt.getTime() - now.getTime();
+    const daysLeft = msLeft / (1000 * 60 * 60 * 24);
+    return daysLeft <= daysThreshold;
+  }
+
+  // 🔹 Renueva un token (siempre que el token anterior aún sea válido o sea long-lived no vencido).
+  async refreshToken(id: string): Promise<any> {
+    const cuenta = await this.findById(id);
+    if (!cuenta) throw new Error(`Cuenta con ID ${id} no encontrada`);
 
     const appId = process.env.META_APP_ID;
     const appSecret = process.env.META_APP_SECRET;
@@ -116,21 +153,51 @@ export class WhatsappAccountsService {
         grant_type: 'fb_exchange_token',
         client_id: appId,
         client_secret: appSecret,
-        fb_exchange_token: cuenta.token,
+        fb_exchange_token: cuenta.token, // token actual
       };
 
       const { data } = await axios.get(url, { params });
+      // Meta suele devolver: access_token, token_type, expires_in
+      const newToken: string = data.access_token;
+      const expiresIn: number | undefined = data.expires_in;
 
-      if (!data.access_token) {
-        throw new Error('No se recibió un nuevo token de Meta');
-      }
+      if (!newToken) throw new Error('No se recibió un nuevo token de Meta');
 
-      const updated = await this.updateTokenAccount(id, data.access_token);
+      const updated = await this.updateTokenAccount(id, newToken, expiresIn);
       return updated;
-    } catch (error) {
+    } catch (error: any) {
       throw new Error(
-        `Error refrescando token de cuenta ${id}: ${error.response?.data?.error?.message || error.message}`,
+        `Error refrescando token de cuenta ${id}: ${
+          error.response?.data?.error?.message || error.message
+        }`,
       );
     }
+  }
+
+  /** Refresca todas las cuentas que “conviene” refrescar (faltan <= 7 días o sin fecha de expiración). */
+  async refreshAllDueTokens(daysThreshold = 7): Promise<{
+    refreshed: string[];
+    skipped: string[];
+    errors: Record<string, string>;
+  }> {
+    const refreshed: string[] = [];
+    const skipped: string[] = [];
+    const errors: Record<string, string> = {};
+
+    const accounts = await this.findAll();
+    for (const acc of accounts) {
+      try {
+        if (this.shouldRefresh(acc, daysThreshold)) {
+          await this.refreshToken(acc.id);
+          refreshed.push(acc.id);
+        } else {
+          skipped.push(acc.id);
+        }
+      } catch (err: any) {
+        errors[acc.id] = err.message || String(err);
+      }
+    }
+
+    return { refreshed, skipped, errors };
   }
 }
