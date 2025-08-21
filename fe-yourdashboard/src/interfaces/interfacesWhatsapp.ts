@@ -19,6 +19,7 @@ export interface Message {
   conversation_id: string;
   message: string;
   name: string;
+  from?: 'me' | 'other';
   timestamp: string;
   phone: string;
 }
