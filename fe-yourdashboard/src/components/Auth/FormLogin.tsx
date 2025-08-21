@@ -10,12 +10,19 @@ import { FormView, IFormLogin } from "@/interfaces/interfacesAuth";
 const FormLogin = ({ setChangeForm }: FormView) => {
   const router = useRouter();
   const { saveToken } = useAuth();
+
   const onFinish = async (values: IFormLogin) => {
-    const response = await login(values.email, values.password);
-    if (response) {
-      console.log("response", response);
-      saveToken(response.token);
-      router.push("/dashboard/email");
+    try {
+      const response = await login(values.email, values.password);
+      if (response && response.token) {
+        console.log("response", response);
+
+        saveToken(response.token);
+
+        router.push("/dashboard");
+      }
+    } catch (error) {
+      console.error("Error en login:", error);
     }
   };
 
@@ -34,7 +41,7 @@ const FormLogin = ({ setChangeForm }: FormView) => {
       </Form.Item>
       <Form.Item
         name="password"
-        rules={[{ required: true, message: "Por favor ingrese su contraseña" }]}
+        rules={[{ required: true, message: "Por favor ingrese su contraseña" }]}
       >
         <Input
           prefix={<LockOutlined />}
@@ -45,7 +52,7 @@ const FormLogin = ({ setChangeForm }: FormView) => {
 
       <Form.Item>
         <Button block type="primary" htmlType="submit">
-          Iniciar Sesión
+          Iniciar Sesión
         </Button>
         <div style={{ marginTop: "12px", textAlign: "center" }}>
           Si no tienes una cuenta,{" "}
@@ -56,13 +63,6 @@ const FormLogin = ({ setChangeForm }: FormView) => {
             registrate aquí
           </span>
         </div>
-        {/* 
-        <span
-          
-          onClick={() => setChangeForm(true)}
-        >
-          registrate aqui
-        </span> */}
       </Form.Item>
     </Form>
   );

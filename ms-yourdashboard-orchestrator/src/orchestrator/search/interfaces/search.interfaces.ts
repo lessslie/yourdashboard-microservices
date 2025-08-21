@@ -56,6 +56,22 @@ export interface CalendarResult {
   sourceAccountId: number;
 }
 
+//*******************************************
+// WHATSAPP */
+//*******************************************
+
+// Interface para los datos crudos que vienen del microservicio WhatsApp
+export interface WhatsappConversationRaw {
+  conversation_id?: string;
+  id?: string;
+  last_message?: string;
+  message?: string;
+  name?: string;
+  phone?: string;
+  last_message_date?: string;
+  timestamp?: string;
+}
+
 export interface WhatsappSearchResponse {
   results: WhatsappResult[];
   total: number;
