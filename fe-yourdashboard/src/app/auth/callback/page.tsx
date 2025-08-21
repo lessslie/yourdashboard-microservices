@@ -50,7 +50,7 @@ export default function AuthCallbackPage() {
           message.error(`Error de autenticación: ${decodedMessage}`);
 
           setTimeout(() => {
-            router.push("/dashboard");
+            router.push("/dashboard/calendar");
           }, 2000);
           return;
         }
@@ -95,7 +95,7 @@ export default function AuthCallbackPage() {
             setCurrentStep("Redirigiendo al calendario...");
 
             setTimeout(() => {
-              router.replace("/dashboard");
+              router.replace("/dashboard/calendar");
             }, 1000);
           } catch (profileError) {
             addDebugInfo(`❌ Error al recargar perfil: ${profileError}`);
