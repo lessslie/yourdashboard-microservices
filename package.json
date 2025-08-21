@@ -1,10 +1,19 @@
 {
   "dependencies": {
+    "@fullcalendar/core": "^6.1.19",
+    "@fullcalendar/daygrid": "^6.1.19",
+    "@fullcalendar/interaction": "^6.1.19",
+    "@fullcalendar/list": "^6.1.19",
+    "@fullcalendar/multimonth": "^6.1.19",
+    "@fullcalendar/react": "^6.1.19",
+    "@fullcalendar/rrule": "^6.1.19",
+    "@fullcalendar/timegrid": "^6.1.19",
     "@nestjs/config": "^4.0.2",
     "@nestjs/schedule": "^6.0.0",
     "@nestjs/swagger": "^11.2.0",
     "@types/node": "^24.2.1",
     "googleapis": "^155.0.1",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "zustand": "^5.0.8"
   }
 }
