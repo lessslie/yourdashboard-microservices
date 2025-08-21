@@ -38,7 +38,17 @@ const ViewEmails = ({ emailId }: { emailId?: string }) => {
           alignItems: "center",
         }}
       >
-        <h1>YOUR DASHBOARD</h1>
+        <Button
+          type="primary"
+          onClick={() => {
+            router.push("/dashboard");
+          }}
+        >
+          Volver al Dashboard
+        </Button>
+
+        <h1>📧Email Dashboard</h1>
+
         {/* <Image
           src="/logo.png"
           alt="Logo"

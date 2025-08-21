@@ -1,12 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
-import { getUserData, getGmailCuentas } from "@/services/auth/auth";
-import {
-  ICuentaGmail,
-  ICuentaGmailBack,
-  IUser,
-  IUserBack,
-} from "@/interfaces/interfacesAuth";
+import { getUserData } from "@/services/auth/auth";
+import { ICuentaGmail, IUser } from "@/interfaces/interfacesAuth";
 
 export const useAuth = () => {
   const { accessToken, setToken, clearAuth } = useAuthStore();
@@ -67,6 +62,7 @@ export const useUserData = () => {
 
 export const useCuentasGmail = () => {
   const { getGmailAccounts } = useAuthStore();
+  console.log("Cuentas de Gmail:", getGmailAccounts());
 
   const cuentasGmail: ICuentaGmail[] = getGmailAccounts().map((cuenta) => ({
     id: cuenta.id.toString(),
