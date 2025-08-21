@@ -4,7 +4,10 @@ import { useParams } from "next/navigation";
 import { useState, useMemo, useEffect } from "react";
 import { Row, Col, Empty, Layout } from "antd";
 import ChatWindow from "@/components/Whatsapp/ChatWindow";
-import { Conversation, ConversationListItem } from "@/interfaces/interfacesWhatsapp";
+import {
+  Conversation,
+  ConversationListItem,
+} from "@/interfaces/interfacesWhatsapp";
 import { getConversations } from "@/services/whatsapp/whatsapp";
 import ConversationList from "@/components/Whatsapp/ConversationList";
 import SearchBar from "@/components/Whatsapp/SearchBar";
@@ -20,6 +23,26 @@ export default function ConversationsPage() {
   const [searchError, setSearchError] = useState(false);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [allConversations, setAllConversations] = useState<ConversationListItem[]>([]);
+
+  // 🔹 Persistencia de selectedChatId
+  useEffect(() => {
+    const savedChatId = localStorage.getItem("selectedChatId");
+    if (savedChatId) {
+      setSelectedChatId(savedChatId);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedChatId) {
+      localStorage.setItem("selectedChatId", selectedChatId);
+    }
+  }, [selectedChatId]);
+
+  // 🔹 Resetear chat cuando cambia la cuenta
+  useEffect(() => {
+    setSelectedChatId(null);
+    localStorage.removeItem("selectedChatId");
+  }, [accountId]);
 
   useEffect(() => {
     async function fetchConversations() {
@@ -65,33 +88,33 @@ export default function ConversationsPage() {
                 paddingTop: 30,
               }}
             >
-              <SearchBar 
+              <SearchBar
                 onResults={(results) => {
                   setSearchResults(results);
                   setSearchError(false); // si hay resultados, limpio el error
-                }} 
+                }}
                 onError={() => {
                   setSearchResults([]); // limpio resultados
                   setSearchError(true); // marco error
-                }} 
+                }}
               />
 
               {searchError ? (
-                  <Empty description="No hay resultados encontrados" />
-                ) : searchResults.length > 0 ? (
-                  <SearchResult
-                    conversations={searchResults}
-                    selectedChatId={selectedChatId}
-                    onSelectChat={setSelectedChatId}
-                  />
-                ) : (
-                  <ConversationList
-                    accountId={accountId}
-                    selectedChatId={selectedChatId}
-                    onSelectChat={setSelectedChatId}
-                    conversations={allConversations}
-                  />
-                )}
+                <Empty description="No hay resultados encontrados" />
+              ) : searchResults.length > 0 ? (
+                <SearchResult
+                  conversations={searchResults}
+                  selectedChatId={selectedChatId}
+                  onSelectChat={setSelectedChatId}
+                />
+              ) : (
+                <ConversationList
+                  accountId={accountId}
+                  selectedChatId={selectedChatId}
+                  onSelectChat={setSelectedChatId}
+                  conversations={allConversations}
+                />
+              )}
             </div>
           </Col>
 
@@ -110,7 +133,15 @@ export default function ConversationsPage() {
             ) : (
               <Empty
                 description="Selecciona una conversación"
-                style={{ marginTop: 100 }}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center", 
+                  alignItems: "center",    
+                  height: "100%",         
+                  color: "#888",       
+                  fontSize: 16,          
+                }}
               />
             )}
           </Col>

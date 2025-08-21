@@ -34,11 +34,8 @@ export default function WhatsappLayout({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <h1 style={{ margin: 0, color: "#299feeff" }}>📱 WhatsApp</h1>
+          <h1 style={{ margin: 0, color: "#ee2f29ff" }}>📱 WhatsApp</h1>
         </div>
-        <div
-          style={{ display: "flex", alignItems: "center", gap: "16px" }}
-        ></div>
       </Header>
       <Layout
         style={{
@@ -60,38 +57,37 @@ export default function WhatsappLayout({
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            justifyContent: "flex-start",
-            padding: "20px 0",
-            position: "absolute",
-            left: 0,
-            top: 64, 
-            bottom: 0,
-            height: "calc(100% - 64px)",
-            minHeight: 0,
+            paddingTop: 20,
+            paddingBottom: 20,
+            height: "calc(100vh - 64px)", // ajusta al Header
             overflowY: "auto",
-            zIndex: 1000,
+            minHeight: 0,
           }}
         >
           <Menu
             mode="inline"
             selectable={false}
+            style={{ width: "100%", borderRight: 0 }}
             items={[
               ...accounts.map((account) => ({
                 key: account.id,
                 label: (
-                  <Link
-                    href={`/dashboard/whatsapp/${account.id}/conversations`}
-                  >
-                    <div style={{ textAlign: "center" }}>
+                  <Link href={`/dashboard/whatsapp/${account.id}/conversations`}>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 4, // espacio entre avatar y texto
+                      }}
+                    >
                       <Avatar
-                        style={{
-                          backgroundColor: "#87d068",
-                          width: 64,
-                          height: 64,
-                        }}
+                        size={64}
+                        style={{ backgroundColor: "rgba(222, 125, 103, 0.78)" }}
                         icon={<UserOutlined />}
                       />
-                      <Text style={{ display: "block", fontSize: 12 }}>
+                      <Text style={{ fontSize: 12, textAlign: "center" }}>
                         {account.name}
                       </Text>
                     </div>
@@ -108,13 +104,17 @@ export default function WhatsappLayout({
                 key: "add",
                 label: (
                   <Link href={`/dashboard/whatsapp`}>
-                    <div style={{ textAlign: "center" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
                       <Avatar
-                        style={{
-                          backgroundColor: "#1890ff",
-                          width: 64,
-                          height: 64,
-                        }}
+                        size={64}
+                        style={{ backgroundColor: "#188fff69" }}
                         icon={<PlusOutlined />}
                       />
                     </div>
@@ -130,9 +130,9 @@ export default function WhatsappLayout({
             ]}
           />
         </Sider>
+
         <Content
           style={{
-            marginLeft: "calc(100px )",
             padding: 0,
             height: "100%",
             minHeight: 0,
