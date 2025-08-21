@@ -195,7 +195,7 @@ export class WebhookController {
   @Post('/cuentas')
   async createAccount(@Body() body: CreateAccountDTO, @Res() res: Response) {
     try {
-      console.log('Body recibido en /cuentas:', body); // <-- Agregá esto
+      console.log('Body recibido en /cuentas:', body);
 
       const cuenta = await this.whatsappAccountsService.createAccount(body);
       return res.status(201).json(cuenta);
@@ -213,7 +213,7 @@ export class WebhookController {
   ) {
     try {
       const cuenta = await this.whatsappAccountsService.updateAccount(
-        Number(id),
+        id,
         body,
       );
 
