@@ -451,6 +451,8 @@ CREATE TABLE whatsapp_accounts (
 
 ALTER TABLE whatsapp_accounts
 ADD COLUMN phone_number_id VARCHAR(100) UNIQUE; -- Asegura que cada cuenta de WhatsApp tenga un ID de número único
+ADD COLUMN IF NOT EXISTS token_updated_at TIMESTAMP DEFAULT NOW(); -- Marca la última vez que se actualizó el token
+ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMP; -- Marca la fecha de expiración del token
 
 -- 💬 TABLA: conversations
 -- Conversaciones por cuenta de WhatsApp
