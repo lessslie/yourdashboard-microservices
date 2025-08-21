@@ -13,7 +13,7 @@ export default function SearchResult({
   }
 
   return (
-    <List
+   <List
       itemLayout="horizontal"
       dataSource={conversations}
       renderItem={(chat) => (
@@ -25,7 +25,10 @@ export default function SearchResult({
           }}
           onClick={() => onSelectChat(chat.conversation_id)}
         >
-          <List.Item.Meta title={chat.name} description={chat.last_message} />
+          <List.Item.Meta 
+            title={chat.name} 
+            description={chat.matched_message} 
+          />
         </List.Item>
       )}
     />

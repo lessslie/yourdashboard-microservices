@@ -27,6 +27,7 @@ export default function ConversationsPage() {
   // 🔹 Persistencia de selectedChatId
   useEffect(() => {
     const savedChatId = localStorage.getItem("selectedChatId");
+    console.log("Saved chat ID from localStorage:", savedChatId);
     if (savedChatId) {
       setSelectedChatId(savedChatId);
     }
@@ -58,7 +59,7 @@ export default function ConversationsPage() {
 
   const selectedContact = useMemo(() => {
     if (!accountId) return undefined;
-    return allConversations.find((c) => c.id === selectedChatId);
+    return allConversations.find((c) => c.conversation_id === selectedChatId);
   }, [accountId, allConversations, selectedChatId]);
 
   if (!accountId) {
@@ -91,11 +92,11 @@ export default function ConversationsPage() {
               <SearchBar
                 onResults={(results) => {
                   setSearchResults(results);
-                  setSearchError(false); // si hay resultados, limpio el error
+                  setSearchError(false); 
                 }}
                 onError={() => {
-                  setSearchResults([]); // limpio resultados
-                  setSearchError(true); // marco error
+                  setSearchResults([]);
+                  setSearchError(true); 
                 }}
               />
 
