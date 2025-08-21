@@ -38,7 +38,7 @@ export default function SearchBar({ onResults }: SearchBarProps) {
       allowClear
       value={search}
       onChange={(e) => handleSearch(e.target.value)}
-      style={{ marginBottom: 16 }}
+      style={{ marginBottom: 16}}
     />
   );
 }

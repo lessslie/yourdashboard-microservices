@@ -45,7 +45,7 @@ export default function ChatWindow({
         }
 
         const formatted: UIMessage[] = source.map((msg) => ({
-          from: msg.phone === myPhone ? "me" : "other",
+          from: msg.from || (msg.phone === myPhone ? "me" : "other"),
           name: msg.phone === myPhone ? "Yo" : msg.name,
           phone: msg.phone,
           text: msg.message,
@@ -70,7 +70,7 @@ export default function ChatWindow({
         }
         setMessages(
           fallback.map((msg) => ({
-            from: msg.phone === myPhone ? "me" : "other",
+            from: msg.from || (msg.phone === myPhone ? "me" : "other"),
             name: msg.phone === myPhone ? "Yo" : msg.name,
             phone: msg.phone,
             text: msg.message,
@@ -131,54 +131,58 @@ export default function ChatWindow({
         }}
       >
         <List
-          dataSource={messages}
-          renderItem={(msg) => (
+  dataSource={messages}
+  renderItem={(msg) => {
+  
+    return (
+      <div
+        style={{
+          display: "flex",
+          justifyContent: msg.from === "me" ? "flex-end" : "flex-start",
+          marginBottom: 6,
+        }}
+      >
+        <div
+          style={{
+            backgroundColor: msg.from === "me" ? "#7faff1" : "#f0f0f0",
+            color: msg.from === "me" ? "#fff" : "black",
+            padding: "8px 12px",
+            borderRadius: 16,
+            maxWidth: "60%",
+            wordBreak: "break-word",
+            textAlign: "left",
+            marginLeft: msg.from === "me" ? 40 : 0,
+            marginRight: msg.from === "me" ? 0 : 40,
+          }}
+        >
+          {msg.from !== "me" && (
             <div
               style={{
-                display: "flex",
-                justifyContent: msg.from === "me" ? "flex-end" : "flex-start",
-                marginBottom: 6,
+                fontWeight: 600,
+                fontSize: 13,
+                marginBottom: 4,
               }}
             >
-              <div
-                style={{
-                  backgroundColor: msg.from === "me" ? "#7faff1" : "#f0f0f0",
-                  color: msg.from === "me" ? "#fff" : "black",
-                  padding: "8px 12px",
-                  borderRadius: 16,
-                  maxWidth: "60%",
-                  wordBreak: "break-word",
-                  textAlign: "left",
-                  marginLeft: msg.from === "me" ? 40 : 0,
-                  marginRight: msg.from === "me" ? 0 : 40,
-                }}
-              >
-                {msg.from !== "me" && (
-                  <div
-                    style={{
-                      fontWeight: 600,
-                      fontSize: 13,
-                      marginBottom: 4,
-                    }}
-                  >
-                    {msg.name}
-                  </div>
-                )}
-                <div>{msg.text}</div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: msg.from === "me" ? "#e0e0e0" : "#999",
-                    marginTop: 4,
-                    textAlign: "right",
-                  }}
-                >
-                  {msg.time}
-                </div>
-              </div>
+              {msg.name}
             </div>
           )}
-        />
+          <div>{msg.text}</div>
+          <div
+            style={{
+              fontSize: 11,
+              color: msg.from === "me" ? "#e0e0e0" : "#999",
+              marginTop: 4,
+              textAlign: "right",
+            }}
+          >
+            {msg.time}
+          </div>
+        </div>
+      </div>
+    );
+  }}
+/>
+
         <div ref={messagesEndRef} />
       </Content>
 

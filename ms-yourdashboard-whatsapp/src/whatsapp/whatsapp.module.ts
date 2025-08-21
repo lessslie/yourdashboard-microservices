@@ -9,5 +9,6 @@ import { WhatsappAccountsService } from './whatsapp-accounts.service';
   imports: [ConversationsModule],
   controllers: [WebhookController],
   providers: [WhatsappService, MessagesGateway, WhatsappAccountsService],
+  exports: [WhatsappAccountsService],
 })
 export class WhatsappModule {}

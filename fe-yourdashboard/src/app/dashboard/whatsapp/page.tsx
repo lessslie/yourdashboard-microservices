@@ -27,6 +27,7 @@ export default function Home() {
           justifyContent: "flex-start",
           padding: "20px 0",
           position: "fixed",
+          marginTop: 45,
           left: 0,
           top: 0,
           bottom: 0,
@@ -41,7 +42,6 @@ export default function Home() {
               style={{
                 textAlign: "center",
                 minHeight: 100,
-                marginTop: 45,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -51,7 +51,7 @@ export default function Home() {
                 <div>
                   <Avatar
                     style={{
-                      backgroundColor: "#87d068",
+                      backgroundColor: "rgba(222, 125, 103, 0.78)",
                       width: 64,
                       height: 64,
                     }}
@@ -78,7 +78,7 @@ export default function Home() {
             <div>
               <Avatar
                 style={{
-                  backgroundColor: "#1890ff",
+                  backgroundColor: "#188fff69",
                   marginBottom: 5,
                   width: 64,
                   height: 64,
