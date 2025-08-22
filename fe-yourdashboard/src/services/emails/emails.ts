@@ -13,7 +13,6 @@ export const handleConnectService = async (token: string) => {
   }
 };
 
-// peticiones de emails
 export const getAllEmails = async (
   token: string,
   userId: string,
@@ -63,7 +62,6 @@ export const getEmails = async (
   }
 };
 
-// peticiones de busqueda de emails
 export const getAllSearchEmails = async (
   token: string,
   userId: string,
@@ -137,7 +135,7 @@ export const postEmailSync = async (token: string, cuentaGmailId: string) => {
   try {
     const response = await axios.post(
       `${MS_ORCHES_URL}/emails/sync/incremental`,
-      {}, // body vacío
+      {},
       {
         headers: {
           Authorization: `Bearer ${token}`,

@@ -3,7 +3,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosResponse } from 'axios';
-import { CacheService } from '../cache/cache.service';
 
 // ================================
 // 🔧 INTERFACES DE TIPADO SEGURO
@@ -25,8 +24,8 @@ export class CalendarOrchestratorService {
   private readonly msCalendarUrl: string;
 
   constructor(
-    private readonly configService: ConfigService,
-    private readonly cacheService: CacheService
+    private readonly configService: ConfigService
+    // ✅ REMOVIDO: private readonly cacheService: CacheService
   ) {
     this.msAuthUrl = this.configService.get<string>('MS_AUTH_URL') || 'http://localhost:3001';
     this.msCalendarUrl = this.configService.get<string>('MS_CALENDAR_URL') || 'http://localhost:3005';
@@ -65,11 +64,11 @@ export class CalendarOrchestratorService {
   }
 
   // ================================
-  // 📅 EVENTOS POR CUENTA ESPECÍFICA
+  // 📅 EVENTOS POR CUENTA ESPECÍFICA - SIN CACHE
   // ================================
 
   async getEventsPorCuenta(
-    authHeader: string, // ✅ Agregar JWT
+    authHeader: string,
     cuentaGmailId: string,
     timeMin: string,
     timeMax?: string,
@@ -77,25 +76,12 @@ export class CalendarOrchestratorService {
     limit: number = 10
   ): Promise<unknown> {
     try {
-      this.logger.log(`📅 Obteniendo eventos para cuenta Gmail ${cuentaGmailId} - Página ${page}`);
-
-      // 🎯 Generar clave de cache
-      const cacheKey = `calendar-events:${cuentaGmailId}:limit:${limit}|page:${page}|timeMax:${timeMax || '2025-08-31T23:59:59Z'}|timeMin:${timeMin}`;
-      
-      // 🔍 Verificar cache
-      const cachedResult = await this.cacheService.get(cacheKey);
-      if (cachedResult) {
-        this.logger.debug(`📦 Cache HIT: eventos cuenta ${cuentaGmailId}`);
-        return cachedResult;
-      }
-
-      this.logger.debug(`📭 Cache MISS: ${cacheKey}`);
-      this.logger.log(`📡 CACHE MISS - Obteniendo eventos desde MS-Calendar para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`📅 ⚡ TIEMPO REAL - Obteniendo eventos para cuenta Gmail ${cuentaGmailId} - Página ${page}`);
 
       // 🔑 Obtener token OAuth con JWT del usuario
       const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
 
-      // 📅 Llamar a MS-Calendar con token OAuth
+      // 📅 Llamar DIRECTAMENTE a MS-Calendar (SIN CACHE)
       const response: AxiosResponse<CalendarApiResponse> = await axios.get(`${this.msCalendarUrl}/calendar/events`, {
         headers: {
           'Authorization': `Bearer ${accessToken}` // ✅ Usar token OAuth
@@ -111,9 +97,7 @@ export class CalendarOrchestratorService {
       });
 
       if (response.data) {
-        // 💾 Guardar en cache por 5 minutos
-        await this.cacheService.set(cacheKey, response.data, 300);
-        this.logger.log(`✅ Eventos obtenidos y guardados en cache para cuenta Gmail ${cuentaGmailId}`);
+        this.logger.log(`✅ ⚡ Eventos obtenidos en TIEMPO REAL para cuenta Gmail ${cuentaGmailId}`);
         return response.data;
       }
 
@@ -127,7 +111,7 @@ export class CalendarOrchestratorService {
   }
 
   // ================================
-  // 📅 EVENTOS UNIFICADOS DE TODAS LAS CUENTAS
+  // 📅 EVENTOS UNIFICADOS - SIN CACHE
   // ================================
 
   async getEventosUnificados(
@@ -138,22 +122,9 @@ export class CalendarOrchestratorService {
     limit: number = 10
   ): Promise<unknown> {
     try {
-      this.logger.log(`📅 🎯 EVENTOS UNIFICADOS para usuario ${userId} - Página ${page}`);
+      this.logger.log(`📅 🎯 ⚡ TIEMPO REAL - EVENTOS UNIFICADOS para usuario ${userId} - Página ${page}`);
 
-      // 🎯 Generar clave de cache
-      const cacheKey = `calendar-events-unified:${userId}:limit:${limit}|page:${page}|timeMax:${timeMax || '2025-08-31T23:59:59Z'}|timeMin:${timeMin}`;
-      
-      // 🔍 Verificar cache
-      const cachedResult = await this.cacheService.get(cacheKey);
-      if (cachedResult) {
-        this.logger.debug(`📦 Cache HIT: eventos unificados usuario ${userId}`);
-        return cachedResult;
-      }
-
-      this.logger.debug(`📭 Cache MISS: ${cacheKey}`);
-      this.logger.log(`📡 CACHE MISS - Eventos unificados desde MS-Calendar para usuario ${userId}`);
-
-      // 📅 Llamar directamente a MS-Calendar con userId
+      // 📅 Llamar DIRECTAMENTE a MS-Calendar (SIN CACHE)
       const response: AxiosResponse<CalendarApiResponse> = await axios.get(`${this.msCalendarUrl}/calendar/events-unified`, {
         params: {
           userId,
@@ -166,9 +137,7 @@ export class CalendarOrchestratorService {
       });
 
       if (response.data) {
-        // 💾 Guardar en cache por 3 minutos (menos tiempo porque son datos de múltiples cuentas)
-        await this.cacheService.set(cacheKey, response.data, 180);
-        this.logger.log(`✅ Eventos unificados obtenidos y guardados en cache para usuario ${userId}`);
+        this.logger.log(`✅ ⚡ Eventos unificados obtenidos en TIEMPO REAL para usuario ${userId}`);
         return response.data;
       }
 
@@ -182,11 +151,11 @@ export class CalendarOrchestratorService {
   }
 
   // ================================
-  // 🔍 BÚSQUEDA DE EVENTOS POR CUENTA
+  // 🔍 BÚSQUEDA DE EVENTOS - SIN CACHE
   // ================================
 
   async buscarEventosPorCuenta(
-    authHeader: string, // ✅ Agregar JWT
+    authHeader: string,
     cuentaGmailId: string,
     timeMin: string,
     searchTerm: string,
@@ -194,25 +163,12 @@ export class CalendarOrchestratorService {
     limit: number = 10
   ): Promise<unknown> {
     try {
-      this.logger.log(`🔍 Buscando eventos para cuenta Gmail ${cuentaGmailId}: "${searchTerm}"`);
-
-      // 🎯 Generar clave de cache
-      const cacheKey = `calendar-search:${cuentaGmailId}:limit:${limit}|page:${page}|searchTerm:${searchTerm}|timeMin:${timeMin}`;
-      
-      // 🔍 Verificar cache
-      const cachedResult = await this.cacheService.get(cacheKey);
-      if (cachedResult) {
-        this.logger.debug(`📦 Cache HIT: búsqueda eventos cuenta ${cuentaGmailId}`);
-        return cachedResult;
-      }
-
-      this.logger.debug(`📭 Cache MISS: ${cacheKey}`);
-      this.logger.log(`📡 CACHE MISS - Buscando eventos desde MS-Calendar para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`🔍 ⚡ TIEMPO REAL - Buscando eventos para cuenta Gmail ${cuentaGmailId}: "${searchTerm}"`);
 
       // 🔑 Obtener token OAuth con JWT del usuario
       const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
 
-      // 🔍 Llamar a MS-Calendar
+      // 🔍 Llamar DIRECTAMENTE a MS-Calendar (SIN CACHE)
       const response: AxiosResponse<CalendarApiResponse> = await axios.get(`${this.msCalendarUrl}/calendar/events/search`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`
@@ -228,9 +184,7 @@ export class CalendarOrchestratorService {
       });
 
       if (response.data) {
-        // 💾 Guardar en cache por 2 minutos (búsquedas cambian más frecuentemente)
-        await this.cacheService.set(cacheKey, response.data, 120);
-        this.logger.log(`✅ Búsqueda de eventos completada y guardada en cache`);
+        this.logger.log(`✅ ⚡ Búsqueda de eventos completada en TIEMPO REAL`);
         return response.data;
       }
 
@@ -244,7 +198,7 @@ export class CalendarOrchestratorService {
   }
 
   // ================================
-  // 🔍 BÚSQUEDA GLOBAL DE EVENTOS
+  // 🔍 BÚSQUEDA GLOBAL - SIN CACHE
   // ================================
 
   async buscarEventosGlobal(
@@ -255,22 +209,9 @@ export class CalendarOrchestratorService {
     limit: number = 10
   ): Promise<unknown> {
     try {
-      this.logger.log(`🌍 BÚSQUEDA GLOBAL de eventos para usuario ${userId}: "${searchTerm}"`);
+      this.logger.log(`🌍 ⚡ TIEMPO REAL - BÚSQUEDA GLOBAL de eventos para usuario ${userId}: "${searchTerm}"`);
 
-      // 🎯 Generar clave de cache
-      const cacheKey = `calendar-global-search:${userId}:limit:${limit}|page:${page}|searchTerm:${searchTerm}|timeMin:${timeMin}`;
-      
-      // 🔍 Verificar cache
-      const cachedResult = await this.cacheService.get(cacheKey);
-      if (cachedResult) {
-        this.logger.debug(`📦 Cache HIT: búsqueda global eventos usuario ${userId}`);
-        return cachedResult;
-      }
-
-      this.logger.debug(`📭 Cache MISS: ${cacheKey}`);
-      this.logger.log(`📡 CACHE MISS - Búsqueda global de eventos desde MS-Calendar para usuario ${userId}`);
-
-      // 🔍 Llamar directamente a MS-Calendar con userId para búsqueda global
+      // 🔍 Llamar DIRECTAMENTE a MS-Calendar (SIN CACHE)
       const response: AxiosResponse<CalendarApiResponse> = await axios.get(`${this.msCalendarUrl}/calendar/search-global`, {
         params: {
           userId,
@@ -283,9 +224,7 @@ export class CalendarOrchestratorService {
       });
 
       if (response.data) {
-        // 💾 Guardar en cache por 2 minutos
-        await this.cacheService.set(cacheKey, response.data, 120);
-        this.logger.log(`✅ Búsqueda global de eventos completada y guardada en cache`);
+        this.logger.log(`✅ ⚡ Búsqueda global de eventos completada en TIEMPO REAL`);
         return response.data;
       }
 
@@ -299,30 +238,17 @@ export class CalendarOrchestratorService {
   }
 
   // ================================
-  // 📊 ESTADÍSTICAS DE CALENDARIO
+  // 📊 ESTADÍSTICAS - SIN CACHE
   // ================================
 
   async getEstadisticasCalendario(authHeader: string, cuentaGmailId: string): Promise<unknown> {
     try {
-      this.logger.log(`📊 Obteniendo estadísticas para cuenta Gmail ${cuentaGmailId}`);
-
-      // 🎯 Generar clave de cache
-      const cacheKey = `calendar-stats:${cuentaGmailId}`;
-      
-      // 🔍 Verificar cache
-      const cachedResult = await this.cacheService.get(cacheKey);
-      if (cachedResult) {
-        this.logger.debug(`📦 Cache HIT: stats calendario cuenta ${cuentaGmailId}`);
-        return cachedResult;
-      }
-
-      this.logger.debug(`📭 Cache MISS: ${cacheKey}`);
-      this.logger.log(`📡 CACHE MISS - Obteniendo stats desde MS-Calendar`);
+      this.logger.log(`📊 ⚡ TIEMPO REAL - Obteniendo estadísticas para cuenta Gmail ${cuentaGmailId}`);
 
       // 🔑 Obtener token OAuth con JWT del usuario
       const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
 
-      // 📊 Llamar a MS-Calendar
+      // 📊 Llamar DIRECTAMENTE a MS-Calendar (SIN CACHE)
       const response: AxiosResponse<CalendarApiResponse> = await axios.get(`${this.msCalendarUrl}/calendar/stats`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`
@@ -334,9 +260,7 @@ export class CalendarOrchestratorService {
       });
 
       if (response.data) {
-        // 💾 Guardar en cache por 10 minutos (stats cambian menos frecuentemente)
-        await this.cacheService.set(cacheKey, response.data, 600);
-        this.logger.log(`✅ Stats de calendario obtenidas y guardadas en cache`);
+        this.logger.log(`✅ ⚡ Stats de calendario obtenidas en TIEMPO REAL`);
         return response.data;
       }
 
@@ -350,17 +274,17 @@ export class CalendarOrchestratorService {
   }
 
   // ================================
-  // 🔄 SINCRONIZACIÓN DE EVENTOS
+  // 🔄 SINCRONIZACIÓN - SIN CACHE
   // ================================
 
   async sincronizarEventos(authHeader: string, cuentaGmailId: string, maxEvents: number = 100): Promise<unknown> {
     try {
-      this.logger.log(`🔄 Iniciando sync de eventos para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`🔄 ⚡ TIEMPO REAL - Iniciando sync de eventos para cuenta Gmail ${cuentaGmailId}`);
 
       // 🔑 Obtener token OAuth con JWT del usuario
       const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
 
-      // 🔄 Llamar a MS-Calendar
+      // 🔄 Llamar DIRECTAMENTE a MS-Calendar (SIN CACHE)
       const response: AxiosResponse<CalendarApiResponse> = await axios.post(`${this.msCalendarUrl}/calendar/sync`, null, {
         headers: {
           'Authorization': `Bearer ${accessToken}`
@@ -373,11 +297,7 @@ export class CalendarOrchestratorService {
       });
 
       if (response.data) {
-        this.logger.log(`✅ Sync de eventos completado para cuenta Gmail ${cuentaGmailId}`);
-        
-        // 🧹 Limpiar cache relacionado después del sync
-        await this.limpiarCacheCalendar(cuentaGmailId);
-        
+        this.logger.log(`✅ ⚡ Sync de eventos completado en TIEMPO REAL para cuenta Gmail ${cuentaGmailId}`);
         return response.data;
       }
 
@@ -391,38 +311,14 @@ export class CalendarOrchestratorService {
   }
 
   // ================================
-  // 🧹 UTILIDADES DE CACHE
+  // 🔧 MÉTODOS LEGACY
   // ================================
 
-  private async limpiarCacheCalendar(cuentaGmailId: string): Promise<void> {
-    try {
-      // Limpiar cache relacionado con esta cuenta
-      const keysToDelete = [
-        `calendar-events:${cuentaGmailId}:*`,
-        `calendar-search:${cuentaGmailId}:*`,
-        `calendar-stats:${cuentaGmailId}`
-      ];
-
-      for (const pattern of keysToDelete) {
-        await this.cacheService.deletePattern(pattern);
-      }
-
-      this.logger.debug(`🧹 Cache de calendario limpiado para cuenta ${cuentaGmailId}`);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
-      this.logger.debug(`⚠️ No se pudo limpiar cache:`, errorMessage);
-    }
-  }
-
-  // ================================
-  // 🔧 MÉTODOS LEGACY (MANTENER COMPATIBILIDAD)
-  // ================================
-
-  // Estos métodos pueden existir en tu archivo original, mantenerlos para compatibilidad
   healthCheck(): Record<string, unknown> {
     return {
       service: 'calendar-orchestrator',
       status: 'OK',
+      mode: 'TIEMPO-REAL', // ✅ Indicar que es tiempo real
       timestamp: new Date().toISOString(),
       endpoints: {
         msAuth: this.msAuthUrl,
@@ -432,7 +328,7 @@ export class CalendarOrchestratorService {
   }
 
   // ================================
-  // 📋 OBTENER EVENTO ESPECÍFICO POR ID
+  // 📋 OBTENER EVENTO ESPECÍFICO - SIN CACHE
   // ================================
 
   async getEventByIdWithToken(
@@ -441,7 +337,7 @@ export class CalendarOrchestratorService {
     eventId: string
   ): Promise<unknown> {
     try {
-      this.logger.log(`📋 Obteniendo evento ${eventId} para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`📋 ⚡ TIEMPO REAL - Obteniendo evento ${eventId} para cuenta Gmail ${cuentaGmailId}`);
 
       if (!eventId || eventId.trim() === '') {
         throw new Error('eventId es requerido');
@@ -450,7 +346,7 @@ export class CalendarOrchestratorService {
       // Obtener token válido para la cuenta
       const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
 
-      // Llamar al MS-Calendar
+      // Llamar DIRECTAMENTE al MS-Calendar (SIN CACHE)
       const response: AxiosResponse<CalendarApiResponse> = await axios.get(`${this.msCalendarUrl}/calendar/events/${eventId}`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`
@@ -461,7 +357,7 @@ export class CalendarOrchestratorService {
         timeout: 15000
       });
 
-      this.logger.log(`✅ Evento ${eventId} obtenido exitosamente`);
+      this.logger.log(`✅ ⚡ Evento ${eventId} obtenido en TIEMPO REAL`);
       return response.data;
 
     } catch (error: unknown) {
@@ -472,7 +368,7 @@ export class CalendarOrchestratorService {
   }
 
   // ================================
-  // ➕ CREAR NUEVO EVENTO
+  // ➕ CREAR NUEVO EVENTO - SIN CACHE
   // ================================
 
   async createEventWithToken(
@@ -485,12 +381,12 @@ export class CalendarOrchestratorService {
       const eventData = createEventDto as { summary?: string };
       const eventTitle = eventData?.summary || 'Evento sin título';
       
-      this.logger.log(`➕ Creando evento "${eventTitle}" para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`➕ ⚡ TIEMPO REAL - Creando evento "${eventTitle}" para cuenta Gmail ${cuentaGmailId}`);
 
       // Obtener token válido para la cuenta
       const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
 
-      // Llamar al MS-Calendar
+      // Llamar DIRECTAMENTE al MS-Calendar (SIN CACHE)
       const response: AxiosResponse<CalendarApiResponse> = await axios.post(`${this.msCalendarUrl}/calendar/events`, 
         createEventDto,
         {
@@ -505,7 +401,7 @@ export class CalendarOrchestratorService {
         }
       );
 
-      this.logger.log(`✅ Evento "${eventTitle}" creado exitosamente`);
+      this.logger.log(`✅ ⚡ Evento "${eventTitle}" creado en TIEMPO REAL`);
       return response.data;
 
     } catch (error: unknown) {
@@ -516,7 +412,7 @@ export class CalendarOrchestratorService {
   }
 
   // ================================
-  // ➕ CREAR EVENTO PRIVADO
+  // ➕ CREAR EVENTO PRIVADO - SIN CACHE
   // ================================
 
   async createPrivateEventWithToken(
@@ -528,12 +424,12 @@ export class CalendarOrchestratorService {
       const eventData = createEventDto as { summary?: string };
       const eventTitle = eventData?.summary || 'Evento privado sin título';
       
-      this.logger.log(`➕ Creando evento PRIVADO "${eventTitle}" para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`➕ ⚡ TIEMPO REAL - Creando evento PRIVADO "${eventTitle}" para cuenta Gmail ${cuentaGmailId}`);
 
       // Obtener token válido para la cuenta
       const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
 
-      // Llamar al MS-Calendar
+      // Llamar DIRECTAMENTE al MS-Calendar (SIN CACHE)
       const response: AxiosResponse<CalendarApiResponse> = await axios.post(`${this.msCalendarUrl}/calendar/events/private`, 
         createEventDto,
         {
@@ -548,7 +444,7 @@ export class CalendarOrchestratorService {
         }
       );
 
-      this.logger.log(`✅ Evento privado "${eventTitle}" creado exitosamente`);
+      this.logger.log(`✅ ⚡ Evento privado "${eventTitle}" creado en TIEMPO REAL`);
       return response.data;
 
     } catch (error: unknown) {
@@ -559,7 +455,7 @@ export class CalendarOrchestratorService {
   }
 
   // ================================
-  // ✏️ ACTUALIZAR EVENTO EXISTENTE
+  // ✏️ ACTUALIZAR EVENTO - SIN CACHE
   // ================================
 
   async updateEventWithToken(
@@ -569,12 +465,12 @@ export class CalendarOrchestratorService {
     updateEventDto: unknown
   ): Promise<unknown> {
     try {
-      this.logger.log(`✏️ Actualizando evento ${eventId} para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`✏️ ⚡ TIEMPO REAL - Actualizando evento ${eventId} para cuenta Gmail ${cuentaGmailId}`);
 
       // Obtener token válido para la cuenta
       const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
 
-      // Llamar al MS-Calendar
+      // Llamar DIRECTAMENTE al MS-Calendar (SIN CACHE)
       const response: AxiosResponse<CalendarApiResponse> = await axios.patch(`${this.msCalendarUrl}/calendar/events/${eventId}`, 
         updateEventDto,
         {
@@ -589,7 +485,7 @@ export class CalendarOrchestratorService {
         }
       );
 
-      this.logger.log(`✅ Evento ${eventId} actualizado exitosamente`);
+      this.logger.log(`✅ ⚡ Evento ${eventId} actualizado en TIEMPO REAL`);
       return response.data;
 
     } catch (error: unknown) {
@@ -600,7 +496,7 @@ export class CalendarOrchestratorService {
   }
 
   // ================================
-  // 🗑️ ELIMINAR EVENTO
+  // 🗑️ ELIMINAR EVENTO - SIN CACHE
   // ================================
 
   async deleteEventWithToken(
@@ -609,12 +505,12 @@ export class CalendarOrchestratorService {
     eventId: string
   ): Promise<unknown> {
     try {
-      this.logger.log(`🗑️ Eliminando evento ${eventId} para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`🗑️ ⚡ TIEMPO REAL - Eliminando evento ${eventId} para cuenta Gmail ${cuentaGmailId}`);
 
       // Obtener token válido para la cuenta
       const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
 
-      // Llamar al MS-Calendar
+      // Llamar DIRECTAMENTE al MS-Calendar (SIN CACHE)
       const response: AxiosResponse<CalendarApiResponse> = await axios.delete(`${this.msCalendarUrl}/calendar/events/${eventId}`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`
@@ -625,7 +521,7 @@ export class CalendarOrchestratorService {
         timeout: 15000
       });
 
-      this.logger.log(`✅ Evento ${eventId} eliminado exitosamente`);
+      this.logger.log(`✅ ⚡ Evento ${eventId} eliminado en TIEMPO REAL`);
       return response.data;
 
     } catch (error: unknown) {
