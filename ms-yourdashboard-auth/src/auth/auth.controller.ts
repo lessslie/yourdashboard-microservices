@@ -893,32 +893,30 @@ private async invalidateOrchestratorCache(userId: number): Promise<void> {
   /**
    * 📅 Manejar callback de CALENDAR
    */
- private async handleCalendarCallback(
-  googleUser: GoogleOAuthUser, // 🔧 Fix tipo
+private async handleCalendarCallback(
+  googleUser: GoogleOAuthUser,
   userId: number,
   res: Response
 ): Promise<void> {
   console.log(`📅 Procesando conexión Calendar para usuario ${userId}`);
   
   try {
-    // 🚀 AQUÍ IRÍA LA LÓGICA DE CALENDAR
-    // Por ahora, simulamos éxito con await
-    await Promise.resolve(); // 🔧 Agregar este await
-    console.log(`📅 Calendar ${googleUser.email} conectado para usuario ${userId}`);
+    // ✅ GUARDAR LA CUENTA IGUAL QUE GMAIL
+    await this.authService.manejarCallbackGoogle(googleUser, userId);
     
-    //  Implementar lógica de conexión de Calendar
-    // await this.calendarService.conectarCalendar(googleUser, userId);
-
+    // ✅ INVALIDAR CACHE DEL ORCHESTRATOR
+    await this.invalidateOrchestratorCache(userId);
+    
+    // ✅ OPCIONAL: Sincronizar eventos iniciales
+    // (como Gmail sincroniza emails)
+    
     const redirectUrl = new URL(
       this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000',
     );
     redirectUrl.pathname = '/dashboard/calendar';
-    redirectUrl.searchParams.set('auth', 'success');
-    redirectUrl.searchParams.set(
-      'message',
-      `Google Calendar ${googleUser.email} conectado exitosamente`,
-    );
-    redirectUrl.searchParams.set('calendar', googleUser.email);
+    redirectUrl.searchParams.set('success', 'true');
+    redirectUrl.searchParams.set('refresh', 'profile'); // ← Forzar refresh
+    redirectUrl.searchParams.set('message', `Google Calendar ${googleUser.email} conectado exitosamente`);
 
     console.log(`✅ Calendar conectado, redirigiendo: ${redirectUrl.toString()}`);
     res.redirect(redirectUrl.toString());

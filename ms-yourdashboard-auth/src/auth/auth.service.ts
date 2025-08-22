@@ -590,42 +590,60 @@ try {
   /**
    * 🎯 Obtener scopes según el servicio
    */
+  // private getScopesForService(service: 'gmail' | 'calendar'): string[] {
+  //   const commonScopes = [
+  //     'email',
+  //     'profile'
+  //   ];
+
+  //   if (service === 'gmail') {
+  //     return [
+  //       ...commonScopes,
+  //       'https://www.googleapis.com/auth/gmail.readonly',
+  //       'https://www.googleapis.com/auth/gmail.modify',
+  //       'https://mail.google.com/',
+  //       'https://www.googleapis.com/auth/calendar',
+  //       'https://www.googleapis.com/auth/calendar.events',
+  //       'https://www.googleapis.com/auth/calendar.events.readonly'
+  //     ];
+  //   }
+
+  //   if (service === 'calendar') {
+  //     return [
+  //       ...commonScopes,
+  //       'https://www.googleapis.com/auth/calendar',
+  //       'https://www.googleapis.com/auth/calendar.events',
+  //       'https://www.googleapis.com/auth/calendar.events.readonly'
+  //     ];
+  //   }
+
+  //   // Default: Gmail con Calendar
+  //   return [
+  //     ...commonScopes,
+  //     'https://www.googleapis.com/auth/gmail.readonly',
+  //     'https://www.googleapis.com/auth/gmail.modify',
+  //     'https://mail.google.com/',
+  //     'https://www.googleapis.com/auth/calendar',
+  //     'https://www.googleapis.com/auth/calendar.events',
+  //     'https://www.googleapis.com/auth/calendar.events.readonly'
+  //   ];
+  // }
+
   private getScopesForService(service: 'gmail' | 'calendar'): string[] {
-    const commonScopes = [
-      'email',
-      'profile'
-    ];
+  // ✅ TODOS LOS SERVICIOS = TODOS LOS SCOPES
+  console.log(`🔍 Obteniendo scopes para servicio: ${service}`);
+  const allScopes = [
+    'email',
+    'profile',
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/gmail.modify',
+    'https://mail.google.com/',
+    'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/calendar.events.readonly'
+  ];
 
-    if (service === 'gmail') {
-      return [
-        ...commonScopes,
-        'https://www.googleapis.com/auth/gmail.readonly',
-        'https://www.googleapis.com/auth/gmail.modify',
-        'https://mail.google.com/',
-        'https://www.googleapis.com/auth/calendar',
-        'https://www.googleapis.com/auth/calendar.events',
-        'https://www.googleapis.com/auth/calendar.events.readonly'
-      ];
-    }
-
-    if (service === 'calendar') {
-      return [
-        ...commonScopes,
-        'https://www.googleapis.com/auth/calendar',
-        'https://www.googleapis.com/auth/calendar.events',
-        'https://www.googleapis.com/auth/calendar.events.readonly'
-      ];
-    }
-
-    // Default: Gmail con Calendar
-    return [
-      ...commonScopes,
-      'https://www.googleapis.com/auth/gmail.readonly',
-      'https://www.googleapis.com/auth/gmail.modify',
-      'https://mail.google.com/',
-      'https://www.googleapis.com/auth/calendar',
-      'https://www.googleapis.com/auth/calendar.events',
-      'https://www.googleapis.com/auth/calendar.events.readonly'
-    ];
-  }
+  // 🎯 SIEMPRE RETORNAR TODOS LOS SCOPES
+  return allScopes;
+}
 }

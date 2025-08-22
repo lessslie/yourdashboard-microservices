@@ -68,6 +68,11 @@ export const getMyProfile = async () => {
       "📊 Cuentas Gmail en perfil:",
       response.data?.cuentas_gmail?.length || 0
     );
+    // En tu frontend, después de la línea que dice "📊 Cuentas Gmail en perfil: 0"
+console.log('🔍 PERFIL COMPLETO:', JSON.stringify(response.data, null, 2));
+console.log('🔍 ESTRUCTURA RESPONSE:', Object.keys(response.data));
+console.log('🔍 CUENTAS_GMAIL:', response.data.cuentas_gmail);
+console.log('🔍 TIPO CUENTAS:', typeof response.data.cuentas_gmail);
 
     return response.data;
   } catch (error) {
@@ -227,21 +232,21 @@ export const logOut = async () => {
   }
 };
 
-export const connectGoogleCalendar = async () => {
-  try {
-    const token = useAuthStore.getState().accessToken;
+// export const connectGoogleCalendar = async () => {
+//   try {
+//     const token = useAuthStore.getState().accessToken;
 
-    if (!token) {
-      throw new Error("No hay token de autenticación disponible");
-    }
+//     if (!token) {
+//       throw new Error("No hay token de autenticación disponible");
+//     }
 
-    const authUrl = `${MS_ORCHES_URL}/auth/google?token=${encodeURIComponent(
-      token
-    )}`;
+//     const authUrl = `${MS_ORCHES_URL}/auth/google?token=${encodeURIComponent(
+//       token
+//     )}`;
 
-    window.location.href = authUrl;
-  } catch (error) {
-    console.error("❌ Error iniciando OAuth:", error);
-    throw error;
-  }
-};
+//     window.location.href = authUrl;
+//   } catch (error) {
+//     console.error("❌ Error iniciando OAuth:", error);
+//     throw error;
+//   }
+// };

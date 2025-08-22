@@ -225,10 +225,11 @@ export class AuthOrchestratorController {
     }
     
     console.log(`🔵 ORCHESTRATOR-AUTH - Google OAuth solicitado`);
-    console.log(`🎯 ORCHESTRATOR - Service: ${service || 'gmail (default)'}`);
-  
+  console.log(`🎯 ORCHESTRATOR - Service: ${service || 'gmail (default)'}`);
+  console.log(`🔍 ORCHESTRATOR - Llamando getGoogleAuthUrlWithToken con: token=${!!token}, service=${service}`);
+
     
-    const authUrl = this.authService.getGoogleAuthUrlWithToken(token);
+    const authUrl = this.authService.getGoogleAuthUrlWithToken(token, service);
     
     console.log(`🔵 ORCHESTRATOR-AUTH - Redirigiendo a: ${authUrl}`);
     res.redirect(authUrl);
