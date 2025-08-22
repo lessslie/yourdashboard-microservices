@@ -53,10 +53,8 @@ export default function CalendarioPage() {
           setIsLoading(true);
           const profileData = await getMyProfile();
           setUserProfile(profileData);
-        } catch {
-          message.error(
-            "Tu sesión ha expirado. Por favor, inicia sesión de nuevo."
-          );
+        } catch (error) {
+          console.error("Error al cargar el perfil:", error);
           clearAuth();
           router.push("/auth");
         } finally {
@@ -70,69 +68,41 @@ export default function CalendarioPage() {
     loadProfile();
   }, [isHydrated, accessToken, userProfile, setUserProfile, clearAuth, router]);
 
- useEffect(() => {
-  const authStatus = searchParams.get("auth");
-  const gmailConnected = searchParams.get("gmail");
-  const successParam = searchParams.get("success"); // ✨ NUEVO
-  const refreshParam = searchParams.get("refresh"); // ✨ NUEVO
+  useEffect(() => {
+    const authStatus = searchParams.get("auth");
+    const gmailConnected = searchParams.get("gmail");
 
-  // ✨ DETECTAR SUCCESS PARAM (desde Calendar OAuth)
-  if (successParam === "true" && refreshParam === "profile") {
-    console.log('🔄 Calendar OAuth exitoso, refrescando perfil...');
-    
-    message.success({
-      content: "¡Google Calendar conectado exitosamente!",
-      duration: 5,
-    });
+    if (authStatus === "success" || gmailConnected) {
+      message.success({
+        content: `¡Cuenta ${
+          gmailConnected || "de Google"
+        } conectada exitosamente!`,
+        duration: 5,
+      });
 
-    const reloadProfile = async () => {
-      try {
-        console.log('🔄 Actualizando perfil después de Calendar OAuth...');
-        const updatedProfile = await getMyProfile();
-        setUserProfile(updatedProfile);
-        console.log('✅ Perfil actualizado:', updatedProfile.cuentas_gmail?.length);
-      } catch (error) {
-        console.error("Error recargando perfil:", error);
-      }
-    };
+      const reloadProfile = async () => {
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          const updatedProfile = await getMyProfile();
+          setUserProfile(updatedProfile);
+        } catch (error) {
+          console.error("Error recargando perfil:", error);
+        }
+      };
 
-    reloadProfile();
-    router.replace("/dashboard/calendar");
-    return; // ✨ IMPORTANTE: return para no ejecutar el resto
-  }
+      reloadProfile();
+      router.replace("/dashboard/calendar");
+    }
 
-  // LÓGICA EXISTENTE PARA GMAIL
-  if (authStatus === "success" || gmailConnected) {
-    message.success({
-      content: `¡Cuenta ${
-        gmailConnected || "de Google"
-      } conectada exitosamente!`,
-      duration: 5,
-    });
-
-    const reloadProfile = async () => {
-      try {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        const updatedProfile = await getMyProfile();
-        setUserProfile(updatedProfile);
-      } catch (error) {
-        console.error("Error recargando perfil:", error);
-      }
-    };
-
-    reloadProfile();
-    router.replace("/dashboard/calendar");
-  }
-
-  if (authStatus === "error") {
-    const authMessage = searchParams.get("message");
-    const decodedMessage = decodeURIComponent(
-      authMessage || "Error desconocido"
-    );
-    message.error(`Error de autenticación: ${decodedMessage}`);
-    router.replace("/dashboard/calendar");
-  }
-}, [searchParams, setUserProfile, router]);
+    if (authStatus === "error") {
+      const authMessage = searchParams.get("message");
+      const decodedMessage = decodeURIComponent(
+        authMessage || "Error desconocido"
+      );
+      message.error(`Error de autenticación: ${decodedMessage}`);
+      router.replace("/dashboard/calendar");
+    }
+  }, [searchParams, setUserProfile, router]);
 
   useEffect(() => {
     if (userProfile && hasGmailAccounts() && !selectedAccountId) {

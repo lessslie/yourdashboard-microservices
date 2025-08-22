@@ -45,6 +45,7 @@ interface AuthState {
   setHasHydrated: (state: boolean) => void;
 
   getGmailAccounts: () => UserProfile["cuentas_gmail"];
+  setGmailAccounts: (cuentas: UserProfile["cuentas_gmail"]) => void;
   getActiveGmailAccount: () => UserProfile["cuentas_gmail"][0] | undefined;
   hasGmailAccounts: () => boolean;
 }
@@ -67,6 +68,17 @@ export const useAuthStore = create<AuthState>()(
       getGmailAccounts: () => {
         const state = get();
         return state.userProfile?.cuentas_gmail || [];
+      },
+      setGmailAccounts: (cuentas) => {
+        const state = get();
+        if (!state.userProfile) return;
+        set({
+          userProfile: {
+            usuario: state.userProfile.usuario,
+            cuentas_gmail: cuentas,
+            estadisticas: state.userProfile.estadisticas,
+          },
+        });
       },
 
       getActiveGmailAccount: () => {
