@@ -62,12 +62,6 @@ export const useUserData = () => {
 
 export const useCuentasGmail = () => {
   const { getGmailAccounts } = useAuthStore();
-  console.log("Cuentas de Gmail:", getGmailAccounts());
-  // ✨ AGREGAR ESTE DEBUG
-  const rawAccounts = getGmailAccounts();
-  console.log("🔍 RAW accounts desde store:", rawAccounts);
-  console.log("🔍 Cantidad raw accounts:", rawAccounts.length);
-
   const cuentasGmail: ICuentaGmail[] = getGmailAccounts().map((cuenta) => ({
     id: cuenta.id.toString(),
     emailGmail: cuenta.email_gmail,

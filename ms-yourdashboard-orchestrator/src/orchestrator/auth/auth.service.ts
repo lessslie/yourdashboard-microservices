@@ -268,11 +268,12 @@ async getProfile(authHeader: string): Promise<ProfileResponseDto> {
   /**
    * 🔐 Obtener URL de Google OAuth con token
    */
-  getGoogleAuthUrlWithToken(token: string): string {
-    const authUrl = `${this.msAuthUrl}/auth/google?token=${encodeURIComponent(token)}`;
-    console.log(`🔵 ORCHESTRATOR-AUTH - URL de Google OAuth con token`);
-    return authUrl;
-  }
+ getGoogleAuthUrlWithToken(token: string, service?: string): string {
+  const serviceParam = service ? `&service=${service}` : '';
+  const authUrl = `${this.msAuthUrl}/auth/google?token=${encodeURIComponent(token)}${serviceParam}`;
+  console.log(`🔵 ORCHESTRATOR-AUTH - URL: ${authUrl}`); 
+  return authUrl;
+}
 
   /**
    * 🔐 Obtener URL de Google OAuth (sin token)

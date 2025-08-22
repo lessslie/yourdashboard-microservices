@@ -61,7 +61,12 @@ export const connectGoogleCalendar = async () => {
     // 🎯 Construir URL del orquestador con token
     const authUrl = `${MS_ORCHES_URL}/auth/google?token=${encodeURIComponent(
       token
-    )}`;
+    )}&service=calendar`;
+
+    // 🎯 LOG TEMPORAL PARA DEBUG:
+    console.log(`🔗 URL GENERADA: ${authUrl}`);
+    console.log(`🔍 CONTIENE service=calendar: ${authUrl.includes('service=calendar')}`);
+
 
     console.log(`🔗 Redirigiendo a: ${authUrl}`);
     console.log(`📍 Después del OAuth, serás redirigido a: /auth/callback`);

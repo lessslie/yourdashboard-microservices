@@ -217,13 +217,16 @@ export class AuthOrchestratorController {
   })
   redirectToGoogleAuth(
     @Query('token') token: string,
-    @Res() res: Response
+    @Res() res: Response,
+    @Query('service') service?: string,
   ): void {
     if (!token) {
       throw new BadRequestException('Token JWT requerido como query parameter');
     }
     
     console.log(`🔵 ORCHESTRATOR-AUTH - Google OAuth solicitado`);
+    console.log(`🎯 ORCHESTRATOR - Service: ${service || 'gmail (default)'}`);
+  
     
     const authUrl = this.authService.getGoogleAuthUrlWithToken(token);
     

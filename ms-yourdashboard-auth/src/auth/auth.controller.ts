@@ -306,32 +306,38 @@ export class AuthController {
     type: ErrorResponseDto,
   })
   async googleAuth(
-    @Req() req: Request,
-    @Res() res: Response,
-    @Query('token') tokenQuery?: string,
-    @Query('service') service?: string
-  ): Promise<void> {
-    try {
-      console.log('🔵 OAuth Google iniciado');
-      console.log('🎯 Servicio solicitado:', service || 'gmail (default)');
+  @Req() req: Request,
+  @Res() res: Response,
+  @Query('token') tokenQuery?: string,
+  @Query('service') service?: string
+): Promise<void> {
+  try {
+    console.log('🔵 OAuth Google iniciado');
+    
+    // 🎯 LOG TEMPORAL PARA DEBUG:
+    console.log('🔍 QUERY PARAMS RECIBIDOS:', req.query);
+    console.log('🔍 SERVICE PARAMETER:', service);
+    console.log('🔍 SERVICE TYPE:', typeof service);
+    
+    console.log('🎯 Servicio solicitado:', service || 'gmail (default)');
 
-      // 1️⃣ EXTRAER Y VALIDAR TOKEN
-      const token = this.extractTokenFromRequest(req, tokenQuery);
+    // 1️⃣ EXTRAER Y VALIDAR TOKEN
+    const token = this.extractTokenFromRequest(req, tokenQuery);
 
-      // 2️⃣ VALIDAR JWT Y OBTENER DATOS DEL USUARIO
-      const userPayload = await this.validateJwtAndGetUser(token);
+    // 2️⃣ VALIDAR JWT Y OBTENER DATOS DEL USUARIO
+    const userPayload = await this.validateJwtAndGetUser(token);
 
-      // 3️⃣ VALIDAR SERVICE PARAMETER
-      const targetService = this.validateService(service);
+    // 3️⃣ VALIDAR SERVICE PARAMETER
+    const targetService = this.validateService(service);
 
-      // 4️⃣ GENERAR Y REDIRIGIR A URL OAUTH CON SERVICE
-      this.redirectToGoogleOAuth(res, userPayload.sub, targetService);
+    // 4️⃣ GENERAR Y REDIRIGIR A URL OAUTH CON SERVICE
+    this.redirectToGoogleOAuth(res, userPayload.sub, targetService);
 
-    } catch (error) {
-      console.error('❌ Error en OAuth Google:', error);
-      this.handleOAuthError(res, error);
-    }
+  } catch (error) {
+    console.error('❌ Error en OAuth Google:', error);
+    this.handleOAuthError(res, error);
   }
+}
 
   /**
    * 🔧 Extraer token de request (header o query)
@@ -859,9 +865,9 @@ private async handleGmailCallback(
   const redirectUrl = new URL(
     this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000',
   );
-  redirectUrl.pathname = '/dashboard/emails';
+  redirectUrl.pathname = '/dashboard/email';
   redirectUrl.searchParams.set('success', 'true');
-  redirectUrl.searchParams.set('source', 'gmail'); // ← AGREGAR
+  redirectUrl.searchParams.set('refresh', 'profile'); // ← AGREGAR
   redirectUrl.searchParams.set('message', `Gmail ${googleUser.email} conectado exitosamente`);
 
   console.log(`✅ Gmail conectado, redirigiendo: ${redirectUrl.toString()}`);
