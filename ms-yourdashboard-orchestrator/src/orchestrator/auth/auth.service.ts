@@ -102,41 +102,121 @@ export class AuthOrchestratorService {
     }
   }
 
-  /**
-   * 👤 Obtener perfil del usuario
-   */
-  async getProfile(authHeader: string): Promise<ProfileResponseDto> {
-    try {
-      this.logger.log(`👤 Obteniendo perfil de usuario`);
+/**
+ * 👤 Obtener perfil del usuario CON COUNTS REALES
+ */
+async getProfile(authHeader: string): Promise<ProfileResponseDto> {
+  try {
+    this.logger.log(`👤 Obteniendo perfil de usuario`);
 
-      const response: AxiosResponse<ProfileResponseDto> = await axios.get(
-        `${this.msAuthUrl}/auth/me`,
-        {
-          headers: {
-            Authorization: authHeader,
-          },
+    // 1. Obtener perfil básico desde MS-Auth
+    const response: AxiosResponse<ProfileResponseDto> = await axios.get(
+      `${this.msAuthUrl}/auth/me`,
+      {
+        headers: {
+          Authorization: authHeader,
         },
-      );
+      },
+    );
 
-      this.logger.log(`✅ Perfil obtenido exitosamente`);
-      return response.data;
-    } catch (error) {
-      const axiosError = error as AxiosError;
-      this.logger.error(`❌ Error obteniendo perfil:`, axiosError.message);
+    // 2. 🎯 ENRIQUECER CON COUNTS REALES (igual que getCuentasGmail)
+    const cuentasConStats = await Promise.all(
+      response.data.cuentas_gmail.map(async (cuenta: any) => {
+        try {
+          // Intentar obtener del cache primero
+          const cacheKey = `gmail_count:${cuenta.id}`;
+          let emailCount = await this.cacheService.get<number>(cacheKey);
 
-      if (axiosError.response?.status === 401) {
-        throw new HttpException(
-          'Token inválido o expirado',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
+          if (emailCount === null) {
+            // No hay cache, obtener stats reales
+            this.logger.log(
+              `📊 Obteniendo count real para cuenta ${cuenta.id} (${cuenta.email_gmail})`,
+            );
 
+            // Obtener token para esta cuenta específica
+            const tokenResponse: AxiosResponse<{
+              success: boolean;
+              accessToken: string;
+              user: {
+                id: string;
+                email: string;
+                name: string;
+                cuentaGmailId: string;
+              };
+              renewed: boolean;
+            }> = await axios.get(
+              `${this.msAuthUrl}/tokens/gmail/${cuenta.id}`,
+            );
+
+            if (!tokenResponse.data.success) {
+              throw new Error('No se pudo obtener token');
+            }
+
+            // Obtener stats desde MS-Email
+            const statsResponse: AxiosResponse<{
+              totalEmails: number;
+              unreadEmails: number;
+              readEmails: number;
+            }> = await axios.get(`${this.msEmailUrl}/emails/stats`, {
+              params: { cuentaGmailId: cuenta.id },
+              headers: {
+                Authorization: `Bearer ${tokenResponse.data.accessToken}`,
+              },
+            });
+
+            emailCount = statsResponse.data.totalEmails;
+
+            this.logger.log(
+              `✅ Count real obtenido: ${emailCount} emails para ${cuenta.email_gmail}`,
+            );
+
+            // Guardar en cache por 10 minutos
+            await this.cacheService.set(cacheKey, emailCount, 600);
+          } else {
+            this.logger.log(
+              `⚡ Count desde cache: ${emailCount} emails para ${cuenta.email_gmail}`,
+            );
+          }
+
+          return {
+            ...cuenta,
+            emails_count: emailCount,
+          };
+        } catch (error) {
+          this.logger.warn(
+            `⚠️ No se pudo obtener count para cuenta ${cuenta.id}: ${error}`,
+          );
+          return cuenta; // Mantener el count original (0)
+        }
+      }),
+    );
+
+    // 3. Construir respuesta con cuentas enriquecidas
+    const profileConCounts: ProfileResponseDto = {
+      ...response.data,
+      cuentas_gmail: cuentasConStats,
+    };
+
+    this.logger.log(`✅ Perfil obtenido con counts reales`);
+    return profileConCounts;
+
+  } catch (error) {
+    const axiosError = error as AxiosError;
+    this.logger.error(`❌ Error obteniendo perfil:`, axiosError.message);
+
+    if (axiosError.response?.status === 401) {
       throw new HttpException(
-        'Error al obtener perfil',
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        'Token inválido o expirado',
+        HttpStatus.UNAUTHORIZED,
       );
     }
+
+    throw new HttpException(
+      'Error al obtener perfil',
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
   }
+}
 
   /**
    * 🚪 Cerrar sesión

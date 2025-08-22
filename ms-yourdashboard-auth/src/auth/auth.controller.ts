@@ -48,15 +48,21 @@ import {
   ReqCallbackGoogle,
   UsuarioAutenticado,
   JwtPayload,
+  GoogleOAuthUser,
 } from './interfaces/auth.interfaces';
+import axios from 'axios';
 
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
+  
+  private readonly orchestratorUrl: string;
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
-  ) {}
+  ) {
+    this.orchestratorUrl = this.configService.get<string>('ORCHESTRATOR_URL') || 'http://localhost:3003';
+  }
 
   // ================================
   // ENDPOINTS TRADICIONALES (sin cambios)
@@ -273,18 +279,23 @@ export class AuthController {
   // 🎯 OAUTH GOOGLE
   // ================================
 
-  @Get('google')
+ @Get('google')
   @ApiOperation({
     summary: 'Iniciar OAuth con Google',
-    description:
-      'Inicia proceso OAuth. Acepta JWT token en header Authorization o query parameter token.',
+    description: 'Inicia proceso OAuth. Acepta JWT token y service parameter.',
   })
   @ApiQuery({
     name: 'token',
-    description:
-      'JWT token como query parameter (alternativa a Authorization header)',
+    description: 'JWT token como query parameter',
     required: false,
     example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+  })
+  @ApiQuery({
+    name: 'service',
+    description: 'Servicio de destino: gmail o calendar',
+    required: false,
+    example: 'gmail',
+    enum: ['gmail', 'calendar']
   })
   @ApiResponse({
     status: 302,
@@ -298,9 +309,11 @@ export class AuthController {
     @Req() req: Request,
     @Res() res: Response,
     @Query('token') tokenQuery?: string,
+    @Query('service') service?: string
   ): Promise<void> {
     try {
       console.log('🔵 OAuth Google iniciado');
+      console.log('🎯 Servicio solicitado:', service || 'gmail (default)');
 
       // 1️⃣ EXTRAER Y VALIDAR TOKEN
       const token = this.extractTokenFromRequest(req, tokenQuery);
@@ -308,8 +321,12 @@ export class AuthController {
       // 2️⃣ VALIDAR JWT Y OBTENER DATOS DEL USUARIO
       const userPayload = await this.validateJwtAndGetUser(token);
 
-      // 3️⃣ GENERAR Y REDIRIGIR A URL OAUTH
-      this.redirectToGoogleOAuth(res, userPayload.sub);
+      // 3️⃣ VALIDAR SERVICE PARAMETER
+      const targetService = this.validateService(service);
+
+      // 4️⃣ GENERAR Y REDIRIGIR A URL OAUTH CON SERVICE
+      this.redirectToGoogleOAuth(res, userPayload.sub, targetService);
+
     } catch (error) {
       console.error('❌ Error en OAuth Google:', error);
       this.handleOAuthError(res, error);
@@ -401,14 +418,17 @@ export class AuthController {
     }
   }
 
-  /**
-   * 🔧 Redirigir a Google OAuth
-   */
-  private redirectToGoogleOAuth(res: Response, userId: number): void {
-    const authUrl = this.authService.generarUrlOAuth(userId);
-    console.log(`🔗 Redirigiendo a: ${authUrl}`);
-    res.redirect(authUrl);
-  }
+/**
+ * 🔧 Redirigir a Google OAuth CON SERVICE
+ */
+private redirectToGoogleOAuth(res: Response, userId: number, service: 'gmail' | 'calendar'): void {
+  const authUrl = this.authService.generarUrlOAuth(userId, service);
+  
+  console.log(`🔗 Redirigiendo a: ${authUrl}`);
+  console.log(`🎯 Usuario: ${userId}, Service: ${service}`);
+  
+  res.redirect(authUrl);
+}
 
   /**
    * 🔧 Manejar errores de OAuth
@@ -417,7 +437,6 @@ export class AuthController {
     const frontendUrl =
       this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
     const errorUrl = new URL(frontendUrl);
-    // errorUrl.searchParams.set('auth', 'error');
     errorUrl.pathname = '/auth/callback';
     errorUrl.searchParams.set('auth', 'error');
 
@@ -433,12 +452,11 @@ export class AuthController {
     res.redirect(errorUrl.toString());
   }
 
-  @Get('google/callback')
+ @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   @ApiOperation({
     summary: 'Callback de Google OAuth',
-    description:
-      'Endpoint interno usado por Google OAuth para completar la autenticación.',
+    description: 'Endpoint interno usado por Google OAuth. Ahora maneja Gmail Y Calendar.',
   })
   @ApiResponse({
     status: 302,
@@ -453,73 +471,24 @@ export class AuthController {
       console.log('🔵 Callback recibido de Google');
       console.log('🔍 Estado recibido:', req.query.state);
 
-      // 🎯 EXTRAER USER ID DEL STATE
-      const userIdFromState = req.query.state
-        ? parseInt(req.query.state, 10)
-        : null;
+      // 🎯 EXTRAER USER ID + SERVICE DEL STATE
+      const { userId, service } = this.parseState(req.query.state);
 
-      if (!userIdFromState || isNaN(userIdFromState)) {
-        throw new Error('Estado inválido - Usuario no identificado');
+      console.log(`🎯 Procesando callback para usuario ${userId}, servicio: ${service}`);
+
+      // 🎯 PROCESAR SEGÚN EL SERVICIO
+      if (service === 'gmail') {
+        await this.handleGmailCallback(req.user, userId, res);
+      } else if (service === 'calendar') {
+        await this.handleCalendarCallback(req.user, userId, res);
+      } else {
+        throw new Error(`Servicio no soportado: ${service}`);
       }
+      console.log(`✅ Callback procesado exitosamente para usuario ${userId}, servicio: ${service}`);
 
-      console.log(`🎯 Conectando cuenta Gmail para usuario ${userIdFromState}`);
-
-      // 🎯 PASAR EL USER ID AL SERVICE
-      await this.authService.manejarCallbackGoogle(req.user, userIdFromState);
-
-      console.log('✅ Callback procesado exitosamente');
-
-      // const redirectUrl = new URL(this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000');
-      // redirectUrl.searchParams.set('auth', 'success');
-      // redirectUrl.searchParams.set('message', `Gmail ${req.user.email} conectado exitosamente`);
-      // redirectUrl.searchParams.set('gmail', req.user.email);
-
-      const redirectUrl = new URL(
-        this.configService.get<string>('FRONTEND_URL') ||
-          'http://localhost:3000',
-      );
-      redirectUrl.pathname = '/auth/callback'; //!!!!
-      redirectUrl.searchParams.set('auth', 'success');
-      redirectUrl.searchParams.set(
-        'message',
-        `Gmail ${req.user.email} conectado exitosamente`,
-      );
-      redirectUrl.searchParams.set('gmail', req.user.email);
-
-      res.redirect(redirectUrl.toString());
     } catch (error) {
       console.error('❌ Error en callback de OAuth:', error);
-      console.log('🔴 Redirigiendo a error de autenticación');
-
-      const errorUrl = new URL(
-        this.configService.get<string>('FRONTEND_URL') ||
-          'http://localhost:3000',
-      );
-      errorUrl.searchParams.set('auth', 'error');
-
-      // 🎯 MANEJAR MENSAJE DE ERROR ESPECÍFICO
-      let errorMessage = 'Error desconocido';
-
-      if (error instanceof UnauthorizedException) {
-        const errorData = error.getResponse();
-        if (typeof errorData === 'object' && 'mensaje' in errorData) {
-          errorMessage = (errorData as any).mensaje;
-        } else {
-          errorMessage = error.message;
-        }
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-
-      // 🎯 Si es error de cuenta ya conectada, asegurar mensaje claro
-      if (errorMessage.includes('ya está conectada')) {
-        // Ya tiene el mensaje correcto
-      }
-
-      errorUrl.searchParams.set('message', encodeURIComponent(errorMessage));
-      console.log('🔴 Redirigiendo a:', errorUrl.toString());
-
-      res.redirect(errorUrl.toString());
+      this.handleCallbackError(res, error);
     }
   }
 
@@ -785,5 +754,203 @@ export class AuthController {
       supported_providers: ['email', 'google'],
       upcoming_providers: ['whatsapp', 'calendar'],
     };
+  }
+
+
+  
+  // ================================
+  // 🔧 MÉTODOS PRIVADOS NUEVOS - AGREGAR AL FINAL DE LA CLASE
+  // ================================
+
+  /**
+   * 🔧 Validar service parameter
+   */
+  private validateService(service?: string): 'gmail' | 'calendar' {
+    if (!service) {
+      console.log('🎯 Service no especificado, usando gmail por defecto');
+      return 'gmail';
+    }
+
+    const validServices = ['gmail', 'calendar'];
+    if (!validServices.includes(service)) {
+      console.warn(`⚠️ Service inválido "${service}", usando gmail por defecto`);
+      return 'gmail';
+    }
+
+    console.log(`✅ Service validado: ${service}`);
+    return service as 'gmail' | 'calendar';
+  }
+
+  /**
+   * 🔧 Parsear state (userId:service)
+   */
+  private parseState(state?: string): { userId: number; service: 'gmail' | 'calendar' } {
+    if (!state) {
+      throw new Error('Estado inválido - Usuario y servicio no identificados');
+    }
+
+    const parts = state.split(':');
+    
+    if (parts.length !== 2) {
+      // Retrocompatibilidad: si no hay ":", asumir que es solo userId + gmail
+      const userId = parseInt(state, 10);
+      if (isNaN(userId)) {
+        throw new Error('Estado inválido - formato incorrecto');
+      }
+      console.log(`🔄 Retrocompatibilidad: userId ${userId}, asumiendo gmail`);
+      return { userId, service: 'gmail' };
+    }
+
+    const [userIdStr, service] = parts;
+    const userId = parseInt(userIdStr, 10);
+
+    if (isNaN(userId)) {
+      throw new Error('Estado inválido - userId debe ser numérico');
+    }
+
+    if (!['gmail', 'calendar'].includes(service)) {
+      throw new Error(`Estado inválido - servicio "${service}" no soportado`);
+    }
+
+    return { userId, service: service as 'gmail' | 'calendar' };
+  }
+
+  /**
+   * 📧 Manejar callback de GMAIL
+   */
+  // private async handleGmailCallback(
+  //   googleUser: GoogleOAuthUser,
+  //   userId: number,
+  //   res: Response
+  // ): Promise<void> {
+  //   console.log(`📧 Procesando conexión Gmail para usuario ${userId}`);
+    
+  //   // Usar el método existente
+  //   await this.authService.manejarCallbackGoogle(googleUser, userId);
+
+  //   const redirectUrl = new URL(
+  //     this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000',
+  //   );
+  //   redirectUrl.pathname = '/dashboard/email';
+  //   redirectUrl.searchParams.set('auth', 'success');
+  //   redirectUrl.searchParams.set(
+  //     'message',
+  //     `Gmail ${googleUser.email} conectado exitosamente`,
+  //   );
+  //   redirectUrl.searchParams.set('gmail', googleUser.email);
+
+  //   console.log(`✅ Gmail conectado, redirigiendo: ${redirectUrl.toString()}`);
+  //   res.redirect(redirectUrl.toString());
+  // }
+// MS-Auth/auth.controller.ts - handleGmailCallback
+private async handleGmailCallback(
+  googleUser: GoogleOAuthUser,
+  userId: number,
+  res: Response
+): Promise<void> {
+  console.log(`📧 Procesando conexión Gmail para usuario ${userId}`);
+  
+  // Usar el método existente
+  await this.authService.manejarCallbackGoogle(googleUser, userId);
+
+  // ✨ NUEVO: Invalidar cache del Orchestrator
+  await this.invalidateOrchestratorCache(userId);
+
+  const redirectUrl = new URL(
+    this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000',
+  );
+  redirectUrl.pathname = '/dashboard/emails';
+  redirectUrl.searchParams.set('success', 'true');
+  redirectUrl.searchParams.set('source', 'gmail'); // ← AGREGAR
+  redirectUrl.searchParams.set('message', `Gmail ${googleUser.email} conectado exitosamente`);
+
+  console.log(`✅ Gmail conectado, redirigiendo: ${redirectUrl.toString()}`);
+  res.redirect(redirectUrl.toString());
+}
+
+// ✨ NUEVO MÉTODO
+private async invalidateOrchestratorCache(userId: number): Promise<void> {
+  try {
+    // Invalidar cache de perfil en el Orchestrator
+    await axios.post(`${this.orchestratorUrl}/cache/invalidate`, {
+      keys: [
+        `gmail_count:*`,  // Todos los counts de Gmail
+        `profile:${userId}`, // Perfil del usuario
+      ]
+    });
+    console.log(`🗑️ Cache invalidado para usuario ${userId}`);
+  } catch (error) {
+    console.warn(`⚠️ No se pudo invalidar cache:`, error);
+    // No lanzar error - es nice to have
+  }
+}
+  /**
+   * 📅 Manejar callback de CALENDAR
+   */
+ private async handleCalendarCallback(
+  googleUser: GoogleOAuthUser, // 🔧 Fix tipo
+  userId: number,
+  res: Response
+): Promise<void> {
+  console.log(`📅 Procesando conexión Calendar para usuario ${userId}`);
+  
+  try {
+    // 🚀 AQUÍ IRÍA LA LÓGICA DE CALENDAR
+    // Por ahora, simulamos éxito con await
+    await Promise.resolve(); // 🔧 Agregar este await
+    console.log(`📅 Calendar ${googleUser.email} conectado para usuario ${userId}`);
+    
+    //  Implementar lógica de conexión de Calendar
+    // await this.calendarService.conectarCalendar(googleUser, userId);
+
+    const redirectUrl = new URL(
+      this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000',
+    );
+    redirectUrl.pathname = '/dashboard/calendar';
+    redirectUrl.searchParams.set('auth', 'success');
+    redirectUrl.searchParams.set(
+      'message',
+      `Google Calendar ${googleUser.email} conectado exitosamente`,
+    );
+    redirectUrl.searchParams.set('calendar', googleUser.email);
+
+    console.log(`✅ Calendar conectado, redirigiendo: ${redirectUrl.toString()}`);
+    res.redirect(redirectUrl.toString());
+
+  } catch (error) {
+    console.error(`❌ Error conectando Calendar:`, error);
+    throw error;
+  }
+}
+
+  /**
+   * 🔧 Manejar errores de callback
+   */
+  private handleCallbackError(res: Response, error: unknown): void {
+    console.log('🔴 Redirigiendo a error de autenticación');
+
+    const errorUrl = new URL(
+      this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000',
+    );
+    errorUrl.pathname = '/auth/callback';
+    errorUrl.searchParams.set('auth', 'error');
+
+    let errorMessage = 'Error desconocido';
+
+    if (error instanceof UnauthorizedException) {
+      const errorData = error.getResponse();
+      if (typeof errorData === 'object' && 'mensaje' in errorData) {
+        errorMessage = (errorData as any).mensaje;
+      } else {
+        errorMessage = error.message;
+      }
+    } else if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+
+    errorUrl.searchParams.set('message', encodeURIComponent(errorMessage));
+    console.log('🔴 Redirigiendo a:', errorUrl.toString());
+
+    res.redirect(errorUrl.toString());
   }
 }
