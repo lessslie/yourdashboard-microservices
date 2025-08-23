@@ -6,7 +6,7 @@ export const handleConnectService = async (token: string) => {
   try {
     const authUrl = `${MS_ORCHES_URL}/auth/google?token=${encodeURIComponent(
       token
-    )}`;
+    )}&service=gmail`;
     window.location.href = authUrl;
   } catch (error) {
     console.error("❌ Error iniciando OAuth:", error);

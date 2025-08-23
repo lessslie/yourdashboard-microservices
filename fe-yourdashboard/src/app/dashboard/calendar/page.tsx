@@ -54,9 +54,7 @@ export default function CalendarioPage() {
           const profileData = await getMyProfile();
           setUserProfile(profileData);
         } catch (error) {
-          message.error(
-            "Tu sesión ha expirado. Por favor, inicia sesión de nuevo."
-          );
+          console.error("Error al cargar el perfil:", error);
           clearAuth();
           router.push("/auth");
         } finally {
@@ -73,6 +71,32 @@ export default function CalendarioPage() {
   useEffect(() => {
     const authStatus = searchParams.get("auth");
     const gmailConnected = searchParams.get("gmail");
+      const successParam = searchParams.get("success");      // ✨ 
+      const refreshParam = searchParams.get("refresh");      // ✨ 
+
+  // ✨  CONDICIÓN:
+  if (successParam === "true" && refreshParam === "profile") {
+    console.log('🔄 Calendar OAuth exitoso, refrescando perfil...');
+    
+    message.success({
+      content: "¡Google Calendar conectado exitosamente!",
+      duration: 5,
+    });
+
+    const reloadProfile = async () => {
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const updatedProfile = await getMyProfile();
+        setUserProfile(updatedProfile);
+      } catch (error) {
+        console.error("Error recargando perfil:", error);
+      }
+    };
+
+    reloadProfile();
+    router.replace("/dashboard/calendar");
+    return; // ✨ IMPORTANTE: return para no ejecutar el resto
+  }
 
     if (authStatus === "success" || gmailConnected) {
       message.success({

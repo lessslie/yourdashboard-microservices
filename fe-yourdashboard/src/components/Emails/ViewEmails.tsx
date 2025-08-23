@@ -1,31 +1,19 @@
 "use client";
 import React from "react";
-import { Button, Layout, Skeleton } from "antd";
+import { Button, Layout } from "antd";
 import ListEmails from "./ListEmails";
 import { useUserData, useCuentasGmail, useAuth } from "../Auth/hooks/useAuth";
 import { useRouter } from "next/navigation";
-import { Content, Header } from "antd/es/layout/layout";
+import { Header } from "antd/es/layout/layout";
 import DetailsEmail from "./DetailsEmail";
 
 const { Footer } = Layout;
 
 const ViewEmails = ({ emailId }: { emailId?: string }) => {
-  console.log("emailId", emailId);
-
   const router = useRouter();
   const { token, remuveToken } = useAuth();
   const { cuentasGmail } = useCuentasGmail();
-  const { userData, loadingProfile } = useUserData();
-
-  if (loadingProfile) {
-    return (
-      <Content
-        style={{ padding: "0 48px", textAlign: "center", paddingTop: "50px" }}
-      >
-        <Skeleton active />
-      </Content>
-    );
-  }
+  const { userData } = useUserData();
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
