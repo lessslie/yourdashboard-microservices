@@ -14,6 +14,7 @@ import {
 import GoogleConnectButton from "@/components/Calendar/GoogleConnectButton";
 import EnhancedCalendarView from "@/components/Calendar/EnhancedCalendarView";
 import AccountManager from "@/components/Calendar/ccountManager";
+import { CalendarEvent } from "@/interfaces/interfacesCalendar";
 
 export default function CalendarioPage() {
   const router = useRouter();
@@ -166,7 +167,7 @@ export default function CalendarioPage() {
     }
   };
 
-  const handleEventClick = (event: any) => {
+  const handleEventClick = (event: CalendarEvent) => {
     console.log("📅 Evento seleccionado:", event);
   };
 

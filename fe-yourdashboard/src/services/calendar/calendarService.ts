@@ -1,5 +1,6 @@
 import axios from "axios";
 import { useAuthStore } from "@/store/authStore";
+import { CreateEventDto, UpdateEventDto } from "@/interfaces/interfacesCalendar";
 
 const MS_ORCHES_URL =
   process.env.NEXT_PUBLIC_MS_ORCHESTRATOR_URL || "http://localhost:3003";
@@ -203,7 +204,7 @@ export const getCalendarEventById = async (
 
 export const createCalendarEvent = async (
   cuentaGmailId: string,
-  eventData: any,
+  eventData: CreateEventDto, //en lugar de any
   isPrivate?: boolean
 ) => {
   console.log(`➕ Creando evento para cuenta ${cuentaGmailId}`);
@@ -226,7 +227,7 @@ export const createCalendarEvent = async (
 export const updateCalendarEvent = async (
   eventId: string,
   cuentaGmailId: string,
-  eventData: any
+  eventData: UpdateEventDto //en lugar de any
 ) => {
   console.log(`✏️ Actualizando evento ${eventId}`);
   try {
