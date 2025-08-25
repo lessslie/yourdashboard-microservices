@@ -275,46 +275,37 @@ async obtenerCuentaGmailPorId(usuarioId: number, cuentaId: number) {
   };
 }
 
-  // ================================
-  // 🔐 GENERAR URL OAUTH CON STATE
-  // ================================
 
-  generarUrlOAuth(userId: number): string {
+/**
+   * 🔧 GENERAR URL OAUTH CON STATE CODIFICADO (userId:service)
+   */
+  generarUrlOAuth(userId: number, service: 'gmail' | 'calendar' = 'gmail'): string {
     try {
-      console.log(`🔵 Generando URL OAuth para usuario ${userId}`);
+      console.log(`🔵 Generando URL OAuth para usuario ${userId}, servicio: ${service}`);
       
       const baseUrl = 'https://accounts.google.com/o/oauth2/v2/auth';
       const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
       const redirectUri = this.configService.get<string>('GOOGLE_REDIRECT_URI') || 'http://localhost:3001/auth/google/callback';
       
+      // 🎯 SCOPES SEGÚN EL SERVICIO
+      const scopes = this.getScopesForService(service);
+      
       const params = new URLSearchParams({
         client_id: clientId || '',
         redirect_uri: redirectUri,
         response_type: 'code',
-        scope: [
-          'email',
-          'profile', 
-          'https://www.googleapis.com/auth/gmail.readonly',
-          'https://www.googleapis.com/auth/calendar',
-          'https://www.googleapis.com/auth/gmail.modify',
-          'https://mail.google.com/',
-          'https://www.googleapis.com/auth/calendar.events',
-          'https://www.googleapis.com/auth/calendar.events.readonly',
-
-        ].join(' '),
+        scope: scopes.join(' '),
         access_type: 'offline',
         prompt: 'consent',
-        state: userId.toString() // 🎯 PASAR USER ID EN STATE
+        state: `${userId}:${service}` // 🎯 CODIFICAR USER ID + SERVICE
       });
 
       const authUrl = `${baseUrl}?${params.toString()}`;
-      console.log(`✅ URL OAuth generada para usuario ${userId}`);
+      console.log(`✅ URL OAuth generada para usuario ${userId}, servicio: ${service}`);
       
       return authUrl;
-
       
     } catch (error) {
-        
       console.log(error);
       this.logger.error(`❌ Error generando URL OAuth:`, error);
       throw new Error('Error generando URL de autenticación Google');
@@ -590,4 +581,69 @@ try {
       return null;
     }
   }
+
+  
+  // ================================
+  // 🔧 MÉTODO PRIVADO NUEVO
+  // ================================
+
+  /**
+   * 🎯 Obtener scopes según el servicio
+   */
+  // private getScopesForService(service: 'gmail' | 'calendar'): string[] {
+  //   const commonScopes = [
+  //     'email',
+  //     'profile'
+  //   ];
+
+  //   if (service === 'gmail') {
+  //     return [
+  //       ...commonScopes,
+  //       'https://www.googleapis.com/auth/gmail.readonly',
+  //       'https://www.googleapis.com/auth/gmail.modify',
+  //       'https://mail.google.com/',
+  //       'https://www.googleapis.com/auth/calendar',
+  //       'https://www.googleapis.com/auth/calendar.events',
+  //       'https://www.googleapis.com/auth/calendar.events.readonly'
+  //     ];
+  //   }
+
+  //   if (service === 'calendar') {
+  //     return [
+  //       ...commonScopes,
+  //       'https://www.googleapis.com/auth/calendar',
+  //       'https://www.googleapis.com/auth/calendar.events',
+  //       'https://www.googleapis.com/auth/calendar.events.readonly'
+  //     ];
+  //   }
+
+  //   // Default: Gmail con Calendar
+  //   return [
+  //     ...commonScopes,
+  //     'https://www.googleapis.com/auth/gmail.readonly',
+  //     'https://www.googleapis.com/auth/gmail.modify',
+  //     'https://mail.google.com/',
+  //     'https://www.googleapis.com/auth/calendar',
+  //     'https://www.googleapis.com/auth/calendar.events',
+  //     'https://www.googleapis.com/auth/calendar.events.readonly'
+  //   ];
+  // }
+
+  private getScopesForService(service: 'gmail' | 'calendar'): string[] {
+  // ✅ TODOS LOS SERVICIOS = TODOS LOS SCOPES
+  console.log(`🔍 Obteniendo scopes para servicio: ${service}`);
+  const allScopes = [
+    'email',
+    'profile',
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/gmail.modify',
+    'https://mail.google.com/',
+    'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/calendar.events.readonly'
+  ];
+
+  // 🎯 SIEMPRE RETORNAR TODOS LOS SCOPES
+  return allScopes;
+}
 }

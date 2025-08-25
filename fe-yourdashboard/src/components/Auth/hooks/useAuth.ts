@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
-import { getUserData } from "@/services/auth/auth";
+import { getGmailCuentas, getUserData } from "@/services/auth/auth";
 import { ICuentaGmail, IUser } from "@/interfaces/interfacesAuth";
 
 export const useAuth = () => {
@@ -43,6 +43,7 @@ export const useUserData = () => {
       const getUser = async () => {
         try {
           const userResponse = await getUserData(accessToken);
+          console.log("userResponse", userResponse);
 
           setUserProfile(userResponse);
         } catch (error) {
@@ -61,9 +62,8 @@ export const useUserData = () => {
 };
 
 export const useCuentasGmail = () => {
-  const { getGmailAccounts } = useAuthStore();
-  console.log("Cuentas de Gmail:", getGmailAccounts());
-
+  const { getGmailAccounts, setGmailAccounts, accessToken, setUserProfile } =
+    useAuthStore();
   const cuentasGmail: ICuentaGmail[] = getGmailAccounts().map((cuenta) => ({
     id: cuenta.id.toString(),
     emailGmail: cuenta.email_gmail,
@@ -74,6 +74,20 @@ export const useCuentasGmail = () => {
     isActive: cuenta.esta_activa ? "Activo" : "Inactivo",
     emailsCount: cuenta.emails_count,
   }));
+
+  useEffect(() => {
+    const token = accessToken;
+    if (token) {
+      const getCuentasGmail = async () => {
+        const gmailResponse = await getGmailCuentas(token);
+        const cuentas = gmailResponse.cuentas;
+
+        setGmailAccounts(cuentas);
+        setUserProfile(gmailResponse.user);
+      };
+      getCuentasGmail();
+    }
+  }, [accessToken, setGmailAccounts, setUserProfile]);
 
   return {
     cuentasGmail,

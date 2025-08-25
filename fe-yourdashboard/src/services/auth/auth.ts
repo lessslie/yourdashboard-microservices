@@ -227,21 +227,23 @@ export const logOut = async () => {
   }
 };
 
-export const connectGoogleCalendar = async () => {
-  try {
-    const token = useAuthStore.getState().accessToken;
+//FUNCION COMENTADA YA QUE ESTA DUPLICADA EN CALENDARSERVICE, HASTA QUE SE DECIDA SI SE QUITA O NO
+// Esta función está comentada porque ya existe una versión en calendarService.ts
+// export const connectGoogleCalendar = async () => {
+//   try {
+//     const token = useAuthStore.getState().accessToken;
 
-    if (!token) {
-      throw new Error("No hay token de autenticación disponible");
-    }
+//     if (!token) {
+//       throw new Error("No hay token de autenticación disponible");
+//     }
 
-    const authUrl = `${MS_ORCHES_URL}/auth/google?token=${encodeURIComponent(
-      token
-    )}`;
+//     const authUrl = `${MS_ORCHES_URL}/auth/google?token=${encodeURIComponent(
+//       token
+//     )}`;
 
-    window.location.href = authUrl;
-  } catch (error) {
-    console.error("❌ Error iniciando OAuth:", error);
-    throw error;
-  }
-};
+//     window.location.href = authUrl;
+//   } catch (error) {
+//     console.error("❌ Error iniciando OAuth:", error);
+//     throw error;
+//   }
+// };
