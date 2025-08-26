@@ -544,6 +544,62 @@ export class CalendarOrchestratorService {
       throw new Error(`Error compartiendo calendar: ${errorMessage}`);
     }
   }
+  // ================================
+  // 🚫 REVOCAR ACCESO AL CALENDAR - SIN CACHE
+  // ================================
+
+  async unshareCalendar(
+    authHeader: string,
+    cuentaGmailId: string,
+    userEmail: string,
+    calendarId: string = 'primary'
+  ): Promise<unknown> {
+    try {
+      this.logger.log(`🚫 ⚡ TIEMPO REAL - Revocando acceso al calendar ${calendarId} de cuenta Gmail ${cuentaGmailId} para ${userEmail}`);
+
+      // 🔑 Obtener token OAuth con JWT del usuario
+      const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
+
+      // 🚫 Llamar DIRECTAMENTE a MS-Calendar (SIN CACHE)
+      // El aclRuleId se forma como "user:email" para usuarios normales
+      const aclRuleId = `user:${userEmail}`;
+      
+      const response: AxiosResponse<CalendarApiResponse> = await axios.delete(
+        `${this.msCalendarUrl}/calendar/share/${encodeURIComponent(aclRuleId)}`, 
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          },
+          params: {
+            cuentaGmailId,
+            calendarId
+          },
+          timeout: 15000
+        }
+      );
+
+      this.logger.log(`✅ ⚡ Acceso al calendar revocado en TIEMPO REAL para ${userEmail}`);
+      
+      // Para DELETE, MS-Calendar podría devolver solo un mensaje de éxito
+      return {
+        success: true,
+        message: 'Acceso al calendar revocado exitosamente',
+        revoked_from: userEmail,
+        calendar_id: calendarId
+      };
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error revocando acceso al calendar:`, errorMessage);
+      
+      // Si es error 404, puede ser que el usuario ya no tenía acceso
+      if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+        throw new Error(`El usuario ${userEmail} no tiene acceso a este calendar`);
+      }
+      
+      throw new Error(`Error revocando acceso al calendar: ${errorMessage}`);
+    }
+  }
 
   // ================================
   // 🗑️ ELIMINAR EVENTO - SIN CACHE

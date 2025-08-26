@@ -41,6 +41,8 @@ import {
   UpdateEventDto,
   ShareCalendarDto,
   ShareCalendarResponseDto,
+  UnshareCalendarDto,
+  UnshareCalendarResponseDto
 } from './dto';
 
 @ApiTags('Calendar')
@@ -428,6 +430,75 @@ async getCalendarStats(
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
       this.logger.error(`❌ Error compartiendo calendar:`, errorMessage);
       throw new BadRequestException(`Error compartiendo calendar: ${errorMessage}`);
+    }
+  }
+  /**
+   * 🚫 POST /calendar/unshare - Revocar acceso al calendar
+   */
+  @Post('unshare')
+  @ApiOperation({ 
+    summary: 'Revocar acceso al calendar compartido',
+    description: 'Coordina MS-Auth + MS-Calendar para revocar los permisos de acceso de un usuario específico a un calendar compartido.'
+  })
+  @ApiBody({ 
+    type: UnshareCalendarDto,
+    description: 'Datos para revocar acceso al calendar'
+  })
+  @ApiOkResponse({ 
+    description: 'Acceso al calendar revocado exitosamente',
+    type: UnshareCalendarResponseDto
+  })
+  @ApiBadRequestResponse({ description: 'Datos inválidos para revocar acceso' })
+  @ApiUnauthorizedResponse({ description: 'Token de autorización inválido' })
+  @ApiNotFoundResponse({ description: 'Usuario no tiene acceso a este calendar' })
+  async unshareCalendar(
+    @Req() req: Request,
+    @Body() unshareCalendarDto: UnshareCalendarDto
+  ) {
+    this.logger.log(`🚫 Revocando acceso al calendar de cuenta Gmail ${unshareCalendarDto.cuentaGmailId} para ${unshareCalendarDto.userEmail}`);
+
+    // Obtener auth header del request
+    const authHeader = req.headers?.authorization;
+
+    if (!authHeader) {
+      throw new UnauthorizedException('Authorization header requerido');
+    }
+
+    // Validar datos básicos
+    if (!unshareCalendarDto.cuentaGmailId) {
+      throw new BadRequestException('cuentaGmailId es requerido');
+    }
+
+    if (!unshareCalendarDto.userEmail || !unshareCalendarDto.userEmail.includes('@')) {
+      throw new BadRequestException('userEmail debe ser un email válido');
+    }
+
+    try {
+      // Resultado del service
+      const result: unknown = await this.calendarService.unshareCalendar(
+        authHeader,
+        unshareCalendarDto.cuentaGmailId,
+        unshareCalendarDto.userEmail,
+        unshareCalendarDto.calendarId || 'primary'
+      );
+
+      return {
+        success: true,
+        source: 'orchestrator',
+        data: result,
+        message: `Permisos revocados para ${unshareCalendarDto.userEmail}`
+      };
+    } catch (error: unknown) {
+      // Manejo seguro de errores
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`Error revocando acceso al calendar:`, errorMessage);
+      
+      // Si el usuario no tenía acceso, devolver 404
+      if (errorMessage.includes('no tiene acceso')) {
+        throw new NotFoundException(errorMessage);
+      }
+      
+      throw new BadRequestException(`Error revocando acceso: ${errorMessage}`);
     }
   }
 

@@ -313,7 +313,66 @@ export class CalendarService {
       throw new Error(`Error al buscar eventos: ${error.message}`);
     }
   }
+/**
+   * 🚫 Revocar acceso al calendar con token (CON AUTO-REFRESH)
+   */
+  async unshareCalendarWithToken(
+    accessToken: string,
+    cuentaGmailId: string,
+    calendarId: string,
+    aclRuleId: string,
+    userEmail: string
+  ) {
+    try {
+      this.logger.log(`🚫 Revocando acceso al calendar ${calendarId} para ${userEmail} (regla: ${aclRuleId})`);
 
+      const cuentaGmailIdNum = parseInt(cuentaGmailId);
+      
+      if (isNaN(cuentaGmailIdNum)) {
+        throw new Error('cuentaGmailId debe ser un número válido');
+      }
+
+      // Obtener token válido (con auto-refresh)
+      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+
+      const oauth2Client = new google.auth.OAuth2();
+      oauth2Client.setCredentials({ access_token: validAccessToken });
+      const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+      // Eliminar la regla ACL
+      await calendar.acl.delete({
+        calendarId,
+        ruleId: aclRuleId
+      });
+
+      this.logger.log(`✅ Acceso revocado exitosamente para ${userEmail} en calendar ${calendarId}`);
+      
+      return {
+        success: true,
+        message: 'Acceso al calendar revocado exitosamente',
+        revoked_from: userEmail,
+        calendar_id: calendarId
+      };
+
+    } catch (error: any) {
+      this.logger.error(`Error revocando acceso al calendar:`, error);
+      
+      // Manejo específico de errores de Google Calendar API
+      if (error.code === 404) {
+        throw new Error(`El usuario ${userEmail} no tiene acceso a este calendar`);
+      }
+      
+      if (error.code === 403) {
+        throw new Error('No tienes permisos para gestionar el acceso a este calendar');
+      }
+      
+      if (error.code === 401) {
+        throw new Error('Token de autorización inválido o expirado');
+      }
+      
+      throw new Error(`Error revocando acceso al calendar: ${error.message || 'Error desconocido'}`);
+    }
+  }
   
   /**
    * 📋 Obtener evento específico por ID con token (CON AUTO-REFRESH)
