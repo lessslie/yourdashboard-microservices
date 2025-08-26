@@ -190,6 +190,9 @@ export class CalendarService {
   /**
    * 🔍 Buscar eventos con token - PATRÓN MS-EMAIL
    */
+ /**
+   * 🔍 Buscar eventos con token - CON BÚSQUEDA PARCIAL MEJORADA
+   */
  async searchEventsWithToken(
     accessToken: string,
     cuentaGmailId: string,
@@ -235,10 +238,11 @@ export class CalendarService {
         oauth2Client.setCredentials({ access_token: validAccessToken });
         const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
-        // 🔍 BUSCAR EVENTOS
-        const maxResults = Math.min(limit * page, 250);
+        // ✨ MEJORA: Obtener más eventos para filtrar localmente
+        const maxResults = Math.min(250, limit * page * 3); // Obtener 3x más para filtrar
 
-        const response = await calendar.events.list({
+        // 🔍 PRIMERA BÚSQUEDA: Con término original
+        let response = await calendar.events.list({
           calendarId: 'primary',
           timeMin,
           q: searchTerm.trim(),
@@ -247,9 +251,40 @@ export class CalendarService {
           orderBy: 'startTime'
         });
 
-        const allEvents = response.data.items || [];
+        let allEvents = response.data.items || [];
+
+        // ✨ SI NO ENCUENTRA NADA, BUSCAR SIN FILTRO Y FILTRAR LOCALMENTE
+        if (allEvents.length === 0) {
+          this.logger.log(`🔍 Sin resultados con Google API, buscando localmente...`);
+          
+          // Obtener eventos sin filtro de búsqueda
+          response = await calendar.events.list({
+            calendarId: 'primary',
+            timeMin,
+            maxResults: 250,
+            singleEvents: true,
+            orderBy: 'startTime'
+          });
+
+          const eventsToFilter = response.data.items || [];
+          const searchTermLower = searchTerm.toLowerCase().trim();
+
+          // 🎯 FILTRAR LOCALMENTE CON BÚSQUEDA PARCIAL
+          allEvents = eventsToFilter.filter(event => {
+            const summary = (event.summary || '').toLowerCase();
+            const description = (event.description || '').toLowerCase();
+            const location = (event.location || '').toLowerCase();
+            
+            // Búsqueda parcial: "duo" encuentra "duolingo"
+            return summary.includes(searchTermLower) || 
+                   description.includes(searchTermLower) ||
+                   location.includes(searchTermLower);
+          });
+
+          this.logger.log(`🎯 Filtrado local encontró: ${allEvents.length} eventos`);
+        }
         
-        // Paginación manual
+        // Paginación manual con los eventos filtrados
         const startIndex = (page - 1) * limit;
         const endIndex = startIndex + limit;
         const paginatedEvents = allEvents.slice(startIndex, endIndex);
@@ -273,7 +308,7 @@ export class CalendarService {
       } catch (apiError: any) {
         this.logger.warn(`⚠️ Calendar API falló para búsqueda, intentando BD como fallback:`, apiError.message);
         
-        // 🎯 FALLBACK: BD local
+        // 🎯 FALLBACK: BD local con búsqueda parcial
         const filters: EventSearchFilters = {
           search_text: searchTerm.trim(),
           start_date: new Date(timeMin)
