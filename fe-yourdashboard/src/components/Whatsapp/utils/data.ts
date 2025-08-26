@@ -9,27 +9,30 @@ export const accounts = [
 export const mockConversations: { [key: string]: ConversationListItem[] } = {
   '2': [
     {
-      id: 'chat1',
+      conversation_id: 'chat1',
       name: 'Carlos',
       phone: '+34 612 345 678',
       last_message: 'nos hablamos luego',
       last_message_date: '2025-08-19T09:15:00',
+      whatsapp_account_id: '2',
     },
     {
-      id: 'chat2',
+      conversation_id: 'chat2',
       name: 'Ana',
       phone: '+34 612 987 654',
       last_message: '¿Cómo estás?',
       last_message_date: '2025-08-19T11:00:00',
+      whatsapp_account_id: '2',
     },
   ],
   '3': [
     {
-      id: 'chat3',
+      conversation_id: 'chat3',
       name: 'Teresa',
       phone: '+34 611 123 456',
       last_message: 'Sí, Pedro, nos hablamos luego',
       last_message_date: '2025-08-18T08:40:00',
+      whatsapp_account_id: '3',
     },
   ],
 };

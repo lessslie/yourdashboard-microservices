@@ -16,6 +16,7 @@ export default function SearchBar({ onResults }: SearchBarProps) {
 
   const handleSearch = async (value: string) => {
     setSearch(value);
+    console.log("Buscando mensajes con:", value);
 
     if (value.trim() === "") {
       onResults([]);
@@ -24,6 +25,7 @@ export default function SearchBar({ onResults }: SearchBarProps) {
 
     try {
       const results = await searchMessages(value);
+      console.log("Resultados de la búsqueda:", results);
       onResults(results);
     } catch (error) {
       console.error("Error al buscar mensajes:", error);
