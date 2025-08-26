@@ -640,7 +640,8 @@ try {
     'https://mail.google.com/',
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/calendar.events',
-    'https://www.googleapis.com/auth/calendar.events.readonly'
+    'https://www.googleapis.com/auth/calendar.events.readonly',
+    'https://www.googleapis.com/auth/calendar.acls'
   ];
 
   // 🎯 SIEMPRE RETORNAR TODOS LOS SCOPES

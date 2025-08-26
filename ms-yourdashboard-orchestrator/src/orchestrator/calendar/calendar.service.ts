@@ -496,6 +496,56 @@ export class CalendarOrchestratorService {
   }
 
   // ================================
+  // 🤝 COMPARTIR CALENDAR - SIN CACHE
+  // ================================
+
+  async shareCalendar(
+    authHeader: string,
+    cuentaGmailId: string,
+    userEmail: string,
+    role: 'reader' | 'writer',
+    calendarId: string = 'primary'
+  ): Promise<unknown> {
+    try {
+      this.logger.log(`🤝 ⚡ TIEMPO REAL - Compartiendo calendar ${calendarId} de cuenta Gmail ${cuentaGmailId} con ${userEmail} como ${role}`);
+
+      // 🔑 Obtener token OAuth con JWT del usuario
+      const accessToken = await this.obtenerTokenParaCalendar(authHeader, cuentaGmailId);
+
+      // 🤝 Llamar DIRECTAMENTE a MS-Calendar (SIN CACHE)
+      const response: AxiosResponse<CalendarApiResponse> = await axios.post(`${this.msCalendarUrl}/calendar/share`, 
+        {
+          calendarId,
+          userEmail,
+          role
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          params: {
+            cuentaGmailId
+          },
+          timeout: 15000
+        }
+      );
+
+      if (response.data) {
+        this.logger.log(`✅ ⚡ Calendar compartido en TIEMPO REAL con ${userEmail} como ${role}`);
+        return response.data;
+      }
+
+      throw new Error('Respuesta vacía de MS-Calendar para compartir');
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      this.logger.error(`❌ Error compartiendo calendar:`, errorMessage);
+      throw new Error(`Error compartiendo calendar: ${errorMessage}`);
+    }
+  }
+
+  // ================================
   // 🗑️ ELIMINAR EVENTO - SIN CACHE
   // ================================
 
@@ -530,4 +580,5 @@ export class CalendarOrchestratorService {
       throw new Error(`Error eliminando evento: ${errorMessage}`);
     }
   }
+  
 }
