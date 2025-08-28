@@ -31,6 +31,8 @@ import { CreateEventDto } from './dto/create-event.dto';
 import { ShareCalendarDto } from './dto/share-calendar.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { ConfigService } from '@nestjs/config';
+import { CreateEventRequestBody, safeGetErrorCode, safeGetErrorMessage } from './interfaces/calendar-types';
+
 
 @ApiTags('Calendar')
 @Controller('calendar')
@@ -294,7 +296,7 @@ export class CalendarController {
   async createEvent(
     @Headers('authorization') authHeader: string,
     @Query('cuentaGmailId') cuentaGmailId: string,
-    @Body() eventBody: any
+    @Body() eventBody:CreateEventRequestBody
   ) {
     if (!cuentaGmailId) {
       throw new BadRequestException('cuentaGmailId is required');
@@ -474,20 +476,19 @@ export class CalendarController {
       this.logger.error(`Error revocando acceso al calendar:`, error);
       
       // Manejo específico de errores de Google API
-      if (error.code === 404 || error.message?.includes('Not Found') || error.message?.includes('not found')) {
-        throw new NotFoundException(`El usuario ${userEmail} no tiene acceso a este calendar o la regla ACL no existe`);
-      }
-      
-      if (error.code === 403) {
-        throw new UnauthorizedException('No tienes permisos para gestionar el acceso a este calendar');
-      }
-      
-      if (error.code === 401) {
-        throw new UnauthorizedException('Token de autorización inválido o expirado');
-      }
-      
-      throw new BadRequestException(`Error revocando acceso al calendar: ${error.message || 'Error desconocido'}`);
-    }
+      const errorMessage = safeGetErrorMessage(error);
+      const errorCode = safeGetErrorCode(error);
+  
+  if (errorCode === 404 || errorMessage.includes('Not Found')) {
+    throw new NotFoundException(`El usuario ${userEmail} no tiene acceso`);
+  }
+  
+  if (errorCode === 403) {
+    throw new UnauthorizedException('No tienes permisos');
+  }
+  
+  throw new BadRequestException(`Error: ${errorMessage}`);
+}
   }
 
   /**
@@ -816,7 +817,7 @@ export class CalendarController {
 
     } catch (error) {
       this.logger.error('❌ Error en eventos unificados:', error);
-      throw new BadRequestException(`Error obteniendo eventos unificados: ${error.message}`);
+      throw new BadRequestException(`Error obteniendo eventos unificados: ${error}`);
     }
   }
 
@@ -997,7 +998,7 @@ export class CalendarController {
 
     } catch (error) {
       this.logger.error('❌ Error en búsqueda global:', error);
-      throw new BadRequestException(`Error en búsqueda global: ${error.message}`);
+      throw new BadRequestException(`Error en búsqueda global: ${error}`);
     }
   }
 

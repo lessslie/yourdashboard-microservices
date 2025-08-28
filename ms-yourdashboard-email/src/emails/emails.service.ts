@@ -507,7 +507,7 @@ private extractUserIdFromJWT(authHeader: string): number | null {
     // Decodificar JWT (sin verificar - solo para extraer payload)
     const payload = this.decodeJWTPayload(token);
     
-    if (!payload || !payload.sub) {
+    if (!payload?.sub) {
       throw new Error('Token JWT inválido - sub requerido');
     }
 
@@ -1499,6 +1499,189 @@ private decodeJWTPayload(token: string): { sub: number; email: string; nombre: s
       readEmails: totalEmails - unreadEmails
     };
   }
+
+
+  //********************************************************** */
+/**
+ * 📧 RESPONDER EMAIL CON JWT
+ * Busca el email original y envía una respuesta
+ */
+async replyToEmailWithJWT(
+  jwtToken: string,
+  messageId: string,
+  replyData: {
+    body: string;
+    bodyHtml?: string;
+  }
+): Promise<{
+  success: boolean;
+  message: string;
+  sentMessageId: string;
+}> {
+  try {
+    this.logger.log(`📧 Iniciando respuesta al email ${messageId} con JWT token`);
+
+    // 1️⃣ EXTRAER USER ID DEL JWT TOKEN
+    const userId = this.extractUserIdFromJWT(jwtToken);
+    
+    if (!userId) {
+      throw new UnauthorizedException('Token JWT inválido - no se pudo extraer userId');
+    }
+
+    this.logger.log(`🔍 Usuario extraído del JWT: ${userId}`);
+
+    // 2️⃣ OBTENER TODAS LAS CUENTAS GMAIL DEL USUARIO
+    const cuentasGmail = await this.databaseService.obtenerCuentasGmailUsuario(userId);
+    
+    if (!cuentasGmail || cuentasGmail.length === 0) {
+      throw new NotFoundException(`Usuario ${userId} no tiene cuentas Gmail conectadas`);
+    }
+
+    this.logger.log(`📧 Usuario ${userId} tiene ${cuentasGmail.length} cuentas Gmail`);
+
+    // 3️⃣ BUSCAR EL EMAIL ORIGINAL EN TODAS LAS CUENTAS
+    let emailOriginal: EmailDetail | null = null;
+    let cuentaEncontrada: any = null;
+    let accessToken: string = '';
+
+    for (const cuenta of cuentasGmail) {
+      try {
+        this.logger.log(`🔍 Buscando email ${messageId} en cuenta ${cuenta.email_gmail} (ID: ${cuenta.id})`);
+        
+        // Obtener token para esta cuenta específica
+        accessToken = await this.getValidTokenForAccount(cuenta.id);
+        
+        // Intentar obtener el email desde Gmail API
+        emailOriginal = await this.getEmailFromGmailAPI(accessToken, cuenta.id.toString(), messageId);
+        cuentaEncontrada = cuenta;
+        
+        this.logger.log(`✅ Email ${messageId} encontrado en cuenta ${cuenta.email_gmail}`);
+        break;
+        
+      } catch (error) {
+        // Si no está en esta cuenta, continuar con la siguiente
+        this.logger.debug(`📭 Email ${messageId} no encontrado en cuenta ${cuenta.email_gmail}: ${error}`);
+        continue;
+      }
+    }
+
+    // 4️⃣ VERIFICAR QUE SE ENCONTRÓ EL EMAIL
+    if (!emailOriginal || !cuentaEncontrada) {
+      throw new NotFoundException(
+        `Email ${messageId} no encontrado en ninguna de las ${cuentasGmail.length} cuentas Gmail del usuario`
+      );
+    }
+
+    // 5️⃣ ENVIAR LA RESPUESTA
+    const sentMessageId = await this.sendReplyEmail(
+      accessToken,
+      emailOriginal,
+      replyData,
+      cuentaEncontrada.email_gmail
+    );
+
+    this.logger.log(`✅ Respuesta enviada exitosamente con ID: ${sentMessageId}`);
+
+    return {
+      success: true,
+      message: `Respuesta enviada exitosamente desde ${cuentaEncontrada.email_gmail}`,
+      sentMessageId
+    };
+
+  } catch (error) {
+    this.logger.error('❌ Error enviando respuesta:', error);
+    
+    if (error instanceof UnauthorizedException || error instanceof NotFoundException) {
+      throw error;
+    }
+    
+    throw new Error('Error interno enviando respuesta: ' + (error as Error).message);
+  }
+}
+
+/**
+ * 📤 ENVIAR RESPUESTA USANDO GMAIL API
+ */
+private async sendReplyEmail(
+  accessToken: string,
+  originalEmail: EmailDetail,
+  replyData: { body: string; bodyHtml?: string },
+  fromGmailAccount: string
+): Promise<string> {
+  try {
+    this.logger.log(`📤 Enviando respuesta desde ${fromGmailAccount}`);
+
+    // 1️⃣ CONFIGURAR GMAIL CLIENT
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: accessToken });
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+    // 2️⃣ CONSTRUIR HEADERS DE LA RESPUESTA
+    const replySubject = originalEmail.subject.startsWith('Re: ') 
+      ? originalEmail.subject 
+      : `Re: ${originalEmail.subject}`;
+
+    const replyHeaders = [
+      `To: ${originalEmail.fromEmail}`,
+      `Subject: ${replySubject}`,
+      `In-Reply-To: ${originalEmail.messageId}`,
+      `References: ${originalEmail.messageId}`,
+      `From: ${fromGmailAccount}`,
+      `Content-Type: text/plain; charset=UTF-8`
+    ];
+
+    // 3️⃣ CONSTRUIR EL CUERPO DEL EMAIL
+    let emailContent = replyHeaders.join('\r\n') + '\r\n\r\n';
+
+    // Si hay HTML, crear email multipart
+    if (replyData.bodyHtml) {
+      const boundary = '----=_Part_' + Date.now();
+      
+      // Cambiar content-type header para multipart
+      replyHeaders[replyHeaders.length - 1] = `Content-Type: multipart/alternative; boundary="${boundary}"`;
+      
+      emailContent = replyHeaders.join('\r\n') + '\r\n\r\n';
+      emailContent += `--${boundary}\r\n`;
+      emailContent += 'Content-Type: text/plain; charset=UTF-8\r\n\r\n';
+      emailContent += replyData.body + '\r\n\r\n';
+      emailContent += `--${boundary}\r\n`;
+      emailContent += 'Content-Type: text/html; charset=UTF-8\r\n\r\n';
+      emailContent += replyData.bodyHtml + '\r\n\r\n';
+      emailContent += `--${boundary}--`;
+    } else {
+      // Solo texto plano
+      emailContent += replyData.body;
+    }
+
+    // 4️⃣ CODIFICAR EN BASE64 PARA GMAIL API
+    const encodedMessage = Buffer.from(emailContent)
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+
+    // 5️⃣ ENVIAR A TRAVÉS DE GMAIL API
+    const response = await gmail.users.messages.send({
+      userId: 'me',
+      requestBody: {
+        raw: encodedMessage,
+        threadId: originalEmail.id // Para mantener la conversación
+      }
+    });
+
+    if (!response.data.id) {
+      throw new Error('Gmail API no retornó ID del mensaje enviado');
+    }
+
+    this.logger.log(`✅ Email enviado con ID: ${response.data.id}`);
+    return response.data.id;
+
+  } catch (error) {
+    this.logger.error('❌ Error enviando email via Gmail API:', error);
+    throw error;
+  }
+}
+
 
   /**
    * 📧 Obtener email específico desde Gmail API

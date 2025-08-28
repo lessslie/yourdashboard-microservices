@@ -7,9 +7,11 @@ import {
   EmailListResponse, 
   EmailStats, 
   EmailDetail,
+  ReplyEmailRequest,
+  ReplyEmailResponse
 } from './interfaces/emails.interfaces';
 
-// 🎯 INTERFACE PARA SYNC RESPONSE
+// Interfaces específicas para evitar any
 export interface SyncResponse {
   success: boolean;
   source: string;
@@ -25,9 +27,17 @@ export interface SyncResponse {
   };
 }
 
-// 🎯 INTERFACE PARA ERROR RESPONSE
 interface ErrorResponse {
   message: string;
+}
+
+// Interface para el payload del JWT
+interface JWTPayload {
+  sub?: number;
+  email?: string;
+  nombre?: string;
+  iat?: number;
+  exp?: number;
 }
 
 @Injectable()
@@ -38,10 +48,10 @@ export class EmailsOrchestratorService {
   
   // TTL (Time To Live) para diferentes tipos de cache
   private readonly CACHE_TTL = {
-    EMAILS: 300,     // 5 minutos - emails cambian poco
-    STATS: 600,      // 10 minutos - stats cambian menos
-    SEARCH: 180,     // 3 minutos - búsquedas pueden cambiar
-    DETAIL: 900      // 15 minutos - email específico casi no cambia
+    EMAILS: 300,     // 5 minutos
+    STATS: 600,      // 10 minutos
+    SEARCH: 180,     // 3 minutos
+    DETAIL: 900      // 15 minutos
   };
 
   constructor(
@@ -53,14 +63,12 @@ export class EmailsOrchestratorService {
   }
 
   /**
-   * 🔑 Obtener token válido del ms-auth usando cuentaGmailId (SIN CACHE - siempre fresco)
-   * 🎯 ARREGLADO: Usa el endpoint correcto para cuentaGmailId
+   * Obtener token válido del ms-auth usando cuentaGmailId
    */
   private async getValidTokenForGmailAccount(cuentaGmailId: string): Promise<string> {
     try {
-      this.logger.debug(`🔑 Solicitando token para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.debug(`Solicitando token para cuenta Gmail ${cuentaGmailId}`);
       
-      // 🎯 USAR EL ENDPOINT CORRECTO: /tokens/gmail/:cuentaGmailId
       const response: AxiosResponse<TokenResponse> = await axios.get(
         `${this.msAuthUrl}/tokens/gmail/${cuentaGmailId}`
       );
@@ -69,13 +77,12 @@ export class EmailsOrchestratorService {
         throw new Error('No se pudo obtener token válido');
       }
 
-      this.logger.debug(`✅ Token obtenido para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.debug(`Token obtenido para cuenta Gmail ${cuentaGmailId}`);
       return response.data.accessToken;
 
     } catch (error) {
-       console.log(error);
       const apiError = error as AxiosError<ErrorResponse>;
-      this.logger.error(`❌ Error obteniendo token:`, apiError.message);
+      this.logger.error(`Error obteniendo token:`, apiError.message);
       throw new HttpException(
         `Error obteniendo token para cuenta Gmail: ${apiError.message}`,
         HttpStatus.UNAUTHORIZED
@@ -84,16 +91,112 @@ export class EmailsOrchestratorService {
   }
 
   /**
-   * 🔄 Sincronizar emails manualmente
+   * RESPONDER A UN EMAIL - Coordina con MS-Email para enviar respuesta
+   */
+  async replyToEmail(
+    emailId: string,
+    replyData: ReplyEmailRequest,
+    authHeader: string
+  ): Promise<ReplyEmailResponse> {
+    try {
+      this.logger.log(`Coordinando respuesta al email ${emailId}`);
+
+      const emailServiceUrl = `${this.msEmailUrl}/emails/${emailId}/reply`;
+
+      const response = await fetch(emailServiceUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify(replyData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.text();
+        this.logger.error(`MS-Email error: ${response.status} - ${errorData}`);
+        
+        if (response.status === 404) {
+          throw new HttpException('Email no encontrado en ninguna cuenta del usuario', HttpStatus.NOT_FOUND);
+        } else if (response.status === 401) {
+          throw new HttpException('Token expirado o inválido', HttpStatus.UNAUTHORIZED);
+        } else {
+          throw new HttpException('Error enviando respuesta al email', HttpStatus.BAD_REQUEST);
+        }
+      }
+
+      const result = await response.json() as ReplyEmailResponse;
+
+      this.logger.log(`Respuesta enviada exitosamente via MS-Email`);
+
+      return result;
+
+    } catch (error) {
+      this.logger.error(`Error coordinando respuesta de email:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * INVALIDAR CACHES DE EMAILS - Limpia los caches relacionados con emails
+   */
+  async invalidateEmailCaches(userId: number): Promise<void> {
+    try {
+      const cacheKeys = [
+        `emails_inbox_${userId}`,
+        `emails_stats_${userId}`,
+        `emails_search_${userId}`,
+        'emails_all_accounts'
+      ];
+
+      await Promise.allSettled(
+        cacheKeys.map(key => this.cacheService.delete(key))
+      );
+
+      this.logger.debug(`Cache invalidado para usuario ${userId}`);
+      
+    } catch (error) {
+      this.logger.warn('Error invalidando cache:', error);
+    }
+  }
+
+  /**
+   * Extraer User ID del JWT token - MÉTODO PÚBLICO
+   */
+  extractUserIdFromJWT(authHeader: string): number | null {
+    try {
+      const token = authHeader.replace('Bearer ', '');
+      const parts = token.split('.');
+      
+      if (parts.length !== 3) return null;
+
+      const payloadBase64 = parts[1];
+      const payloadJson = Buffer.from(payloadBase64, 'base64').toString('utf-8');
+      
+      const payload = JSON.parse(payloadJson) as JWTPayload;
+      
+      if (typeof payload.sub !== 'number') {
+        this.logger.warn('JWT payload.sub no es válido');
+        return null;
+      }
+
+      return payload.sub;
+
+    } catch (error) {
+      this.logger.error('Error extrayendo userId del JWT:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Sincronizar emails manualmente
    */
   async syncEmails(cuentaGmailId: string, maxEmails: number = 100): Promise<SyncResponse> {
     try {
-      this.logger.log(`🔄 Iniciando sync manual para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`Iniciando sync manual para cuenta Gmail ${cuentaGmailId}`);
 
-      // 1️⃣ OBTENER TOKEN
       const accessToken = await this.getValidTokenForGmailAccount(cuentaGmailId);
       
-      // 2️⃣ LLAMAR MS-EMAIL
       const response: AxiosResponse<{ success: boolean; message: string; stats: any }> = await axios.post(
         `${this.msEmailUrl}/emails/sync`, 
         null, 
@@ -102,14 +205,13 @@ export class EmailsOrchestratorService {
           headers: {
             'Authorization': `Bearer ${accessToken}`
           },
-          timeout: 120000 // 2 minutos de timeout
+          timeout: 120000
         }
       );
 
-      // 3️⃣ LIMPIAR CACHE DESPUÉS DEL SYNC
       await this.clearGmailAccountCache(cuentaGmailId);
       
-      this.logger.log(`✅ Sync manual completado para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`Sync manual completado para cuenta Gmail ${cuentaGmailId}`);
       
       return {
         success: true,
@@ -118,9 +220,8 @@ export class EmailsOrchestratorService {
       };
 
     } catch (error) {
-       console.log(error);
       const apiError = error as AxiosError<ErrorResponse>;
-      this.logger.error(`❌ Error en sync manual:`, apiError.message);
+      this.logger.error(`Error en sync manual:`, apiError.message);
       throw new HttpException(
         `Error sincronizando emails: ${apiError.response?.data?.message || apiError.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
@@ -129,16 +230,14 @@ export class EmailsOrchestratorService {
   }
 
   /**
-   * 🔄 Sincronización incremental
+   * Sincronización incremental
    */
   async syncIncremental(cuentaGmailId: string, maxEmails: number = 30): Promise<SyncResponse> {
     try {
-      this.logger.log(`🔄 Iniciando sync incremental para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`Iniciando sync incremental para cuenta Gmail ${cuentaGmailId}`);
 
-      // 1️⃣ OBTENER TOKEN
       const accessToken = await this.getValidTokenForGmailAccount(cuentaGmailId);
       
-      // 2️⃣ LLAMAR MS-EMAIL
       const response: AxiosResponse<{ success: boolean; message: string; stats: any }> = await axios.post(
         `${this.msEmailUrl}/emails/sync/incremental`, 
         null, 
@@ -150,10 +249,9 @@ export class EmailsOrchestratorService {
         }
       );
 
-      // 3️⃣ LIMPIAR CACHE DESPUÉS DEL SYNC
       await this.clearGmailAccountCache(cuentaGmailId);
       
-      this.logger.log(`✅ Sync incremental completado para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`Sync incremental completado para cuenta Gmail ${cuentaGmailId}`);
       
       return {
         success: true,
@@ -162,45 +260,47 @@ export class EmailsOrchestratorService {
       };
 
     } catch (error) {
-       console.log(error);
       const apiError = error as AxiosError<ErrorResponse>;
-      this.logger.error(`❌ Error en sync incremental:`, apiError.message);
+      this.logger.error(`Error en sync incremental:`, apiError.message);
       throw new HttpException(
         `Error en sincronización incremental: ${apiError.response?.data?.message || apiError.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
-  private async clearGmailAccountCache(cuentaGmailId: string): Promise<void> {
-  try {
-    this.logger.log(`🧹 Limpiando cache para cuenta Gmail ${cuentaGmailId}`);
-    
-    await Promise.all([
-      this.cacheService.deletePattern(`inbox:${cuentaGmailId}`),
-      this.cacheService.deletePattern(`search:${cuentaGmailId}`),
-      this.cacheService.deletePattern(`stats:${cuentaGmailId}`),
-      this.cacheService.deletePattern(`detail:${cuentaGmailId}`)
-    ]);
-    
-    this.logger.log(`✅ Cache limpiado para cuenta Gmail ${cuentaGmailId}`);
-  } catch (error) {
-    this.logger.error(`❌ Error limpiando cache:`, error);
-  }
-}
 
   /**
-   * 📧 Obtener inbox del usuario - ⚡ CON CACHE
+   * Limpiar cache para cuenta específica
+   */
+  private async clearGmailAccountCache(cuentaGmailId: string): Promise<void> {
+    try {
+      this.logger.log(`Limpiando cache para cuenta Gmail ${cuentaGmailId}`);
+      
+      await Promise.allSettled([
+        this.cacheService.deletePattern(`inbox:${cuentaGmailId}`),
+        this.cacheService.deletePattern(`search:${cuentaGmailId}`),
+        this.cacheService.deletePattern(`stats:${cuentaGmailId}`),
+        this.cacheService.deletePattern(`detail:${cuentaGmailId}`)
+      ]);
+      
+      this.logger.log(`Cache limpiado para cuenta Gmail ${cuentaGmailId}`);
+    } catch (error) {
+      this.logger.error(`Error limpiando cache:`, error);
+    }
+  }
+
+  /**
+   * Obtener inbox del usuario - CON CACHE
    */
   async getInbox(cuentaGmailId: string, page: number = 1, limit: number = 10) {
     try {
-      this.logger.log(`📧 Obteniendo inbox para cuenta Gmail ${cuentaGmailId} - Página ${page}`);
+      this.logger.log(`Obteniendo inbox para cuenta Gmail ${cuentaGmailId} - Página ${page}`);
 
-      // 1️⃣ VERIFICAR CACHE PRIMERO
       const cacheKey = this.cacheService.generateKey('inbox', cuentaGmailId, { page, limit });
       const cachedResult = await this.cacheService.get<EmailListResponse>(cacheKey);
       
       if (cachedResult) {
-        this.logger.log(`⚡ CACHE HIT - Inbox desde cache para cuenta Gmail ${cuentaGmailId}`);
+        this.logger.log(`CACHE HIT - Inbox desde cache para cuenta Gmail ${cuentaGmailId}`);
         return {
           success: true,
           source: 'orchestrator-cache',
@@ -208,12 +308,10 @@ export class EmailsOrchestratorService {
         };
       }
 
-      // 2️⃣ SI NO HAY CACHE → LLAMAR API
-      this.logger.log(`📡 CACHE MISS - Obteniendo inbox desde API para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`CACHE MISS - Obteniendo inbox desde API para cuenta Gmail ${cuentaGmailId}`);
       
       const accessToken = await this.getValidTokenForGmailAccount(cuentaGmailId);
-      // y aca el orchetator llama al service real de emails: GET http://localhost:3002/emails/inbox?cuentaGmailId=4&page=1&limit=10
-      // Llamar al microservicio de emails para obtener la bandeja de entrada
+      
       const response: AxiosResponse<EmailListResponse> = await axios.get(`${this.msEmailUrl}/emails/inbox`, {
         params: { cuentaGmailId, page, limit },
         headers: {
@@ -221,10 +319,9 @@ export class EmailsOrchestratorService {
         }
       });
 
-      // 3️⃣ GUARDAR EN CACHE PARA PRÓXIMAS REQUESTS
       await this.cacheService.set(cacheKey, response.data, this.CACHE_TTL.EMAILS);
       
-      this.logger.log(`✅ Inbox obtenido y guardado en cache para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`Inbox obtenido y guardado en cache para cuenta Gmail ${cuentaGmailId}`);
       
       return {
         success: true,
@@ -233,9 +330,8 @@ export class EmailsOrchestratorService {
       };
 
     } catch (error) {
-      console.log(error);
       const apiError = error as AxiosError<ErrorResponse>;
-      this.logger.error(`❌ Error obteniendo inbox:`, apiError.message);
+      this.logger.error(`Error obteniendo inbox:`, apiError.message);
       throw new HttpException(
         `Error obteniendo inbox: ${apiError.response?.data?.message || apiError.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
@@ -244,7 +340,7 @@ export class EmailsOrchestratorService {
   }
 
   /**
-   * 🔍 Buscar emails del usuario - ⚡ CON CACHE
+   * Buscar emails del usuario - CON CACHE
    */
   async searchEmails(
     cuentaGmailId: string, 
@@ -253,9 +349,8 @@ export class EmailsOrchestratorService {
     limit: number = 10
   ) {
     try {
-      this.logger.log(`🔍 Buscando emails para cuenta Gmail ${cuentaGmailId}: "${searchTerm}"`);
+      this.logger.log(`Buscando emails para cuenta Gmail ${cuentaGmailId}: "${searchTerm}"`);
 
-      // 1️⃣ VERIFICAR CACHE PRIMERO
       const cacheKey = this.cacheService.generateKey('search', cuentaGmailId, { 
         searchTerm: searchTerm.toLowerCase().trim(),
         page, 
@@ -265,7 +360,7 @@ export class EmailsOrchestratorService {
       const cachedResult = await this.cacheService.get<EmailListResponse>(cacheKey);
       
       if (cachedResult) {
-        this.logger.log(`⚡ CACHE HIT - Búsqueda desde cache para cuenta Gmail ${cuentaGmailId}`);
+        this.logger.log(`CACHE HIT - Búsqueda desde cache para cuenta Gmail ${cuentaGmailId}`);
         return {
           success: true,
           source: 'orchestrator-cache',
@@ -274,8 +369,7 @@ export class EmailsOrchestratorService {
         };
       }
 
-      // 2️⃣ SI NO HAY CACHE → LLAMAR API
-      this.logger.log(`📡 CACHE MISS - Buscando desde API para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`CACHE MISS - Buscando desde API para cuenta Gmail ${cuentaGmailId}`);
       
       const accessToken = await this.getValidTokenForGmailAccount(cuentaGmailId);
       
@@ -286,10 +380,9 @@ export class EmailsOrchestratorService {
         }
       });
 
-      // 3️⃣ GUARDAR EN CACHE
       await this.cacheService.set(cacheKey, response.data, this.CACHE_TTL.SEARCH);
       
-      this.logger.log(`✅ Búsqueda completada y guardada en cache`);
+      this.logger.log(`Búsqueda completada y guardada en cache`);
       
       return {
         success: true,
@@ -299,9 +392,8 @@ export class EmailsOrchestratorService {
       };
 
     } catch (error) {
-      console.log(error);
       const apiError = error as AxiosError<ErrorResponse>;
-      this.logger.error(`❌ Error buscando emails:`, apiError.message);
+      this.logger.error(`Error buscando emails:`, apiError.message);
       throw new HttpException(
         `Error buscando emails: ${apiError.response?.data?.message || apiError.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
@@ -309,207 +401,185 @@ export class EmailsOrchestratorService {
     }
   }
 
+  /**
+   * Buscar emails en TODAS las cuentas Gmail del usuario - CON CACHE
+   */
+  async searchAllAccountsEmails(
+    userId: string, 
+    searchTerm: string, 
+    page: number = 1, 
+    limit: number = 10
+  ) {
+    try {
+      this.logger.log(`BÚSQUEDA GLOBAL para usuario ${userId}: "${searchTerm}"`);
 
-  
-/**
- * 🌍 Buscar emails en TODAS las cuentas Gmail del usuario - ⚡ CON CACHE
- * 🎯 NUEVO: Búsqueda global unificada
- */
-async searchAllAccountsEmails(
-  userId: string, 
-  searchTerm: string, 
-  page: number = 1, 
-  limit: number = 10
-) {
-  try {
-    this.logger.log(`🌍 BÚSQUEDA GLOBAL para usuario ${userId}: "${searchTerm}"`);
+      const userIdNum = parseInt(userId, 10);
+      if (isNaN(userIdNum)) {
+        throw new BadRequestException(`userId debe ser un número válido: ${userId}`);
+      }
 
-    // 🎯 VALIDAR USERID ES NÚMERO
-    const userIdNum = parseInt(userId, 10);
-    if (isNaN(userIdNum)) {
-      throw new BadRequestException(`userId debe ser un número válido: ${userId}`);
-    }
+      const cacheKey = this.cacheService.generateKey('global-search', userId, { 
+        searchTerm: searchTerm.toLowerCase().trim(),
+        page, 
+        limit 
+      });
+      
+      const cachedResult = await this.cacheService.get<EmailListResponse & { 
+        accountsSearched?: string[]; 
+      }>(cacheKey);
+      
+      if (cachedResult) {
+        this.logger.log(`CACHE HIT - Búsqueda global desde cache para usuario ${userId}`);
+        return {
+          success: true,
+          source: 'orchestrator-cache',
+          searchTerm,
+          accountsSearched: cachedResult.accountsSearched || [],
+          data: cachedResult
+        };
+      }
 
-    // 1️⃣ VERIFICAR CACHE PRIMERO
-    const cacheKey = this.cacheService.generateKey('global-search', userId, { 
-      searchTerm: searchTerm.toLowerCase().trim(),
-      page, 
-      limit 
-    });
-    
-    const cachedResult = await this.cacheService.get<EmailListResponse & { 
-      accountsSearched?: string[]; 
-    }>(cacheKey);
-    
-    if (cachedResult) {
-      this.logger.log(`⚡ CACHE HIT - Búsqueda global desde cache para usuario ${userId}`);
+      this.logger.log(`CACHE MISS - Búsqueda global desde API para usuario ${userId}`);
+      
+      const response: AxiosResponse<EmailListResponse & { 
+        accountsSearched?: string[]; 
+      }> = await axios.get(`${this.msEmailUrl}/emails/search-all-accounts`, {
+        params: { userId, q: searchTerm, page, limit },
+        headers: {
+          'X-User-ID': userId
+        }
+      });
+
+      await this.cacheService.set(cacheKey, response.data, this.CACHE_TTL.SEARCH);
+      
+      this.logger.log(`Búsqueda global completada y guardada en cache`);
+      this.logger.log(`Resultados: ${response.data.total} emails de ${response.data.accountsSearched?.length || 0} cuentas`);
+      
       return {
         success: true,
-        source: 'orchestrator-cache',
+        source: 'orchestrator-api',
         searchTerm,
-        accountsSearched: cachedResult.accountsSearched || [],
-        data: cachedResult
+        accountsSearched: response.data.accountsSearched || [],
+        data: response.data
       };
-    }
 
-    // 2️⃣ SI NO HAY CACHE → LLAMAR MS-EMAIL
-    this.logger.log(`📡 CACHE MISS - Búsqueda global desde API para usuario ${userId}`);
-    
-    // 🎯 LLAMAR AL NUEVO ENDPOINT EN MS-EMAIL
-    const response: AxiosResponse<EmailListResponse & { 
-      accountsSearched?: string[]; 
-    }> = await axios.get(`${this.msEmailUrl}/emails/search-all-accounts`, {
-      params: { userId, q: searchTerm, page, limit },
-      headers: {
-        // 🎯 POR AHORA SIN TOKEN - El ms-email manejará la autenticación internamente
-        'X-User-ID': userId // Header para identificar al usuario
+    } catch (error) {
+      const apiError = error as AxiosError<ErrorResponse>;
+      this.logger.error(`Error en búsqueda global:`, apiError.message);
+      
+      if (apiError.response?.status === 404) {
+        throw new HttpException(
+          `Usuario ${userId} no tiene cuentas Gmail conectadas`,
+          HttpStatus.NOT_FOUND
+        );
       }
-    });
 
-    // 3️⃣ GUARDAR EN CACHE (TTL más corto para búsquedas globales)
-    await this.cacheService.set(cacheKey, response.data, this.CACHE_TTL.SEARCH);
-    
-    this.logger.log(`✅ Búsqueda global completada y guardada en cache`);
-    this.logger.log(`📊 Resultados: ${response.data.total} emails de ${response.data.accountsSearched?.length || 0} cuentas`);
-    
-    return {
-      success: true,
-      source: 'orchestrator-api',
-      searchTerm,
-      accountsSearched: response.data.accountsSearched || [],
-      data: response.data
-    };
-
-  } catch (error) {
-    console.log(error);
-    const apiError = error as AxiosError<ErrorResponse>;
-    this.logger.error(`❌ Error en búsqueda global:`, apiError.message);
-    
-    // 🎯 MANEJAR ERRORES ESPECÍFICOS
-    if (apiError.response?.status === 404) {
-      throw new HttpException(
-        `Usuario ${userId} no tiene cuentas Gmail conectadas`,
-        HttpStatus.NOT_FOUND
-      );
-    }
-
-    if (apiError.response?.status === 401) {
-      throw new HttpException(
-        `Error de autenticación para usuario ${userId}`,
-        HttpStatus.UNAUTHORIZED
-      );
-    }
-
-    throw new HttpException(
-      `Error en búsqueda global: ${apiError.response?.data?.message || apiError.message}`,
-      HttpStatus.INTERNAL_SERVER_ERROR
-    );
-  }
-}
-
-
-
-/**
- * 📥 Inbox unificado de TODAS las cuentas Gmail del usuario - ⚡ CON CACHE
- * 🎯 NUEVO: Inbox global unificado
- */
-async getInboxAllAccounts(
-  userId: string, 
-  page: number = 1, 
-  limit: number = 10
-) {
-  try {
-    this.logger.log(`📥 🎯 INBOX UNIFICADO para usuario ${userId} - Página ${page}`);
-
-    // 🎯 VALIDAR USERID ES NÚMERO
-    const userIdNum = parseInt(userId, 10);
-    if (isNaN(userIdNum)) {
-      throw new BadRequestException(`userId debe ser un número válido: ${userId}`);
-    }
-
-    // 1️⃣ VERIFICAR CACHE PRIMERO
-    const cacheKey = this.cacheService.generateKey('inbox-unified', userId, { page, limit });
-    
-    const cachedResult = await this.cacheService.get<EmailListResponse & { 
-      accountsLoaded?: string[]; 
-    }>(cacheKey);
-    
-    if (cachedResult) {
-      this.logger.log(`⚡ CACHE HIT - Inbox unificado desde cache para usuario ${userId}`);
-      return {
-        success: true,
-        source: 'orchestrator-cache',
-        accountsLoaded: cachedResult.accountsLoaded || [],
-        data: cachedResult
-      };
-    }
-
-    // 2️⃣ SI NO HAY CACHE → LLAMAR MS-EMAIL
-    this.logger.log(`📡 CACHE MISS - Inbox unificado desde API para usuario ${userId}`);
-    
-    // 🎯 LLAMAR AL NUEVO ENDPOINT EN MS-EMAIL
-    const response: AxiosResponse<EmailListResponse & { 
-      accountsLoaded?: string[]; 
-    }> = await axios.get(`${this.msEmailUrl}/emails/inbox-all-accounts`, {
-      params: { userId, page, limit },
-      headers: {
-        'X-User-ID': userId
+      if (apiError.response?.status === 401) {
+        throw new HttpException(
+          `Error de autenticación para usuario ${userId}`,
+          HttpStatus.UNAUTHORIZED
+        );
       }
-    });
 
-    // 3️⃣ GUARDAR EN CACHE (TTL similar a emails normales)
-    await this.cacheService.set(cacheKey, response.data, this.CACHE_TTL.EMAILS);
-    
-    this.logger.log(`✅ Inbox unificado completado y guardado en cache`);
-    this.logger.log(`📊 Resultados: ${response.data.total} emails de ${response.data.accountsLoaded?.length || 0} cuentas`);
-    
-    return {
-      success: true,
-      source: 'orchestrator-api',
-      accountsLoaded: response.data.accountsLoaded || [],
-      data: response.data
-    };
-
-  } catch (error) {
-    console.log(error);
-    const apiError = error as AxiosError<ErrorResponse>;
-    this.logger.error(`❌ Error en inbox unificado:`, apiError.message);
-    
-    // 🎯 MANEJAR ERRORES ESPECÍFICOS
-    if (apiError.response?.status === 404) {
       throw new HttpException(
-        `Usuario ${userId} no tiene cuentas Gmail conectadas`,
-        HttpStatus.NOT_FOUND
+        `Error en búsqueda global: ${apiError.response?.data?.message || apiError.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
-
-    if (apiError.response?.status === 401) {
-      throw new HttpException(
-        `Error de autenticación para usuario ${userId}`,
-        HttpStatus.UNAUTHORIZED
-      );
-    }
-
-    throw new HttpException(
-      `Error en inbox unificado: ${apiError.response?.data?.message || apiError.message}`,
-      HttpStatus.INTERNAL_SERVER_ERROR
-    );
   }
-}
 
   /**
-   * 📊 Obtener estadísticas de emails - ⚡ CON CACHE
+   * Inbox unificado de TODAS las cuentas Gmail del usuario - CON CACHE
+   */
+  async getInboxAllAccounts(
+    userId: string, 
+    page: number = 1, 
+    limit: number = 10
+  ) {
+    try {
+      this.logger.log(`INBOX UNIFICADO para usuario ${userId} - Página ${page}`);
+
+      const userIdNum = parseInt(userId, 10);
+      if (isNaN(userIdNum)) {
+        throw new BadRequestException(`userId debe ser un número válido: ${userId}`);
+      }
+
+      const cacheKey = this.cacheService.generateKey('inbox-unified', userId, { page, limit });
+      
+      const cachedResult = await this.cacheService.get<EmailListResponse & { 
+        accountsLoaded?: string[]; 
+      }>(cacheKey);
+      
+      if (cachedResult) {
+        this.logger.log(`CACHE HIT - Inbox unificado desde cache para usuario ${userId}`);
+        return {
+          success: true,
+          source: 'orchestrator-cache',
+          accountsLoaded: cachedResult.accountsLoaded || [],
+          data: cachedResult
+        };
+      }
+
+      this.logger.log(`CACHE MISS - Inbox unificado desde API para usuario ${userId}`);
+      
+      const response: AxiosResponse<EmailListResponse & { 
+        accountsLoaded?: string[]; 
+      }> = await axios.get(`${this.msEmailUrl}/emails/inbox-all-accounts`, {
+        params: { userId, page, limit },
+        headers: {
+          'X-User-ID': userId
+        }
+      });
+
+      await this.cacheService.set(cacheKey, response.data, this.CACHE_TTL.EMAILS);
+      
+      this.logger.log(`Inbox unificado completado y guardado en cache`);
+      this.logger.log(`Resultados: ${response.data.total} emails de ${response.data.accountsLoaded?.length || 0} cuentas`);
+      
+      return {
+        success: true,
+        source: 'orchestrator-api',
+        accountsLoaded: response.data.accountsLoaded || [],
+        data: response.data
+      };
+
+    } catch (error) {
+      const apiError = error as AxiosError<ErrorResponse>;
+      this.logger.error(`Error en inbox unificado:`, apiError.message);
+      
+      if (apiError.response?.status === 404) {
+        throw new HttpException(
+          `Usuario ${userId} no tiene cuentas Gmail conectadas`,
+          HttpStatus.NOT_FOUND
+        );
+      }
+
+      if (apiError.response?.status === 401) {
+        throw new HttpException(
+          `Error de autenticación para usuario ${userId}`,
+          HttpStatus.UNAUTHORIZED
+        );
+      }
+
+      throw new HttpException(
+        `Error en inbox unificado: ${apiError.response?.data?.message || apiError.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * Obtener estadísticas de emails - CON CACHE
    */
   async getEmailStats(cuentaGmailId: string) {
     try {
-      this.logger.log(`📊 Obteniendo estadísticas para cuenta Gmail ${cuentaGmailId}`);
+      this.logger.log(`Obteniendo estadísticas para cuenta Gmail ${cuentaGmailId}`);
 
-      // 1️⃣ VERIFICAR CACHE
       const cacheKey = this.cacheService.generateKey('stats', cuentaGmailId);
       const cachedResult = await this.cacheService.get<EmailStats>(cacheKey);
       
       if (cachedResult) {
-        this.logger.log(`⚡ CACHE HIT - Stats desde cache para cuenta Gmail ${cuentaGmailId}`);
+        this.logger.log(`CACHE HIT - Stats desde cache para cuenta Gmail ${cuentaGmailId}`);
         return {
           success: true,
           source: 'orchestrator-cache',
@@ -517,8 +587,7 @@ async getInboxAllAccounts(
         };
       }
 
-      // 2️⃣ SI NO HAY CACHE → LLAMAR API
-      this.logger.log(`📡 CACHE MISS - Obteniendo stats desde API`);
+      this.logger.log(`CACHE MISS - Obteniendo stats desde API`);
       
       const accessToken = await this.getValidTokenForGmailAccount(cuentaGmailId);
       
@@ -529,10 +598,9 @@ async getInboxAllAccounts(
         }
       });
 
-      // 3️⃣ GUARDAR EN CACHE (TTL más largo para stats)
       await this.cacheService.set(cacheKey, response.data, this.CACHE_TTL.STATS);
       
-      this.logger.log(`✅ Stats obtenidas y guardadas en cache`);
+      this.logger.log(`Stats obtenidas y guardadas en cache`);
       
       return {
         success: true,
@@ -541,9 +609,8 @@ async getInboxAllAccounts(
       };
 
     } catch (error) {
-      console.log(error);
       const apiError = error as AxiosError<ErrorResponse>;
-      this.logger.error(`❌ Error obteniendo estadísticas:`, apiError.message);
+      this.logger.error(`Error obteniendo estadísticas:`, apiError.message);
       throw new HttpException(
         `Error obteniendo estadísticas: ${apiError.response?.data?.message || apiError.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
@@ -552,110 +619,70 @@ async getInboxAllAccounts(
   }
 
   /**
-   * 📧 Obtener email específico - ⚡ CON CACHE
+   * Obtener email específico - CON CACHE
    */
- async getEmailByIdWithJWT(authHeader: string, emailId: string) {
-  try {
-    this.logger.log(`📧 🎯 Obteniendo email ${emailId} con JWT token via orchestrator`);
+  async getEmailByIdWithJWT(authHeader: string, emailId: string) {
+    try {
+      this.logger.log(`Obteniendo email ${emailId} con JWT token via orchestrator`);
 
-    // 1️⃣ VERIFICAR CACHE PRIMERO
-    const userId = this.extractUserIdFromJWT(authHeader);
-    
-    if (!userId) {
-      throw new UnauthorizedException('Token JWT inválido');
-    }
+      const userId = this.extractUserIdFromJWT(authHeader);
+      
+      if (!userId) {
+        throw new UnauthorizedException('Token JWT inválido');
+      }
 
-    const cacheKey = this.cacheService.generateKey('email-detail', userId.toString(), { emailId });
-    const cachedResult = await this.cacheService.get<EmailDetail>(cacheKey);
-    
-    if (cachedResult) {
-      this.logger.log(`⚡ CACHE HIT - Email detail desde cache`);
+      const cacheKey = this.cacheService.generateKey('email-detail', userId.toString(), { emailId });
+      const cachedResult = await this.cacheService.get<EmailDetail>(cacheKey);
+      
+      if (cachedResult) {
+        this.logger.log(`CACHE HIT - Email detail desde cache`);
+        return {
+          success: true,
+          source: 'orchestrator-cache',
+          data: cachedResult
+        };
+      }
+
+      this.logger.log(`CACHE MISS - Obteniendo email desde MS-Email`);
+      
+      const response: AxiosResponse<EmailDetail> = await axios.get(`${this.msEmailUrl}/emails/${emailId}`, {
+        headers: {
+          'Authorization': authHeader
+        }
+      });
+
+      await this.cacheService.set(cacheKey, response.data, this.CACHE_TTL.DETAIL);
+      
+      this.logger.log(`Email obtenido y guardado en cache`);
+      
       return {
         success: true,
-        source: 'orchestrator-cache',
-        data: cachedResult
+        source: 'orchestrator-api',
+        data: response.data
       };
-    }
 
-    // 2️⃣ SI NO HAY CACHE → LLAMAR MS-EMAIL
-    this.logger.log(`📡 CACHE MISS - Obteniendo email desde MS-Email`);
-    
-    const response: AxiosResponse<EmailDetail> = await axios.get(`${this.msEmailUrl}/emails/${emailId}`, {
-      headers: {
-        'Authorization': authHeader // 🎯 Pasar JWT directamente
+    } catch (error) {
+      const apiError = error as AxiosError<ErrorResponse>;
+      this.logger.error(`Error obteniendo email con JWT:`, apiError.message);
+      
+      if (apiError.response?.status === 404) {
+        throw new HttpException(
+          `Email ${emailId} no encontrado`,
+          HttpStatus.NOT_FOUND
+        );
       }
-    });
-
-    // 3️⃣ GUARDAR EN CACHE
-    await this.cacheService.set(cacheKey, response.data, this.CACHE_TTL.DETAIL);
-    
-    this.logger.log(`✅ Email obtenido y guardado en cache`);
-    
-    return {
-      success: true,
-      source: 'orchestrator-api',
-      data: response.data
-    };
-
-  } catch (error) {
-    console.log(error);
-    const apiError = error as AxiosError<ErrorResponse>;
-    this.logger.error(`❌ Error obteniendo email con JWT:`, apiError.message);
-    
-    if (apiError.response?.status === 404) {
+      
+      if (apiError.response?.status === 401) {
+        throw new HttpException(
+          'Token JWT inválido o expirado',
+          HttpStatus.UNAUTHORIZED
+        );
+      }
+      
       throw new HttpException(
-        `Email ${emailId} no encontrado`,
-        HttpStatus.NOT_FOUND
+        `Error obteniendo email: ${apiError.response?.data?.message || apiError.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
-    
-    if (apiError.response?.status === 401) {
-      throw new HttpException(
-        'Token JWT inválido o expirado',
-        HttpStatus.UNAUTHORIZED
-      );
-    }
-    
-    throw new HttpException(
-      `Error obteniendo email: ${apiError.response?.data?.message || apiError.message}`,
-      HttpStatus.INTERNAL_SERVER_ERROR
-    );
   }
-}
-
-/**
- * 🔧 Extraer User ID del JWT token (en orchestrator)
- */
-
-private extractUserIdFromJWT(authHeader: string): number | null {
-  try {
-    const token = authHeader.replace('Bearer ', '');
-    const parts = token.split('.');
-    
-    if (parts.length !== 3) return null;
-
-    const payloadBase64 = parts[1];
-    const payloadJson = Buffer.from(payloadBase64, 'base64').toString('utf-8');
-    
-    // 🎯 TIPADO ESPECÍFICO (elimina warning de 'any')
-    const payload = JSON.parse(payloadJson) as { 
-      sub?: number; 
-      email?: string; 
-      iat?: number; 
-      exp?: number; 
-    };
-    
-    // 🎯 VALIDACIÓN EXPLÍCITA (elimina unsafe member access)
-    if (typeof payload.sub !== 'number') {
-      this.logger.warn('JWT payload.sub no es válido');
-      return null;
-    }
-
-    return payload.sub;
-
-  } catch (error) {
-    this.logger.error('Error extrayendo userId del JWT:', error);
-    return null;
-  }
-}
 }

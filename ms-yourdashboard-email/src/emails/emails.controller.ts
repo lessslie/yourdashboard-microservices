@@ -7,18 +7,19 @@ import {
   Headers,
   UnauthorizedException, 
   BadRequestException,
-  Logger
+  Logger,
+  Body
 } from '@nestjs/common';
 import { 
   ApiTags, 
   ApiOperation, 
   ApiQuery,
-  ApiBearerAuth,
   ApiParam,
   ApiOkResponse,
   ApiUnauthorizedResponse,
   ApiBadRequestResponse,
-  ApiNotFoundResponse
+  ApiNotFoundResponse,
+  ApiBody
 } from '@nestjs/swagger';
 import { EmailsService } from './emails.service';
 import { 
@@ -72,7 +73,6 @@ export class EmailsController {
    * 🔄 POST /emails/sync - Sincronización manual
    */
   @Post('sync')
-  @ApiBearerAuth('Gmail-Token')
   @ApiOperation({ 
     summary: 'Sincronizar emails manualmente',
     description: 'Ejecuta sincronización manual de emails desde Gmail para una cuenta específica.'
@@ -118,7 +118,6 @@ export class EmailsController {
    * 🔄 POST /emails/sync/incremental - Sincronización incremental,mas rapido, solo trae los ultimos no actuliza tooodoooo
    */
   @Post('sync/incremental')
-  @ApiBearerAuth('Gmail-Token')
   @ApiOperation({ 
     summary: 'Sincronización incremental de emails',
     description: 'Sincroniza solo emails nuevos desde la última sincronización.'
@@ -163,7 +162,6 @@ export class EmailsController {
    * 📊 GET /emails/stats - Estadísticas de emails
    */
   @Get('stats')
-  @ApiBearerAuth('Gmail-Token')
   @ApiOperation({ 
     summary: 'Obtener estadísticas de emails',
     description: 'Obtiene contadores de emails totales, leídos y no leídos de una cuenta Gmail específica.'
@@ -202,7 +200,6 @@ export class EmailsController {
    * 📧 GET /emails/inbox - Lista de emails con paginación
    */
   @Get('inbox')
-  @ApiBearerAuth('Gmail-Token')
   @ApiOperation({ 
     summary: 'Obtener inbox de emails',
     description: 'Lista emails del inbox con paginación para una cuenta Gmail específica. Usa BD local primero, Gmail API como fallback.'
@@ -267,7 +264,6 @@ export class EmailsController {
    * 🔍 GET /emails/search - Buscar emails
    */
   @Get('search')
-  @ApiBearerAuth('Gmail-Token')
   @ApiOperation({ 
     summary: 'Buscar emails',
     description: 'Busca emails por término específico con paginación en una cuenta Gmail específica. Usa BD local primero.'
@@ -355,7 +351,6 @@ export class EmailsController {
    * 📧 GET /emails/inbox (LEGACY con userId)
    */
   @Get('inbox-legacy')
-  @ApiBearerAuth('Gmail-Token')
   @ApiOperation({ 
     summary: '[LEGACY] Obtener inbox por userId',
     description: 'Endpoint legacy que usa userId. Recomendado: usar /emails/inbox con cuentaGmailId'
@@ -584,11 +579,135 @@ async getInboxAllAccounts(
   );
 }
 
+
+
+
+  /**
+   * 🔍 GET /emails/cron-status - Ver estado del CRON
+   */
+@Get('cron-status')
+@ApiOperation({ 
+  summary: '📊 Ver estado del servicio CRON',
+  description: 'Muestra información sobre la configuración y estado del CRON sync.'
+})
+@ApiOkResponse({ 
+  description: 'Estado del CRON',
+  schema: {
+    type: 'object',
+    properties: {
+      enabled: { type: 'boolean', example: true },
+      weekdaySchedule: { type: 'string', example: '*/10 * * * 1-5' },
+      weekendSchedule: { type: 'string', example: '0 */4 * * 0,6' },
+      maxEmailsPerAccount: { type: 'number', example: 30 },
+      maxAccountsPerRun: { type: 'number', example: 100 },
+      nextWeekdayRun: { type: 'string', example: 'en 7 minutos' },
+      nextWeekendRun: { type: 'string', example: 'Sábado a las 00:00' }
+    }
+  }
+})
+async getCronStatus() {
+  return {
+    enabled: true,
+    weekdaySchedule: '*/10 * * * 1-5',
+    weekendSchedule: '0 */4 * * 0,6',
+    maxEmailsPerAccount: 30,
+    maxAccountsPerRun: 100,
+    nextWeekdayRun: 'en 7 minutos',
+    nextWeekendRun: 'Sábado a las 00:00'
+  };
+}
+
+/**
+ * ✉️ POST /emails/:id/reply - Responder un email específico
+ */
+@Post(':id/reply')
+@ApiOperation({ 
+  summary: 'Responder a un email específico',
+  description: 'Envía una respuesta a un email usando la cuenta Gmail correspondiente.'
+})
+@ApiParam({ 
+  name: 'id', 
+  description: 'ID del email a responder', 
+  example: '1847a8e123456789' 
+})
+@ApiBody({
+  description: 'Contenido de la respuesta',
+  schema: {
+    type: 'object',
+    properties: {
+      body: {
+        type: 'string',
+        description: 'Contenido de la respuesta',
+        example: 'Gracias por tu mensaje. Te respondo que...'
+      },
+      bodyHtml: {
+        type: 'string', 
+        description: 'Contenido HTML (opcional)',
+        example: '<p>Gracias por tu mensaje.</p><p>Te respondo que...</p>'
+      }
+    },
+    required: ['body']
+  }
+})
+@ApiOkResponse({ 
+  description: 'Respuesta enviada exitosamente',
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      message: { type: 'string', example: 'Respuesta enviada exitosamente' },
+      sentMessageId: { type: 'string', example: '1847a8e987654321' }
+    }
+  }
+})
+@ApiUnauthorizedResponse({ 
+  description: 'Token JWT inválido o expirado',
+  type: EmailErrorResponseDto 
+})
+@ApiNotFoundResponse({ 
+  description: 'Email no encontrado en ninguna cuenta del usuario',
+  type: EmailErrorResponseDto 
+})
+@ApiBadRequestResponse({ 
+  description: 'Contenido de respuesta inválido',
+  type: EmailErrorResponseDto 
+})
+async replyToEmail(
+  @Headers('authorization') authHeader: string,
+  @Param('id') emailId: string,
+  @Body() replyData: {
+    body: string;
+    bodyHtml?: string;
+  }
+): Promise<{
+  success: boolean;
+  message: string;
+  sentMessageId: string;
+}> {
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido en Authorization header');
+  }
+
+  if (!emailId) {
+    throw new BadRequestException('ID del email es requerido');
+  }
+
+  if (!replyData.body || replyData.body.trim() === '') {
+    throw new BadRequestException('El contenido de la respuesta es requerido');
+  }
+
+  console.log(`📧 Enviando respuesta al email ${emailId}`);
+  
+  // 🎯 LLAMAR AL NUEVO MÉTODO DEL SERVICE
+  return this.emailsService.replyToEmailWithJWT(authHeader, emailId, replyData);
+}
+  //************************************************ */
+
+
   /**
    * 📧 GET /emails/:id - Obtener email específico
    */
   @Get(':id')
-  @ApiBearerAuth('Gmail-Token')
   @ApiOperation({ 
     summary: 'Obtener email por ID',
     description: 'Obtiene el contenido completo de un email específico por su ID desde Gmail API.'
@@ -611,60 +730,6 @@ async getInboxAllAccounts(
     description: 'Email no encontrado',
     type: EmailErrorResponseDto 
   })
-
-
-
-  /**
-   * 🔍 GET /emails/cron-status - Ver estado del CRON
-   */
-  @Get('cron-status')
-  @ApiOperation({ 
-    summary: '📊 Ver estado del servicio CRON',
-    description: 'Muestra información sobre la configuración y estado del CRON sync.'
-  })
-  @ApiOkResponse({ 
-    description: 'Estado del CRON',
-    schema: {
-      type: 'object',
-      properties: {
-        enabled: { type: 'boolean', example: true },
-        weekdaySchedule: { type: 'string', example: '*/10 * * * 1-5' },
-        weekendSchedule: { type: 'string', example: '0 */4 * * 0,6' },
-        maxEmailsPerAccount: { type: 'number', example: 30 },
-        maxAccountsPerRun: { type: 'number', example: 100 },
-        nextWeekdayRun: { type: 'string', example: 'en 7 minutos' },
-        nextWeekendRun: { type: 'string', example: 'Sábado a las 00:00' }
-      }
-    }
-  })
-
-
-  //************************************************ */
-
-
-@Get(':id')
-@ApiOperation({ 
-  summary: 'Obtener email por ID',
-  description: 'Obtiene el contenido completo de un email específico usando JWT token para identificar al usuario.'
-})
-@ApiParam({ 
-  name: 'id', 
-  description: 'ID del mensaje en Gmail', 
-  example: '1847a8e123456789' 
-})
-@ApiBearerAuth('Gmail-Token') //  Ahora requiere JWT token
-@ApiOkResponse({ 
-  description: 'Email obtenido exitosamente',
-  type: EmailDetailDto 
-})
-@ApiUnauthorizedResponse({ 
-  description: 'Token JWT inválido o expirado',
-  type: EmailErrorResponseDto 
-})
-@ApiNotFoundResponse({ 
-  description: 'Email no encontrado en ninguna cuenta del usuario',
-  type: EmailErrorResponseDto 
-})
 async getEmailById(
   @Headers('authorization') authHeader: string,
   @Param('id') emailId: string

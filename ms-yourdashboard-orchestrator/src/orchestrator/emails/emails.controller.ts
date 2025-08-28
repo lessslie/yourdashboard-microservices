@@ -3,10 +3,15 @@ import {
   Get,
   Post,
   Query,
+  Headers,
+  Delete,
   Param,
   BadRequestException, 
-  Req,
-  UnauthorizedException
+  UnauthorizedException,
+  NotFoundException,
+  Body,
+  Logger,
+  Request
 } from '@nestjs/common';
 import { 
   ApiTags, 
@@ -16,20 +21,25 @@ import {
   ApiOkResponse,
   ApiBadRequestResponse,
   ApiNotFoundResponse,
-  ApiBearerAuth,
   ApiUnauthorizedResponse,
+  ApiBody,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { EmailsOrchestratorService } from './emails.service';
 import {
   OrchestratorEmailListDto,
   OrchestratorStatsDto,
-  OrchestratorErrorDto
+  OrchestratorErrorDto,
+  ReplyEmailDto,
+  ReplyResponseDto
 } from './dto';
-import { Request } from 'express';
+import { ReplyEmailRequest, ReplyEmailResponse } from './interfaces/emails.interfaces';
 
 @Controller('emails')
 @ApiTags('Emails')
 export class EmailsOrchestratorController {
+  private readonly logger = new Logger(EmailsOrchestratorController.name);
+
   constructor(private readonly emailsService: EmailsOrchestratorService) {}
 
   /**
@@ -70,7 +80,7 @@ export class EmailsOrchestratorController {
   })
   @ApiBadRequestResponse({ 
     description: 'cuentaGmailId es requerido',
-    type: OrchestratorErrorDto 
+    type: OrchestratorErrorDto
   })
   async syncEmails(
     @Query('cuentaGmailId') cuentaGmailId: string,
@@ -87,7 +97,7 @@ export class EmailsOrchestratorController {
   }
 
   /**
-   * 🔄 POST /emails/sync/incremental - Sincronización incremental coordinada no sncroniza tooodooo otra vez- solo los ultimos para una actualizacion mas rapda.
+   * 🔄 POST /emails/sync/incremental - Sincronización incremental coordinada
    */
   @Post('sync/incremental')
   @ApiOperation({ 
@@ -152,10 +162,8 @@ export class EmailsOrchestratorController {
   })
   @ApiBadRequestResponse({ 
     description: 'cuentaGmailId es requerido',
-    type: OrchestratorErrorDto 
+    type: OrchestratorErrorDto
   })
-
-//peticion de frontend :GET http://localhost:3003/emails/inbox?cuentaGmailId=4&page=1&limit=10
   async getInbox(
     @Query('cuentaGmailId') cuentaGmailId: string,
     @Query('page') page?: string,
@@ -227,21 +235,17 @@ export class EmailsOrchestratorController {
     );
   }
 
-
-
-
-  
   /**
-   * 🌍 GET /emails/search-all-accounts - Buscar emails (TODAS LAS CUENTAS) - NUEVO
+   * 🌐 GET /emails/search-all-accounts - Buscar emails (TODAS LAS CUENTAS)
    */
   @Get('search-all-accounts')
   @ApiOperation({ 
-    summary: '🌍 Buscar emails en TODAS las cuentas Gmail del usuario',
+    summary: '🌐 Buscar emails en TODAS las cuentas Gmail del usuario',
     description: 'Coordina MS-Auth + MS-Email para buscar emails en TODAS las cuentas Gmail asociadas al usuario principal. Unifica resultados y los ordena por fecha globalmente.'
   })
   @ApiQuery({ 
     name: 'userId', 
-    description: 'ID del usuario principal (extraído del JWT)', 
+    description: 'ID del usuario principal', 
     example: '3' 
   })
   @ApiQuery({ 
@@ -316,7 +320,6 @@ export class EmailsOrchestratorController {
     @Query('page') page?: string,
     @Query('limit') limit?: string
   ) {
-    // 🎯 VALIDACIONES
     if (!userId) {
       throw new BadRequestException('userId es requerido');
     }
@@ -340,7 +343,6 @@ export class EmailsOrchestratorController {
       };
     }
 
-    // 🎯 LLAMAR AL NUEVO MÉTODO DEL SERVICE
     return this.emailsService.searchAllAccountsEmails(
       userId, 
       searchTerm, 
@@ -349,105 +351,99 @@ export class EmailsOrchestratorController {
     );
   }
 
-
-/**
- * 📥 GET /emails/inbox-all-accounts - INBOX UNIFICADO (TODAS LAS CUENTAS) - NUEVO
- * 🎯 NUEVA FUNCIONALIDAD: Inbox unificado de todas las cuentas Gmail del usuario
- */
-@Get('inbox-all-accounts')
-@ApiOperation({ 
-  summary: '📥 Inbox unificado de TODAS las cuentas Gmail',
-  description: `
-    Obtiene los emails más recientes de TODAS las cuentas Gmail del usuario unificados y ordenados por fecha.
-    Similar a /emails/inbox pero abarca múltiples cuentas en lugar de una sola.
-    
-    Perfecto para ver un "stream unificado" de todos los emails recientes del usuario.
-  `
-})
-@ApiQuery({ 
-  name: 'userId', 
-  description: 'ID del usuario principal (extraído del JWT)', 
-  example: '1' 
-})
-@ApiQuery({ 
-  name: 'page', 
-  description: 'Número de página para paginación unificada', 
-  example: 1, 
-  required: false 
-})
-@ApiQuery({ 
-  name: 'limit', 
-  description: 'Emails por página (máx 50)', 
-  example: 10, 
-  required: false 
-})
-@ApiOkResponse({ 
-  description: 'Inbox unificado obtenido exitosamente',
-  type: OrchestratorEmailListDto,
-  schema: {
-    type: 'object',
-    properties: {
-      success: { type: 'boolean', example: true },
-      source: { type: 'string', example: 'orchestrator-unified-inbox' },
-      accountsLoaded: { 
-        type: 'array', 
-        items: { type: 'string' },
-        example: ['agata.morales92@gmail.com', 'celestino.lely54@gmail.com']
-      },
-      data: {
-        type: 'object',
-        properties: {
-          emails: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                id: { type: 'string', example: '1847a8e123456789' },
-                subject: { type: 'string', example: 'Actualización del proyecto' },
-                fromEmail: { type: 'string', example: 'cliente@empresa.com' },
-                fromName: { type: 'string', example: 'María García' },
-                receivedDate: { type: 'string', example: '2024-01-15T10:30:00Z' },
-                isRead: { type: 'boolean', example: false },
-                hasAttachments: { type: 'boolean', example: true },
-                sourceAccount: { type: 'string', example: 'agata.morales92@gmail.com' },
-                sourceAccountId: { type: 'number', example: 1 }
+  /**
+   * 🔥 GET /emails/inbox-all-accounts - INBOX UNIFICADO (TODAS LAS CUENTAS)
+   */
+  @Get('inbox-all-accounts')
+  @ApiOperation({ 
+    summary: '🔥 Inbox unificado de TODAS las cuentas Gmail',
+    description: `
+      Obtiene los emails más recientes de TODAS las cuentas Gmail del usuario unificados y ordenados por fecha.
+      Similar a /emails/inbox pero abarca múltiples cuentas en lugar de una sola.
+      
+      Perfecto para ver un "stream unificado" de todos los emails recientes del usuario.
+    `
+  })
+  @ApiQuery({ 
+    name: 'userId', 
+    description: 'ID del usuario principal', 
+    example: '1' 
+  })
+  @ApiQuery({ 
+    name: 'page', 
+    description: 'Número de página para paginación unificada', 
+    example: 1, 
+    required: false 
+  })
+  @ApiQuery({ 
+    name: 'limit', 
+    description: 'Emails por página (máx 50)', 
+    example: 10, 
+    required: false 
+  })
+  @ApiOkResponse({ 
+    description: 'Inbox unificado obtenido exitosamente',
+    type: OrchestratorEmailListDto,
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        source: { type: 'string', example: 'orchestrator-unified-inbox' },
+        accountsLoaded: { 
+          type: 'array', 
+          items: { type: 'string' },
+          example: ['agata.morales92@gmail.com', 'celestino.lely54@gmail.com']
+        },
+        data: {
+          type: 'object',
+          properties: {
+            emails: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', example: '1847a8e123456789' },
+                  subject: { type: 'string', example: 'Actualización del proyecto' },
+                  fromEmail: { type: 'string', example: 'cliente@empresa.com' },
+                  fromName: { type: 'string', example: 'María García' },
+                  receivedDate: { type: 'string', example: '2024-01-15T10:30:00Z' },
+                  isRead: { type: 'boolean', example: false },
+                  hasAttachments: { type: 'boolean', example: true },
+                  sourceAccount: { type: 'string', example: 'agata.morales92@gmail.com' },
+                  sourceAccountId: { type: 'number', example: 1 }
+                }
               }
-            }
-          },
-          total: { type: 'number', example: 156 },
-          page: { type: 'number', example: 1 },
-          limit: { type: 'number', example: 10 },
-          totalPages: { type: 'number', example: 16 },
-          hasNextPage: { type: 'boolean', example: true },
-          hasPreviousPage: { type: 'boolean', example: false }
+            },
+            total: { type: 'number', example: 156 },
+            page: { type: 'number', example: 1 },
+            limit: { type: 'number', example: 10 },
+            totalPages: { type: 'number', example: 16 },
+            hasNextPage: { type: 'boolean', example: true },
+            hasPreviousPage: { type: 'boolean', example: false }
+          }
         }
       }
     }
-  }
-})
-@ApiBadRequestResponse({ 
-  description: 'userId es requerido',
-  type: OrchestratorErrorDto 
-})
-async getInboxAllAccounts(
-  @Query('userId') userId: string,
-  @Query('page') page?: string,
-  @Query('limit') limit?: string
-) {
-  // 🎯 VALIDACIONES
-  if (!userId) {
-    throw new BadRequestException('userId es requerido para inbox unificado');
-  }
+  })
+  @ApiBadRequestResponse({ 
+    description: 'userId es requerido',
+    type: OrchestratorErrorDto 
+  })
+  async getInboxAllAccounts(
+    @Query('userId') userId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string
+  ) {
+    if (!userId) {
+      throw new BadRequestException('userId es requerido para inbox unificado');
+    }
 
-  // 🎯 LLAMAR AL MÉTODO DEL SERVICE
-  return this.emailsService.getInboxAllAccounts(
-    userId, 
-    page ? parseInt(page, 10) : 1, 
-    limit ? parseInt(limit, 10) : 10
-  );
-}
-
-  
+    return this.emailsService.getInboxAllAccounts(
+      userId, 
+      page ? parseInt(page, 10) : 1, 
+      limit ? parseInt(limit, 10) : 10
+    );
+  }
 
   /**
    * 📊 GET /emails/stats - Estadísticas coordinadas
@@ -473,12 +469,70 @@ async getInboxAllAccounts(
 
     return this.emailsService.getEmailStats(cuentaGmailId);
   }
-
   /**
-   * 📧 GET /emails/:id - Email específico coordinado
-   */
+ * ✉️ POST /emails/:id/reply
+ */
+@Post(':id/reply')
+@ApiBearerAuth('JWT-auth') 
+@ApiOperation({ 
+  summary: 'Responder a un email específico',
+  description: 'Envía una respuesta a un email usando la cuenta Gmail correspondiente.'
+})
+@ApiParam({ name: 'id', description: 'ID del email a responder', example: '1847a8e123456789' })
+@ApiBody({ type: ReplyEmailDto })
+@ApiOkResponse({ description: 'Respuesta enviada exitosamente', type: ReplyResponseDto })
+@ApiUnauthorizedResponse({ description: 'Token JWT inválido', type: OrchestratorErrorDto })
+@ApiNotFoundResponse({ description: 'Email no encontrado', type: OrchestratorErrorDto })
+@ApiBadRequestResponse({ description: 'Datos inválidos', type: OrchestratorErrorDto })
+async replyToEmail(
+  @Param('id') emailId: string,
+  @Body() replyData: ReplyEmailRequest,
+  @Headers('authorization') authHeader: string
+): Promise<ReplyEmailResponse> {
+  try {
+    this.logger.log(`🔍 DEBUG - authHeader: ${authHeader ? 'presente' : 'undefined'}`);
+
+    if (!authHeader) {
+      throw new UnauthorizedException('Token JWT requerido - usa el botón Authorize');
+    }
+
+    const userId = this.emailsService.extractUserIdFromJWT(authHeader);
+    this.logger.log(`📧 Enviando respuesta al email ${emailId} para usuario ${userId}`);
+
+    if (!replyData.body || replyData.body.trim() === '') {
+      throw new BadRequestException('El contenido de la respuesta es requerido');
+    }
+
+    const result = await this.emailsService.replyToEmail(
+      emailId,
+      replyData,
+      authHeader
+    );
+
+    if (userId) {
+      await this.emailsService.invalidateEmailCaches(userId);
+    }
+
+    this.logger.log(`✅ Respuesta enviada exitosamente: ${result.sentMessageId}`);
+    return result;
+
+  } catch (error) {
+    this.logger.error(`❌ Error en respuesta de email:`, error);
+    
+    if (error instanceof NotFoundException || 
+        error instanceof UnauthorizedException || 
+        error instanceof BadRequestException) {
+      throw error;
+    }
+    
+    throw new BadRequestException('Error interno enviando respuesta');
+  }
+}
+/**
+ * 📧 GET /emails/:id - Email específico coordinado
+ */
 @Get(':id')
-@ApiBearerAuth('JWT-auth') // Ahora usa JWT auth
+@ApiBearerAuth('JWT-auth')
 @ApiOperation({ 
   summary: 'Obtener email por ID',
   description: 'Coordina MS-Auth + MS-Email para obtener email específico. Solo necesita messageId + JWT token.'
@@ -524,22 +578,19 @@ async getInboxAllAccounts(
   type: OrchestratorErrorDto 
 })
 async getEmailById(
-  @Req() req: Request,
-  @Param('id') emailId: string
+  @Param('id') emailId: string,
+  @Headers('authorization') authHeader: string
 ) {
-  const authHeader = req.headers?.authorization;
-  
   if (!authHeader) {
-    throw new UnauthorizedException('Token JWT requerido en Authorization header');
+    throw new UnauthorizedException('Token JWT requerido - usa el botón Authorize');
   }
 
   if (!emailId) {
     throw new BadRequestException('ID del mensaje es requerido');
   }
 
-  console.log(`🎭 ORCHESTRATOR - Obteniendo email ${emailId} con JWT token`);
+  this.logger.log(`🎭 ORCHESTRATOR - Obteniendo email ${emailId} con JWT token`);
   
   return this.emailsService.getEmailByIdWithJWT(authHeader, emailId);
 }
-  
 }
