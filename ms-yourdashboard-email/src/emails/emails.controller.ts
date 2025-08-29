@@ -31,6 +31,14 @@ import {
   EmailHealthResponseDto
 } from './dto';
 import { ConfigService } from '@nestjs/config';
+import { 
+  TrafficLightStatus, 
+  TrafficLightDashboardResponse,
+  EmailsByTrafficLightResponse,
+  UpdateTrafficLightsResponse,
+  
+} from './interfaces/traffic-light.interfaces';
+
 
 @ApiTags('Emails')
 @Controller('emails')
@@ -617,6 +625,220 @@ async getCronStatus() {
   };
 }
 
+  // ================================
+  // 🚦 ENDPOINTS DEL SEMÁFORO
+  // ================================
+
+/**
+ * 🚦 GET /emails/traffic-light/dashboard - Dashboard del semáforo
+ */
+@Get('traffic-light/dashboard')
+@ApiOperation({ 
+  summary: 'Dashboard del semáforo de emails',
+  description: 'Obtiene estadísticas del semáforo agrupadas por cuenta Gmail del usuario.'
+})
+@ApiOkResponse({ 
+  description: 'Estadísticas del semáforo obtenidas exitosamente',
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      dashboard: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            cuenta_id: { type: 'number', example: 1 },
+            email_gmail: { type: 'string', example: 'usuario@gmail.com' },
+            nombre_cuenta: { type: 'string', example: 'Juan Pérez' },
+            total_sin_responder: { type: 'number', example: 25 },
+            estadisticas: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  traffic_light_status: { 
+                    type: 'string', 
+                    enum: ['green', 'yellow', 'orange', 'red'],
+                    example: 'red' 
+                  },
+                  count: { type: 'string', example: '15' },
+                  avg_days: { type: 'string', example: '7.2' }
+                }
+              }
+            }
+          }
+        }
+      },
+      ultima_actualizacion: { type: 'string', example: '2025-08-29T15:30:00Z' }
+    }
+  }
+})
+@ApiUnauthorizedResponse({ 
+  description: 'Token JWT inválido o expirado',
+  type: EmailErrorResponseDto 
+})
+async getTrafficLightDashboard(
+  @Headers('authorization') authHeader: string
+): Promise<TrafficLightDashboardResponse> {
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido en Authorization header');
+  }
+
+  console.log('Obteniendo dashboard del semáforo');
+  
+  return await this.emailsService.getTrafficLightDashboard(authHeader);
+}
+
+/**
+ * 🚦 GET /emails/traffic-light/:status - Emails por estado del semáforo
+ */
+@Get('traffic-light/:status')
+@ApiOperation({ 
+  summary: 'Obtener emails por estado del semáforo',
+  description: 'Obtiene emails filtrados por color del semáforo (green, yellow, orange, red).'
+})
+@ApiParam({ 
+  name: 'status', 
+  enum: TrafficLightStatus,
+  description: 'Color del semáforo',
+  example: 'red'
+})
+@ApiQuery({ 
+  name: 'cuentaId', 
+  required: false, 
+  description: 'ID de cuenta Gmail específica (opcional)',
+  example: 1
+})
+@ApiQuery({ 
+  name: 'limit', 
+  required: false, 
+  description: 'Límite de resultados',
+  example: 10
+})
+@ApiOkResponse({ 
+  description: 'Emails por estado obtenidos exitosamente',
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      status: { 
+        type: 'string', 
+        enum: ['green', 'yellow', 'orange', 'red'],
+        example: 'red'
+      },
+      count: { type: 'number', example: 5 },
+      emails: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'number', example: 12345 },
+            gmail_message_id: { type: 'string', example: '1847a8e123456789' },
+            asunto: { type: 'string', example: 'Proyecto urgente' },
+            remitente_email: { type: 'string', example: 'cliente@empresa.com' },
+            remitente_nombre: { type: 'string', example: 'María García' },
+            fecha_recibido: { type: 'string', example: '2025-08-20T10:30:00Z' },
+            days_without_reply: { type: 'number', example: 9 },
+            traffic_light_status: { type: 'string', example: 'red' },
+            replied_at: { type: 'string', nullable: true, example: null }
+          }
+        }
+      }
+    }
+  }
+})
+@ApiBadRequestResponse({ 
+  description: 'Estado del semáforo inválido',
+  type: EmailErrorResponseDto 
+})
+async getEmailsByTrafficLight(
+  @Headers('authorization') authHeader: string,
+  @Param('status') status: string,
+  @Query('cuentaId') cuentaId?: string,
+  @Query('limit') limit?: string
+): Promise<EmailsByTrafficLightResponse> {
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido en Authorization header');
+  }
+
+  // Validar estado del semáforo
+  if (!Object.values(TrafficLightStatus).includes(status as TrafficLightStatus)) {
+    throw new BadRequestException('Estado del semáforo inválido. Debe ser: green, yellow, orange, red');
+  }
+
+  const trafficStatus = status as TrafficLightStatus;
+  const cuentaIdNum = cuentaId ? parseInt(cuentaId, 10) : undefined;
+  const limitNum = limit ? parseInt(limit, 10) : 10;
+
+  if (cuentaId && isNaN(cuentaIdNum!)) {
+    throw new BadRequestException('cuentaId debe ser un número válido');
+  }
+
+  if (limit && (isNaN(limitNum) || limitNum < 1 || limitNum > 100)) {
+    throw new BadRequestException('limit debe ser un número entre 1 y 100');
+  }
+
+  console.log(`Obteniendo emails con estado ${trafficStatus}`);
+  
+  return await this.emailsService.getEmailsByTrafficLight(
+    authHeader, 
+    trafficStatus, 
+    cuentaIdNum, 
+    limitNum
+  );
+}
+
+/**
+ * 🔄 POST /emails/traffic-light/update - Actualizar semáforos manualmente
+ */
+@Post('traffic-light/update')
+@ApiOperation({ 
+  summary: 'Actualizar semáforos de todos los emails',
+  description: 'Recalcula los estados del semáforo para todos los emails del sistema.'
+})
+@ApiOkResponse({ 
+  description: 'Semáforos actualizados correctamente',
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      message: { type: 'string', example: 'Semáforos actualizados correctamente' },
+      estadisticas: {
+        type: 'object',
+        properties: {
+          actualizados: { type: 'number', example: 24450 },
+          tiempo_ms: { type: 'number', example: 1915 },
+          por_estado: {
+            type: 'object',
+            properties: {
+              red: { type: 'number', example: 24057 },
+              orange: { type: 'number', example: 163 },
+              yellow: { type: 'number', example: 44 },
+              green: { type: 'number', example: 186 }
+            }
+          }
+        }
+      }
+    }
+  }
+})
+@ApiUnauthorizedResponse({ 
+  description: 'Token JWT inválido o expirado',
+  type: EmailErrorResponseDto 
+})
+async updateTrafficLights(
+  @Headers('authorization') authHeader: string
+): Promise<UpdateTrafficLightsResponse> {
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido en Authorization header');
+  }
+
+  console.log('Actualizando semáforos de todos los emails');
+  
+  return await this.emailsService.updateTrafficLights(authHeader);
+}
+
 /**
  * ✉️ POST /emails/:id/reply - Responder un email específico
  */
@@ -681,7 +903,7 @@ async replyToEmail(
   }
 ): Promise<{
   success: boolean;
-  message: string;
+  message?: string;
   sentMessageId: string;
 }> {
   if (!authHeader) {
@@ -699,7 +921,12 @@ async replyToEmail(
   console.log(`📧 Enviando respuesta al email ${emailId}`);
   
   // 🎯 LLAMAR AL NUEVO MÉTODO DEL SERVICE
-  return this.emailsService.replyToEmailWithJWT(authHeader, emailId, replyData);
+  const result = await this.emailsService.replyToEmailWithJWT(authHeader, emailId, replyData);
+  return {
+    success: result.success,
+    message: result.message,
+    sentMessageId: result.sentMessageId ?? ''
+  };
 }
   //************************************************ */
 

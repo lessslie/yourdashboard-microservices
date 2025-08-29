@@ -19,6 +19,15 @@ import {
   GmailPayload,
   EmailServiceError
 } from './interfaces/email.interfaces';
+import { 
+  TrafficLightStatus, 
+  TrafficLightDashboardResponse,
+  TrafficLightAccountStats,
+  EmailsByTrafficLightResponse,
+  UpdateTrafficLightsResponse,
+  EmailMetadataDBWithTrafficLight,
+  ReplyEmailResponse
+} from './interfaces/traffic-light.interfaces';
 
 @Injectable()
 export class EmailsService {
@@ -1502,9 +1511,9 @@ private decodeJWTPayload(token: string): { sub: number; email: string; nombre: s
 
 
   //********************************************************** */
+
 /**
- * 📧 RESPONDER EMAIL CON JWT
- * Busca el email original y envía una respuesta
+ * Responder email con JWT - ACTUALIZADO CON SEMÁFORO
  */
 async replyToEmailWithJWT(
   jwtToken: string,
@@ -1513,92 +1522,326 @@ async replyToEmailWithJWT(
     body: string;
     bodyHtml?: string;
   }
-): Promise<{
-  success: boolean;
-  message: string;
-  sentMessageId: string;
-}> {
+): Promise<ReplyEmailResponse> {
   try {
-    this.logger.log(`📧 Iniciando respuesta al email ${messageId} con JWT token`);
+    this.logger.log(`Iniciando respuesta al email ${messageId} con JWT token`);
 
     // 1️⃣ EXTRAER USER ID DEL JWT TOKEN
     const userId = this.extractUserIdFromJWT(jwtToken);
     
     if (!userId) {
-      throw new UnauthorizedException('Token JWT inválido - no se pudo extraer userId');
+      return {
+        success: false,
+        error: 'Token JWT inválido - no se pudo extraer userId'
+      };
     }
 
-    this.logger.log(`🔍 Usuario extraído del JWT: ${userId}`);
+    this.logger.log(`Usuario extraído del JWT: ${userId}`);
 
-    // 2️⃣ OBTENER TODAS LAS CUENTAS GMAIL DEL USUARIO
-    const cuentasGmail = await this.databaseService.obtenerCuentasGmailUsuario(userId);
+    // 2️⃣ BUSCAR EL EMAIL Y LA CUENTA EN UN SOLO QUERY
+    const emailResult = await this.databaseService.findEmailByIdForUser(messageId, userId);
     
-    if (!cuentasGmail || cuentasGmail.length === 0) {
-      throw new NotFoundException(`Usuario ${userId} no tiene cuentas Gmail conectadas`);
+    if (!emailResult) {
+      return {
+        success: false,
+        error: `Email ${messageId} no encontrado o no pertenece al usuario`
+      };
     }
 
-    this.logger.log(`📧 Usuario ${userId} tiene ${cuentasGmail.length} cuentas Gmail`);
+    const { email, cuentaGmail } = emailResult;
+    console.log('🔍 DEBUG - Email encontrado:', email);
+    this.logger.log(`Email encontrado en cuenta: ${cuentaGmail.email_gmail}`);
 
-    // 3️⃣ BUSCAR EL EMAIL ORIGINAL EN TODAS LAS CUENTAS
-    let emailOriginal: EmailDetail | null = null;
-    let cuentaEncontrada: any = null;
-    let accessToken: string = '';
-
-    for (const cuenta of cuentasGmail) {
-      try {
-        this.logger.log(`🔍 Buscando email ${messageId} en cuenta ${cuenta.email_gmail} (ID: ${cuenta.id})`);
-        
-        // Obtener token para esta cuenta específica
-        accessToken = await this.getValidTokenForAccount(cuenta.id);
-        
-        // Intentar obtener el email desde Gmail API
-        emailOriginal = await this.getEmailFromGmailAPI(accessToken, cuenta.id.toString(), messageId);
-        cuentaEncontrada = cuenta;
-        
-        this.logger.log(`✅ Email ${messageId} encontrado en cuenta ${cuenta.email_gmail}`);
-        break;
-        
-      } catch (error) {
-        // Si no está en esta cuenta, continuar con la siguiente
-        this.logger.debug(`📭 Email ${messageId} no encontrado en cuenta ${cuenta.email_gmail}: ${error}`);
-        continue;
-      }
+    // 3️⃣ OBTENER TOKEN DE ACCESO VÁLIDO
+    const accessToken = await this.getValidTokenForAccount(cuentaGmail.id);
+    
+    if (!accessToken) {
+      return {
+        success: false,
+        error: 'No se pudo obtener token de acceso para Gmail'
+      };
     }
 
-    // 4️⃣ VERIFICAR QUE SE ENCONTRÓ EL EMAIL
-    if (!emailOriginal || !cuentaEncontrada) {
-      throw new NotFoundException(
-        `Email ${messageId} no encontrado en ninguna de las ${cuentasGmail.length} cuentas Gmail del usuario`
+    // 4️⃣ OBTENER EMAIL COMPLETO DESDE GMAIL API
+    let emailCompleto: EmailDetail;
+    try {
+      emailCompleto = await this.getEmailFromGmailAPI(
+        accessToken, 
+        cuentaGmail.id.toString(), 
+        messageId
       );
+    } catch (error) {
+      this.logger.error('Error obteniendo email completo:', error);
+      return {
+        success: false,
+        error: 'No se pudo obtener el email completo desde Gmail'
+      };
     }
 
     // 5️⃣ ENVIAR LA RESPUESTA
     const sentMessageId = await this.sendReplyEmail(
       accessToken,
-      emailOriginal,
+      emailCompleto,
       replyData,
-      cuentaEncontrada.email_gmail
+      cuentaGmail.email_gmail
     );
 
-    this.logger.log(`✅ Respuesta enviada exitosamente con ID: ${sentMessageId}`);
+    // 🚦 6️⃣ MARCAR EMAIL COMO RESPONDIDO EN BD
+    let trafficLightUpdated = false;
+    try {
+      const markResult = await this.databaseService.markEmailAsReplied(messageId);
+      
+      if (markResult) {
+        trafficLightUpdated = true;
+        this.logger.log(
+          `Semáforo actualizado: ${markResult.old_status} → ${markResult.new_status} ` +
+          `(ahorró ${markResult.days_saved} días sin respuesta)`
+        );
+      }
+    } catch (dbError) {
+      this.logger.error('Error actualizando semáforo (no crítico):', dbError);
+      // No fallar toda la operación por esto
+    }
+
+    // 7️⃣ INVALIDAR CACHE (si existe)
+    try {
+      // Solo si tienes cache service implementado
+      // await this.cacheService.invalidateEmailCache(cuentaGmail.id);
+    } catch (cacheError) {
+      this.logger.warn('Error invalidando cache (ignorado):', cacheError);
+    }
+
+    this.logger.log(`Respuesta enviada exitosamente con ID: ${sentMessageId}`);
 
     return {
       success: true,
-      message: `Respuesta enviada exitosamente desde ${cuentaEncontrada.email_gmail}`,
-      sentMessageId
+      message: `Respuesta enviada exitosamente desde ${cuentaGmail.email_gmail}`,
+      sentMessageId,
+      traffic_light_updated: trafficLightUpdated
     };
 
   } catch (error) {
-    this.logger.error('❌ Error enviando respuesta:', error);
+    this.logger.error('Error enviando respuesta:', error);
     
-    if (error instanceof UnauthorizedException || error instanceof NotFoundException) {
-      throw error;
-    }
-    
-    throw new Error('Error interno enviando respuesta: ' + (error as Error).message);
+    return {
+      success: false,
+      error: `Error interno enviando respuesta: ${(error as Error).message}`
+    };
   }
 }
 
+/**
+ * Dashboard del semáforo
+ */
+async getTrafficLightDashboard(authHeader: string): Promise<TrafficLightDashboardResponse> {
+  try {
+    const userId = this.extractUserIdFromJWT(authHeader);
+    
+    if (!userId) {
+      return {
+        success: false,
+        dashboard: [],
+        ultima_actualizacion: new Date().toISOString(),
+        error: 'Token JWT inválido - no se pudo extraer userId'
+      };
+    }
+
+    this.logger.log(`Obteniendo dashboard de semáforo para usuario ${userId}`);
+    
+    // Obtener todas las cuentas del usuario
+    const cuentasGmail = await this.databaseService.obtenerCuentasGmailUsuario(userId);
+    
+    if (!cuentasGmail || cuentasGmail.length === 0) {
+      this.logger.warn(`Usuario ${userId} no tiene cuentas Gmail conectadas`);
+      return {
+        success: true,
+        dashboard: [],
+        ultima_actualizacion: new Date().toISOString()
+      };
+    }
+
+    const dashboard: TrafficLightAccountStats[] = [];
+    
+    for (const cuenta of cuentasGmail) {
+      try {
+        const estadisticas = await this.databaseService.getTrafficLightStatsByAccount(cuenta.id);
+        
+        const totalSinResponder = estadisticas.reduce(
+          (sum, stat) => sum + parseInt(stat.count), 
+          0
+        );
+        
+        const accountStats: TrafficLightAccountStats = {
+          cuenta_id: cuenta.id,
+          email_gmail: cuenta.email_gmail,
+          nombre_cuenta: cuenta.nombre_cuenta,
+          estadisticas,
+          total_sin_responder: totalSinResponder
+        };
+        
+        dashboard.push(accountStats);
+        
+        this.logger.debug(`Cuenta ${cuenta.email_gmail}: ${totalSinResponder} emails sin responder`);
+        
+      } catch (error) {
+        this.logger.error(`Error obteniendo stats para cuenta ${cuenta.email_gmail}:`, error);
+        
+        // Continuar con las demás cuentas
+        const fallbackStats: TrafficLightAccountStats = {
+          cuenta_id: cuenta.id,
+          email_gmail: cuenta.email_gmail,
+          nombre_cuenta: cuenta.nombre_cuenta,
+          estadisticas: [],
+          total_sin_responder: 0
+        };
+        
+        dashboard.push(fallbackStats);
+      }
+    }
+    
+    this.logger.log(`Dashboard generado para ${dashboard.length} cuentas Gmail`);
+    
+    return {
+      success: true,
+      dashboard,
+      ultima_actualizacion: new Date().toISOString()
+    };
+    
+  } catch (error) {
+    this.logger.error('Error obteniendo dashboard semáforo:', error);
+    return {
+      success: false,
+      dashboard: [],
+      ultima_actualizacion: new Date().toISOString(),
+      error: (error as Error).message
+    };
+  }
+}
+
+/**
+ * Obtener emails por estado del semáforo 
+ */
+async getEmailsByTrafficLight(
+  authHeader: string,
+  status: TrafficLightStatus,
+  cuentaId?: number,
+  limit: number = 10
+): Promise<EmailsByTrafficLightResponse> {
+  try {
+    const userId = this.extractUserIdFromJWT(authHeader);
+    
+    if (!userId) {
+      return {
+        success: false,
+        status,
+        count: 0,
+        emails: [],
+        error: 'Token JWT inválido - no se pudo extraer userId'
+      };
+    }
+
+    this.logger.log(`Obteniendo emails con estado ${status} para usuario ${userId}`);
+    
+    let emails: EmailMetadataDBWithTrafficLight[] = [];
+    
+    if (cuentaId) {
+      // Verificar que la cuenta pertenece al usuario
+      const cuentasUsuario = await this.databaseService.obtenerCuentasGmailUsuario(userId);
+      const cuentaValida = cuentasUsuario.find(c => c.id === cuentaId);
+      
+      if (!cuentaValida) {
+        return {
+          success: false,
+          status,
+          count: 0,
+          emails: [],
+          error: 'Cuenta no encontrada o no autorizada'
+        };
+      }
+      
+      emails = await this.databaseService.getEmailsByTrafficLight(cuentaId, status, limit);
+      
+    } else {
+      // Obtener de todas las cuentas del usuario
+      const cuentasGmail = await this.databaseService.obtenerCuentasGmailUsuario(userId);
+      
+      const allEmails: EmailMetadataDBWithTrafficLight[] = [];
+      
+      for (const cuenta of cuentasGmail) {
+        try {
+          const emailsCuenta = await this.databaseService.getEmailsByTrafficLight(
+            cuenta.id, 
+            status, 
+            limit * 2  // Obtener más emails para mezclar mejor
+          );
+          allEmails.push(...emailsCuenta);
+        } catch (error) {
+          this.logger.warn(`Error obteniendo emails de cuenta ${cuenta.email_gmail}:`, error);
+          // Continuar con otras cuentas
+        }
+      }
+      
+      // Ordenar por días sin respuesta (descendente) y limitar
+      allEmails.sort((a, b) => b.days_without_reply - a.days_without_reply);
+      emails = allEmails.slice(0, limit);
+    }
+    
+    this.logger.log(`Encontrados ${emails.length} emails con estado ${status}`);
+    
+    return {
+      success: true,
+      status,
+      count: emails.length,
+      emails
+    };
+    
+  } catch (error) {
+    this.logger.error('Error obteniendo emails por semáforo:', error);
+    return {
+      success: false,
+      status,
+      count: 0,
+      emails: [],
+      error: (error as Error).message
+    };
+  }
+}
+
+/**
+ * Actualizar semáforos manualmente - CORREGIDO
+ */
+async updateTrafficLights(authHeader: string): Promise<UpdateTrafficLightsResponse> {
+  try {
+    const userId = this.extractUserIdFromJWT(authHeader);
+    
+    if (!userId) {
+      return {
+        success: false,
+        error: 'Token JWT inválido - no se pudo extraer userId'
+      };
+    }
+
+    this.logger.log(`Usuario ${userId} solicitó actualización de semáforos`);
+    
+    // Actualizar todos los semáforos del sistema
+    const estadisticas = await this.databaseService.updateAllTrafficLights();
+    
+    this.logger.log(`Semáforos actualizados: ${estadisticas.actualizados} emails procesados`);
+    
+    return {
+      success: true,
+      message: 'Semáforos actualizados correctamente',
+      estadisticas
+    };
+    
+  } catch (error) {
+    this.logger.error('Error actualizando semáforos:', error);
+    return {
+      success: false,
+      error: (error as Error).message
+    };
+  }
+}
 /**
  * 📤 ENVIAR RESPUESTA USANDO GMAIL API
  */
