@@ -4,14 +4,12 @@ import {
   Post,
   Query,
   Headers,
-  Delete,
   Param,
   BadRequestException, 
   UnauthorizedException,
   NotFoundException,
   Body,
   Logger,
-  Request
 } from '@nestjs/common';
 import { 
   ApiTags, 
@@ -31,9 +29,10 @@ import {
   OrchestratorStatsDto,
   OrchestratorErrorDto,
   ReplyEmailDto,
-  ReplyResponseDto
+  ReplyResponseDto,
 } from './dto';
 import { ReplyEmailRequest, ReplyEmailResponse } from './interfaces/emails.interfaces';
+import { OrchestratorEmailsByTrafficLight, OrchestratorTrafficLightDashboard, OrchestratorUpdateTrafficLights, TrafficLightStatus } from './interfaces';
 
 @Controller('emails')
 @ApiTags('Emails')
@@ -43,7 +42,7 @@ export class EmailsOrchestratorController {
   constructor(private readonly emailsService: EmailsOrchestratorService) {}
 
   /**
-   * 🔄 POST /emails/sync - Sincronización manual coordinada
+   * POST /emails/sync - Sincronización manual coordinada
    */
   @Post('sync')
   @ApiOperation({ 
@@ -97,7 +96,7 @@ export class EmailsOrchestratorController {
   }
 
   /**
-   * 🔄 POST /emails/sync/incremental - Sincronización incremental coordinada
+   * POST /emails/sync/incremental - Sincronización incremental coordinada
    */
   @Post('sync/incremental')
   @ApiOperation({ 
@@ -146,7 +145,7 @@ export class EmailsOrchestratorController {
   }
 
   /**
-   * 📧 GET /emails/inbox - Obtener inbox coordinado
+   * GET /emails/inbox - Obtener inbox coordinado
    */
   @Get('inbox')
   @ApiOperation({ 
@@ -181,7 +180,7 @@ export class EmailsOrchestratorController {
   }
 
   /**
-   * 🔍 GET /emails/search - Buscar emails coordinado
+   * GET /emails/search - Buscar emails coordinado
    */
   @Get('search')
   @ApiOperation({ 
@@ -236,11 +235,11 @@ export class EmailsOrchestratorController {
   }
 
   /**
-   * 🌐 GET /emails/search-all-accounts - Buscar emails (TODAS LAS CUENTAS)
+   * GET /emails/search-all-accounts - Buscar emails (TODAS LAS CUENTAS)
    */
   @Get('search-all-accounts')
   @ApiOperation({ 
-    summary: '🌐 Buscar emails en TODAS las cuentas Gmail del usuario',
+    summary: 'Buscar emails en TODAS las cuentas Gmail del usuario',
     description: 'Coordina MS-Auth + MS-Email para buscar emails en TODAS las cuentas Gmail asociadas al usuario principal. Unifica resultados y los ordena por fecha globalmente.'
   })
   @ApiQuery({ 
@@ -352,11 +351,11 @@ export class EmailsOrchestratorController {
   }
 
   /**
-   * 🔥 GET /emails/inbox-all-accounts - INBOX UNIFICADO (TODAS LAS CUENTAS)
+   * GET /emails/inbox-all-accounts - INBOX UNIFICADO (TODAS LAS CUENTAS)
    */
   @Get('inbox-all-accounts')
   @ApiOperation({ 
-    summary: '🔥 Inbox unificado de TODAS las cuentas Gmail',
+    summary: 'Inbox unificado de TODAS las cuentas Gmail',
     description: `
       Obtiene los emails más recientes de TODAS las cuentas Gmail del usuario unificados y ordenados por fecha.
       Similar a /emails/inbox pero abarca múltiples cuentas en lugar de una sola.
@@ -446,7 +445,7 @@ export class EmailsOrchestratorController {
   }
 
   /**
-   * 📊 GET /emails/stats - Estadísticas coordinadas
+   * GET /emails/stats - Estadísticas coordinadas
    */
   @Get('stats')
   @ApiOperation({ 
@@ -469,128 +468,373 @@ export class EmailsOrchestratorController {
 
     return this.emailsService.getEmailStats(cuentaGmailId);
   }
-  /**
- * ✉️ POST /emails/:id/reply
- */
-@Post(':id/reply')
-@ApiBearerAuth('JWT-auth') 
-@ApiOperation({ 
-  summary: 'Responder a un email específico',
-  description: 'Envía una respuesta a un email usando la cuenta Gmail correspondiente.'
-})
-@ApiParam({ name: 'id', description: 'ID del email a responder', example: '1847a8e123456789' })
-@ApiBody({ type: ReplyEmailDto })
-@ApiOkResponse({ description: 'Respuesta enviada exitosamente', type: ReplyResponseDto })
-@ApiUnauthorizedResponse({ description: 'Token JWT inválido', type: OrchestratorErrorDto })
-@ApiNotFoundResponse({ description: 'Email no encontrado', type: OrchestratorErrorDto })
-@ApiBadRequestResponse({ description: 'Datos inválidos', type: OrchestratorErrorDto })
-async replyToEmail(
-  @Param('id') emailId: string,
-  @Body() replyData: ReplyEmailRequest,
-  @Headers('authorization') authHeader: string
-): Promise<ReplyEmailResponse> {
-  try {
-    this.logger.log(`🔍 DEBUG - authHeader: ${authHeader ? 'presente' : 'undefined'}`);
 
+  // =================
+  // ENDPOINTS SEMAFORO
+  // =================
+
+  /**
+   * GET /emails/traffic-light/dashboard - Dashboard del semáforo
+   */
+  @Get('traffic-light/dashboard')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ 
+    summary: 'Dashboard del semáforo de emails',
+    description: 'Obtiene estadísticas del semáforo agrupadas por cuenta Gmail del usuario autenticado.'
+  })
+  @ApiOkResponse({ 
+    description: 'Dashboard del semáforo obtenido exitosamente',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        source: { type: 'string', example: 'orchestrator' },
+        data: {
+          type: 'object',
+          properties: {
+            dashboard: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  cuentaId: { type: 'number', example: 1 },
+                  emailGmail: { type: 'string', example: 'usuario@gmail.com' },
+                  nombreCuenta: { type: 'string', example: 'Juan Pérez' },
+                  totalSinResponder: { type: 'number', example: 25 },
+                  estadisticas: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        trafficLightStatus: { 
+                          type: 'string', 
+                          enum: ['green', 'yellow', 'orange', 'red'],
+                          example: 'red' 
+                        },
+                        count: { type: 'string', example: '15' },
+                        avgDays: { type: 'string', example: '7.2' }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            ultimaActualizacion: { type: 'string', example: '2025-08-30T15:30:00Z' }
+          }
+        }
+      }
+    }
+  })
+  @ApiUnauthorizedResponse({ 
+    description: 'Token JWT requerido',
+    type: OrchestratorErrorDto 
+  })
+  async getTrafficLightDashboard(
+    @Headers('authorization') authHeader: string
+  ): Promise<OrchestratorTrafficLightDashboard> {
     if (!authHeader) {
       throw new UnauthorizedException('Token JWT requerido - usa el botón Authorize');
     }
 
-    const userId = this.emailsService.extractUserIdFromJWT(authHeader);
-    this.logger.log(`📧 Enviando respuesta al email ${emailId} para usuario ${userId}`);
-
-    if (!replyData.body || replyData.body.trim() === '') {
-      throw new BadRequestException('El contenido de la respuesta es requerido');
-    }
-
-    const result = await this.emailsService.replyToEmail(
-      emailId,
-      replyData,
-      authHeader
-    );
-
-    if (userId) {
-      await this.emailsService.invalidateEmailCaches(userId);
-    }
-
-    this.logger.log(`✅ Respuesta enviada exitosamente: ${result.sentMessageId}`);
-    return result;
-
-  } catch (error) {
-    this.logger.error(`❌ Error en respuesta de email:`, error);
+    this.logger.log('Dashboard del semáforo via orchestrator');
     
-    if (error instanceof NotFoundException || 
-        error instanceof UnauthorizedException || 
-        error instanceof BadRequestException) {
-      throw error;
-    }
-    
-    throw new BadRequestException('Error interno enviando respuesta');
+    return this.emailsService.getTrafficLightDashboard(authHeader);
   }
-}
-/**
- * 📧 GET /emails/:id - Email específico coordinado
- */
-@Get(':id')
-@ApiBearerAuth('JWT-auth')
-@ApiOperation({ 
-  summary: 'Obtener email por ID',
-  description: 'Coordina MS-Auth + MS-Email para obtener email específico. Solo necesita messageId + JWT token.'
-})
-@ApiParam({ 
-  name: 'id', 
-  description: 'ID del email en Gmail', 
-  example: '1847a8e123456789' 
-})
-@ApiOkResponse({ 
-  description: 'Email obtenido exitosamente',
-  schema: {
-    type: 'object',
-    properties: {
-      success: { type: 'boolean', example: true },
-      source: { type: 'string', example: 'orchestrator' },
-      data: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', example: '1847a8e123456789' },
-          subject: { type: 'string', example: 'Reunión de proyecto' },
-          fromEmail: { type: 'string', example: 'jefe@empresa.com' },
-          fromName: { type: 'string', example: 'Juan Pérez' },
-          receivedDate: { type: 'string', example: '2024-01-15T10:30:00Z' },
-          isRead: { type: 'boolean', example: false },
-          hasAttachments: { type: 'boolean', example: true },
-          toEmails: { type: 'array', items: { type: 'string' } },
-          bodyText: { type: 'string', example: 'Contenido del email...' },
-          bodyHtml: { type: 'string', example: '<p>Contenido del email...</p>' },
-          sourceAccount: { type: 'string', example: 'usuario@gmail.com' },
-          sourceAccountId: { type: 'number', example: 4 }
+
+  /**
+   * GET /emails/traffic-light/:status - Emails por estado del semáforo
+   */
+  @Get('traffic-light/:status')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ 
+    summary: 'Obtener emails por estado del semáforo',
+    description: 'Obtiene emails filtrados por color del semáforo (green, yellow, orange, red) del usuario autenticado.'
+  })
+  @ApiParam({ 
+    name: 'status', 
+    enum: TrafficLightStatus,
+    description: 'Color del semáforo',
+    example: 'red'
+  })
+  @ApiQuery({ 
+    name: 'cuentaId', 
+    required: false, 
+    description: 'ID de cuenta Gmail específica (opcional)',
+    example: 1
+  })
+  @ApiQuery({ 
+    name: 'limit', 
+    required: false, 
+    description: 'Límite de resultados (máximo 100)',
+    example: 10
+  })
+  @ApiOkResponse({ 
+    description: 'Emails por estado obtenidos exitosamente',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        source: { type: 'string', example: 'orchestrator' },
+        status: { 
+          type: 'string', 
+          enum: ['green', 'yellow', 'orange', 'red'],
+          example: 'red'
+        },
+        data: {
+          type: 'object',
+          properties: {
+            count: { type: 'number', example: 5 },
+            emails: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'number', example: 12345 },
+                  messageId: { type: 'string', example: '1847a8e123456789' },
+                  subject: { type: 'string', example: 'Proyecto urgente' },
+                  fromEmail: { type: 'string', example: 'cliente@empresa.com' },
+                  fromName: { type: 'string', example: 'María García' },
+                  receivedDate: { type: 'string', example: '2025-08-20T10:30:00Z' },
+                  isRead: { type: 'boolean', example: false },
+                  hasAttachments: { type: 'boolean', example: true },
+                  daysWithoutReply: { type: 'number', example: 9 },
+                  trafficLightStatus: { type: 'string', example: 'red' },
+                  repliedAt: { type: 'string', nullable: true, example: null },
+                  sourceAccount: { type: 'string', example: 'usuario@gmail.com' },
+                  sourceAccountId: { type: 'number', example: 1 }
+                }
+              }
+            }
+          }
         }
       }
     }
-  }
-})
-@ApiUnauthorizedResponse({ 
-  description: 'Token JWT faltante o inválido',
-  type: OrchestratorErrorDto 
-})
-@ApiNotFoundResponse({ 
-  description: 'Email no encontrado',
-  type: OrchestratorErrorDto 
-})
-async getEmailById(
-  @Param('id') emailId: string,
-  @Headers('authorization') authHeader: string
-) {
-  if (!authHeader) {
-    throw new UnauthorizedException('Token JWT requerido - usa el botón Authorize');
+  })
+  @ApiBadRequestResponse({ 
+    description: 'Estado del semáforo inválido',
+    type: OrchestratorErrorDto 
+  })
+  @ApiUnauthorizedResponse({ 
+    description: 'Token JWT requerido',
+    type: OrchestratorErrorDto 
+  })
+  async getEmailsByTrafficLight(
+    @Headers('authorization') authHeader: string,
+    @Param('status') status: string,
+    @Query('cuentaId') cuentaId?: string,
+    @Query('limit') limit?: string
+  ): Promise<OrchestratorEmailsByTrafficLight> {
+    if (!authHeader) {
+      throw new UnauthorizedException('Token JWT requerido - usa el botón Authorize');
+    }
+
+    // Validar estado del semáforo
+    if (!Object.values(TrafficLightStatus).includes(status as TrafficLightStatus)) {
+      throw new BadRequestException('Estado del semáforo inválido. Debe ser: green, yellow, orange, red');
+    }
+
+    const trafficStatus = status as TrafficLightStatus;
+    const cuentaIdNum = cuentaId ? parseInt(cuentaId, 10) : undefined;
+    const limitNum = limit ? parseInt(limit, 10) : 10;
+
+    if (cuentaId && isNaN(cuentaIdNum!)) {
+      throw new BadRequestException('cuentaId debe ser un número válido');
+    }
+
+    if (limit && (isNaN(limitNum) || limitNum < 1 || limitNum > 100)) {
+      throw new BadRequestException('limit debe ser un número entre 1 y 100');
+    }
+
+    this.logger.log(`Obteniendo emails con estado ${trafficStatus} via orchestrator`);
+    
+    return this.emailsService.getEmailsByTrafficLight(
+      authHeader, 
+      trafficStatus, 
+      cuentaIdNum, 
+      limitNum
+    );
   }
 
-  if (!emailId) {
-    throw new BadRequestException('ID del mensaje es requerido');
+  /**
+   * POST /emails/traffic-light/update - Actualizar semáforos manualmente
+   */
+  @Post('traffic-light/update')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ 
+    summary: 'Actualizar semáforos de todos los emails',
+    description: 'Recalcula los estados del semáforo para todos los emails del usuario autenticado.'
+  })
+  @ApiOkResponse({ 
+    description: 'Semáforos actualizados correctamente',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        source: { type: 'string', example: 'orchestrator' },
+        data: {
+          type: 'object',
+          properties: {
+            message: { type: 'string', example: 'Semáforos actualizados correctamente' },
+            estadisticas: {
+              type: 'object',
+              properties: {
+                actualizados: { type: 'number', example: 24450 },
+                tiempoMs: { type: 'number', example: 1915 },
+                porEstado: {
+                  type: 'object',
+                  properties: {
+                    red: { type: 'number', example: 24057 },
+                    orange: { type: 'number', example: 163 },
+                    yellow: { type: 'number', example: 44 },
+                    green: { type: 'number', example: 186 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  })
+  @ApiUnauthorizedResponse({ 
+    description: 'Token JWT requerido',
+    type: OrchestratorErrorDto 
+  })
+  async updateTrafficLights(
+    @Headers('authorization') authHeader: string
+  ): Promise<OrchestratorUpdateTrafficLights> {
+    if (!authHeader) {
+      throw new UnauthorizedException('Token JWT requerido - usa el botón Authorize');
+    }
+
+    this.logger.log('Actualizando semáforos via orchestrator');
+    
+    return this.emailsService.updateTrafficLights(authHeader);
   }
 
-  this.logger.log(`🎭 ORCHESTRATOR - Obteniendo email ${emailId} con JWT token`);
-  
-  return this.emailsService.getEmailByIdWithJWT(authHeader, emailId);
-}
+  /**
+   * POST /emails/:id/reply
+   */
+  @Post(':id/reply')
+  @ApiBearerAuth('JWT-auth') 
+  @ApiOperation({ 
+    summary: 'Responder a un email específico',
+    description: 'Envía una respuesta a un email usando la cuenta Gmail correspondiente.'
+  })
+  @ApiParam({ name: 'id', description: 'ID del email a responder', example: '1847a8e123456789' })
+  @ApiBody({ type: ReplyEmailDto })
+  @ApiOkResponse({ description: 'Respuesta enviada exitosamente', type: ReplyResponseDto })
+  @ApiUnauthorizedResponse({ description: 'Token JWT inválido', type: OrchestratorErrorDto })
+  @ApiNotFoundResponse({ description: 'Email no encontrado', type: OrchestratorErrorDto })
+  @ApiBadRequestResponse({ description: 'Datos inválidos', type: OrchestratorErrorDto })
+  async replyToEmail(
+    @Param('id') emailId: string,
+    @Body() replyData: ReplyEmailRequest,
+    @Headers('authorization') authHeader: string
+  ): Promise<ReplyEmailResponse> {
+    try {
+      this.logger.log(`DEBUG - authHeader: ${authHeader ? 'presente' : 'undefined'}`);
+
+      if (!authHeader) {
+        throw new UnauthorizedException('Token JWT requerido - usa el botón Authorize');
+      }
+
+      const userId = this.emailsService.extractUserIdFromJWT(authHeader);
+      this.logger.log(`Enviando respuesta al email ${emailId} para usuario ${userId}`);
+
+      if (!replyData.body || replyData.body.trim() === '') {
+        throw new BadRequestException('El contenido de la respuesta es requerido');
+      }
+
+      const result = await this.emailsService.replyToEmail(
+        emailId,
+        replyData,
+        authHeader
+      );
+
+      if (userId) {
+        await this.emailsService.invalidateEmailCaches(userId);
+      }
+
+      this.logger.log(`Respuesta enviada exitosamente: ${result.sentMessageId}`);
+      return result;
+
+    } catch (error) {
+      this.logger.error(`Error en respuesta de email:`, error);
+      
+      if (error instanceof NotFoundException || 
+          error instanceof UnauthorizedException || 
+          error instanceof BadRequestException) {
+        throw error;
+      }
+      
+      throw new BadRequestException('Error interno enviando respuesta');
+    }
+  }
+
+  /**
+   * GET /emails/:id - Email específico coordinado
+   */
+  @Get(':id')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ 
+    summary: 'Obtener email por ID',
+    description: 'Coordina MS-Auth + MS-Email para obtener email específico. Solo necesita messageId + JWT token.'
+  })
+  @ApiParam({ 
+    name: 'id', 
+    description: 'ID del email en Gmail', 
+    example: '1847a8e123456789' 
+  })
+  @ApiOkResponse({ 
+    description: 'Email obtenido exitosamente',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        source: { type: 'string', example: 'orchestrator' },
+        data: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: '1847a8e123456789' },
+            subject: { type: 'string', example: 'Reunión de proyecto' },
+            fromEmail: { type: 'string', example: 'jefe@empresa.com' },
+            fromName: { type: 'string', example: 'Juan Pérez' },
+            receivedDate: { type: 'string', example: '2024-01-15T10:30:00Z' },
+            isRead: { type: 'boolean', example: false },
+            hasAttachments: { type: 'boolean', example: true },
+            toEmails: { type: 'array', items: { type: 'string' } },
+            bodyText: { type: 'string', example: 'Contenido del email...' },
+            bodyHtml: { type: 'string', example: '<p>Contenido del email...</p>' },
+            sourceAccount: { type: 'string', example: 'usuario@gmail.com' },
+            sourceAccountId: { type: 'number', example: 4 }
+          }
+        }
+      }
+    }
+  })
+  @ApiUnauthorizedResponse({ 
+    description: 'Token JWT faltante o inválido',
+    type: OrchestratorErrorDto 
+  })
+  @ApiNotFoundResponse({ 
+    description: 'Email no encontrado',
+    type: OrchestratorErrorDto 
+  })
+  async getEmailById(
+    @Param('id') emailId: string,
+    @Headers('authorization') authHeader: string
+  ) {
+    if (!authHeader) {
+      throw new UnauthorizedException('Token JWT requerido - usa el botón Authorize');
+    }
+
+    if (!emailId) {
+      throw new BadRequestException('ID del mensaje es requerido');
+    }
+
+    this.logger.log(`ORCHESTRATOR - Obteniendo email ${emailId} con JWT token`);
+    
+    return this.emailsService.getEmailByIdWithJWT(authHeader, emailId);
+  }
 }

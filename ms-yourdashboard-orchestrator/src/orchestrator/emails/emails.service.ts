@@ -10,6 +10,15 @@ import {
   ReplyEmailRequest,
   ReplyEmailResponse
 } from './interfaces/emails.interfaces';
+import {
+  TrafficLightStatus,
+  TrafficLightDashboardResponse,
+  EmailsByTrafficLightResponse,
+  UpdateTrafficLightsResponse,
+  OrchestratorTrafficLightDashboard,
+  OrchestratorEmailsByTrafficLight,
+  OrchestratorUpdateTrafficLights
+} from './interfaces';
 
 // Interfaces específicas para evitar any
 export interface SyncResponse {
@@ -681,6 +690,213 @@ export class EmailsOrchestratorService {
       
       throw new HttpException(
         `Error obteniendo email: ${apiError.response?.data?.message || apiError.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  // ==============================
+  // MÉTODOS DEL SISTEMA SEMÁFORO
+  // ==============================
+
+  /**
+   * DASHBOARD DEL SEMÁFORO - Estadísticas por cuenta Gmail
+   */
+  async getTrafficLightDashboard(authHeader: string): Promise<OrchestratorTrafficLightDashboard> {
+    try {
+      this.logger.log(`Obteniendo dashboard del semáforo`);
+
+      const userId = this.extractUserIdFromJWT(authHeader);
+      
+      if (!userId) {
+        throw new UnauthorizedException('Token JWT inválido');
+      }
+
+      const response: AxiosResponse<TrafficLightDashboardResponse> = await axios.get(
+        `${this.msEmailUrl}/emails/traffic-light/dashboard`, 
+        {
+          headers: {
+            'Authorization': authHeader
+          }
+        }
+      );
+
+      if (!response.data.success) {
+        throw new HttpException(
+          response.data.error || 'Error obteniendo dashboard del semáforo',
+          HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      }
+
+      this.logger.log(`Dashboard del semáforo obtenido exitosamente`);
+      
+      return {
+        success: true,
+        source: 'orchestrator',
+        data: {
+          dashboard: response.data.dashboard,
+          ultima_actualizacion: response.data.ultima_actualizacion
+        }
+      };
+
+    } catch (error) {
+      const apiError = error as AxiosError<{ error?: string }>;
+      this.logger.error(`Error obteniendo dashboard del semáforo:`, apiError.message);
+      
+      if (apiError.response?.status === 401) {
+        throw new HttpException(
+          'Token JWT inválido o expirado',
+          HttpStatus.UNAUTHORIZED
+        );
+      }
+      
+      throw new HttpException(
+        `Error obteniendo dashboard del semáforo: ${apiError.response?.data?.error || apiError.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * OBTENER EMAILS POR COLOR DEL SEMÁFORO
+   */
+  async getEmailsByTrafficLight(
+    authHeader: string, 
+    status: TrafficLightStatus, 
+    cuentaId?: number,
+    limit: number = 10
+  ): Promise<OrchestratorEmailsByTrafficLight> {
+    try {
+      this.logger.log(`Obteniendo emails con estado ${status}`);
+
+      const userId = this.extractUserIdFromJWT(authHeader);
+      
+      if (!userId) {
+        throw new UnauthorizedException('Token JWT inválido');
+      }
+
+      // Construir parámetros de query
+      const params: { limit?: number; cuentaId?: number } = { limit };
+      if (cuentaId) {
+        params.cuentaId = cuentaId;
+      }
+
+      const response: AxiosResponse<EmailsByTrafficLightResponse> = await axios.get(
+        `${this.msEmailUrl}/emails/traffic-light/${status}`, 
+        {
+          params,
+          headers: {
+            'Authorization': authHeader
+          }
+        }
+      );
+
+      if (!response.data.success) {
+        throw new HttpException(
+          response.data.error || 'Error obteniendo emails por estado del semáforo',
+          HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      }
+
+      this.logger.log(`Obtenidos ${response.data.count} emails con estado ${status}`);
+      
+      return {
+        success: true,
+        source: 'orchestrator',
+        status: status,
+        data: {
+          count: response.data.count,
+          emails: response.data.emails
+        }
+      };
+
+    } catch (error) {
+      const apiError = error as AxiosError<{ error?: string }>;
+      this.logger.error(`Error obteniendo emails por estado del semáforo:`, apiError.message);
+      
+      if (apiError.response?.status === 401) {
+        throw new HttpException(
+          'Token JWT inválido o expirado',
+          HttpStatus.UNAUTHORIZED
+        );
+      }
+      
+      if (apiError.response?.status === 400) {
+        throw new HttpException(
+          'Estado del semáforo inválido',
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      
+      throw new HttpException(
+        `Error obteniendo emails por estado: ${apiError.response?.data?.error || apiError.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+  }
+
+  /**
+   * ACTUALIZAR SEMÁFOROS MANUALMENTE
+   */
+  async updateTrafficLights(authHeader: string): Promise<OrchestratorUpdateTrafficLights> {
+    try {
+      this.logger.log(`Actualizando semáforos de todos los emails`);
+
+      const userId = this.extractUserIdFromJWT(authHeader);
+      
+      if (!userId) {
+        throw new UnauthorizedException('Token JWT inválido');
+      }
+
+      const response: AxiosResponse<UpdateTrafficLightsResponse> = await axios.post(
+        `${this.msEmailUrl}/emails/traffic-light/update`, 
+        {}, // Body vacío
+        {
+          headers: {
+            'Authorization': authHeader
+          },
+          timeout: 30000 // 30 segundos timeout para esta operación
+        }
+      );
+
+      if (!response.data.success) {
+        throw new HttpException(
+          response.data.error || 'Error actualizando semáforos',
+          HttpStatus.INTERNAL_SERVER_ERROR
+        );
+      }
+
+      this.logger.log(`Semáforos actualizados exitosamente: ${response.data.estadisticas?.actualizados} emails`);
+      
+      return {
+        success: true,
+        source: 'orchestrator',
+        data: {
+          message: response.data.message || 'Semáforos actualizados correctamente',
+          estadisticas: response.data.estadisticas!
+        }
+      };
+
+    } catch (error) {
+      const apiError = error as AxiosError<{ error?: string }>;
+      this.logger.error(`Error actualizando semáforos:`, apiError.message);
+      
+      if (apiError.response?.status === 401) {
+        throw new HttpException(
+          'Token JWT inválido o expirado',
+          HttpStatus.UNAUTHORIZED
+        );
+      }
+      
+      if (apiError.code === 'ECONNABORTED') {
+        throw new HttpException(
+          'Timeout actualizando semáforos - la operación tomó demasiado tiempo',
+          HttpStatus.REQUEST_TIMEOUT
+        );
+      }
+      
+      throw new HttpException(
+        `Error actualizando semáforos: ${apiError.response?.data?.error || apiError.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }

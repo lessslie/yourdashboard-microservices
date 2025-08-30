@@ -65,6 +65,10 @@ CREATE TABLE emails_sincronizados (
   etiquetas_gmail TEXT[], -- Array de labels de Gmail
   tamano_bytes INTEGER, -- Tamaño del email en bytes
   fecha_sincronizado TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+  replied_at TIMESTAMP WITHOUT TIME ZONE, -- Fecha cuando se respondió el email (NULL = no respondido)
+  days_without_reply INTEGER DEFAULT 0, -- Días transcurridos sin respuesta desde fecha_recibido
+  traffic_light_status VARCHAR(10) DEFAULT 'green' -- Estado del semáforo: green, yellow, orange, red
+
   -- Constraint: Un mensaje de Gmail no se puede duplicar por cuenta
   UNIQUE(cuenta_gmail_id, gmail_message_id)
 );
@@ -150,25 +154,52 @@ USING gin(to_tsvector('spanish',
   COALESCE(destinatario_email, '')
 ));
 
+-----------------------------------------
 -- Índice compuesto para filtros comunes
+-----------------------------------------
 CREATE INDEX idx_emails_filters 
 ON emails_sincronizados(cuenta_gmail_id, esta_leido, tiene_adjuntos, fecha_recibido DESC);
 
+
+----------------------------------------------------
 -- Índice para búsqueda por remitente específico
+----------------------------------------------------
 CREATE INDEX idx_emails_remitente_specific 
 ON emails_sincronizados(cuenta_gmail_id, remitente_email) 
 WHERE remitente_email IS NOT NULL;
 
+-----------------------------------------------------
 -- Índice para emails no leídos (consulta frecuente)
+-----------------------------------------------------
 CREATE INDEX idx_emails_unread 
 ON emails_sincronizados(cuenta_gmail_id, fecha_recibido DESC) 
 WHERE esta_leido = FALSE;
 
+-----------------------------------------
 -- Índices para sesiones_jwt
+-----------------------------------------
 CREATE INDEX idx_sesiones_usuario_principal ON sesiones_jwt(usuario_principal_id);
 CREATE INDEX idx_sesiones_jwt_token ON sesiones_jwt(jwt_token);
 CREATE INDEX idx_sesiones_expira_en ON sesiones_jwt(expira_en);
 CREATE INDEX idx_sesiones_activa ON sesiones_jwt(esta_activa);
+
+
+---------------------------------------------
+-- Índices para el sistema de semáforo
+---------------------------------------------
+CREATE INDEX idx_emails_traffic_light_status 
+ON emails_sincronizados(traffic_light_status);
+
+CREATE INDEX idx_emails_account_traffic_status 
+ON emails_sincronizados(cuenta_gmail_id, traffic_light_status);
+
+CREATE INDEX idx_emails_days_without_reply 
+ON emails_sincronizados(cuenta_gmail_id, days_without_reply DESC, fecha_recibido ASC)
+WHERE replied_at IS NULL;
+
+CREATE INDEX idx_emails_replied_recent 
+ON emails_sincronizados(cuenta_gmail_id, replied_at DESC)
+WHERE replied_at IS NOT NULL;
 
 -- =====================================
 -- PASO 5: FUNCIONES ÚTILES
@@ -186,7 +217,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+
+----------------------------------------------
 -- Función: Obtener estadísticas del sistema
+----------------------------------------------
 CREATE OR REPLACE FUNCTION obtener_estadisticas_sistema()
 RETURNS TABLE (
     total_usuarios INTEGER,
@@ -208,7 +242,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+---------------------------------------------------
 -- Función: Obtener cuentas Gmail de un usuario
+---------------------------------------------------
 CREATE OR REPLACE FUNCTION obtener_cuentas_gmail_usuario(p_usuario_id INTEGER)
 RETURNS TABLE (
     cuenta_id INTEGER,
@@ -241,7 +277,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+------------------------------------------------------
 -- Función: Eliminar cuenta Gmail de forma segura
+------------------------------------------------------
 CREATE OR REPLACE FUNCTION eliminar_cuenta_gmail_segura(p_cuenta_id INTEGER)
 RETURNS JSON AS $$
 DECLARE
@@ -274,7 +312,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+--------------------------------------------------------
 -- Función: Obtener estadísticas rápidas por cuenta
+--------------------------------------------------------
 CREATE OR REPLACE FUNCTION obtener_stats_emails_cuenta(p_cuenta_id INTEGER)
 RETURNS TABLE (
     total_emails BIGINT,
@@ -317,8 +357,9 @@ BEGIN
     WHERE cuenta_gmail_id = p_cuenta_id;
 END;
 $$ LANGUAGE plpgsql;
-
+---------------------------------------------------------------------------------
 -- Función: Obtener reporte de emails por antigüedad (solo consulta, no borra)
+---------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION obtener_reporte_emails_antiguos(
     p_dias_antiguedad INTEGER DEFAULT 365
 )
@@ -342,6 +383,110 @@ BEGIN
     ORDER BY emails_antiguos DESC;
 END;
 $ LANGUAGE plpgsql;
+
+
+
+-- Función: Calcular estado del semáforo
+CREATE OR REPLACE FUNCTION calculate_traffic_light_status(days_elapsed INTEGER)
+RETURNS VARCHAR(10) AS $$
+BEGIN
+    IF days_elapsed >= 5 THEN
+        RETURN 'red';
+    ELSIF days_elapsed = 4 THEN
+        RETURN 'orange';  
+    ELSIF days_elapsed = 3 THEN
+        RETURN 'yellow';
+    ELSE
+        RETURN 'green';
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Función: Marcar email como respondido
+CREATE OR REPLACE FUNCTION mark_email_as_replied(gmail_message_id_param VARCHAR(255))
+RETURNS TABLE (
+    email_id INTEGER,
+    old_status VARCHAR(10),
+    new_status VARCHAR(10),
+    days_saved INTEGER
+) AS $$
+DECLARE 
+    email_record RECORD;
+BEGIN
+    SELECT id, days_without_reply, traffic_light_status 
+    INTO email_record
+    FROM emails_sincronizados 
+    WHERE gmail_message_id = gmail_message_id_param;
+
+    IF FOUND THEN
+        UPDATE emails_sincronizados 
+        SET 
+            replied_at = NOW(),
+            days_without_reply = 0,
+            traffic_light_status = 'green'
+        WHERE gmail_message_id = gmail_message_id_param;
+
+        RETURN QUERY
+        SELECT 
+            email_record.id,
+            email_record.traffic_light_status,
+            'green'::VARCHAR(10),
+            email_record.days_without_reply;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-------------------------------------------------
+-- Función: Actualizar todos los semáforos
+-------------------------------------------------
+CREATE OR REPLACE FUNCTION update_all_traffic_lights()
+RETURNS TABLE (
+    actualizados INTEGER,
+    por_estado JSON,
+    tiempo_ms INTEGER
+) AS $$
+DECLARE
+    start_time TIMESTAMP;
+    end_time TIMESTAMP;
+    updated_count INTEGER;
+    status_counts JSON;
+BEGIN
+    start_time := clock_timestamp();
+    
+    WITH email_updates AS (
+        UPDATE emails_sincronizados 
+        SET 
+            days_without_reply = CASE 
+                WHEN replied_at IS NOT NULL THEN 0
+                ELSE EXTRACT(DAY FROM (NOW() - fecha_recibido))::INTEGER
+            END,
+            traffic_light_status = CASE 
+                WHEN replied_at IS NOT NULL THEN 'green'
+                ELSE calculate_traffic_light_status(
+                    EXTRACT(DAY FROM (NOW() - fecha_recibido))::INTEGER
+                )
+            END
+        WHERE fecha_recibido IS NOT NULL
+        RETURNING 1
+    )
+    SELECT COUNT(*)::INTEGER INTO updated_count FROM email_updates;
+    
+    SELECT json_build_object(
+        'red', COALESCE((SELECT COUNT(*) FROM emails_sincronizados WHERE traffic_light_status = 'red'), 0),
+        'orange', COALESCE((SELECT COUNT(*) FROM emails_sincronizados WHERE traffic_light_status = 'orange'), 0),
+        'yellow', COALESCE((SELECT COUNT(*) FROM emails_sincronizados WHERE traffic_light_status = 'yellow'), 0),
+        'green', COALESCE((SELECT COUNT(*) FROM emails_sincronizados WHERE traffic_light_status = 'green'), 0)
+    ) INTO status_counts;
+    
+    end_time := clock_timestamp();
+    
+    RETURN QUERY
+    SELECT 
+        updated_count,
+        status_counts,
+        EXTRACT(MILLISECONDS FROM (end_time - start_time))::INTEGER;
+END;
+$$ LANGUAGE plpgsql;
 
 -- =====================================
 -- PASO 6: TRIGGERS
@@ -381,6 +526,14 @@ COMMENT ON COLUMN cuentas_gmail_asociadas.backfill_page_token IS 'Token de pagin
 COMMENT ON COLUMN cuentas_gmail_asociadas.backfill_checkpoint_date IS 'Checkpoint de fecha para backfill (DEPRECADO - usar page_token)';
 COMMENT ON COLUMN emails_sincronizados.destinatario_email IS 'Email del destinatario principal (primer TO)';
 COMMENT ON COLUMN emails_sincronizados.tamano_bytes IS 'Tamaño del email en bytes (incluye adjuntos)';
+
+----------------------
+-- comentarios semáforo
+----------------------
+COMMENT ON COLUMN emails_sincronizados.replied_at IS 'Fecha cuando se respondió el email (NULL = no respondido)';
+COMMENT ON COLUMN emails_sincronizados.days_without_reply IS 'Días transcurridos sin respuesta desde fecha_recibido';
+COMMENT ON COLUMN emails_sincronizados.traffic_light_status IS 'Estado del semáforo: green, yellow, orange, red';
+
 
 -- =====================================
 -- PASO 8: DATOS DE EJEMPLO (OPCIONAL)
@@ -495,6 +648,22 @@ CREATE INDEX idx_messages_conversation ON messages(conversation_id);
 CREATE INDEX idx_messages_account ON messages(whatsapp_account_id);
 
 -- =====================================
+
+
+-- EJECUTAR ESTE SCRIPT UNA SOLA VEZ PARA INICIALIZAR SEMAFORO CON LOS DATOS EXISTENTES(si asi lo deseas)
+-- Inicializar sistema de semáforo para datos existentes
+DO $$
+DECLARE
+    result_record RECORD;
+BEGIN
+    IF EXISTS (SELECT 1 FROM emails_sincronizados WHERE traffic_light_status IS NULL LIMIT 1) THEN
+        SELECT * INTO result_record FROM update_all_traffic_lights();
+        
+        RAISE NOTICE 'Sistema de semáforo inicializado:';
+        RAISE NOTICE '- Emails procesados: %', result_record.actualizados;
+        RAISE NOTICE '- Distribución: %', result_record.por_estado;
+    END IF;
+END $$;
 
 -- =====================================
 -- 🎉 MENSAJE DE ÉXITO
