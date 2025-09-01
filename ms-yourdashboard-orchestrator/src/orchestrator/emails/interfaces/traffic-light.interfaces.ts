@@ -5,7 +5,8 @@ export enum TrafficLightStatus {
   GREEN = 'green',
   YELLOW = 'yellow',
   ORANGE = 'orange',
-  RED = 'red'
+  RED = 'red',
+  DELETED = 'deleted',
 }
 
 // Email extendido con campos del semaforo
