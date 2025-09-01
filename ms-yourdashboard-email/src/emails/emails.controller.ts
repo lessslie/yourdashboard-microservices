@@ -8,7 +8,9 @@ import {
   UnauthorizedException, 
   BadRequestException,
   Logger,
-  Body
+  Body,
+  NotFoundException,
+  Delete
 } from '@nestjs/common';
 import { 
   ApiTags, 
@@ -630,15 +632,15 @@ async getCronStatus() {
   // ================================
 
 /**
- * 🚦 GET /emails/traffic-light/dashboard - Dashboard del semáforo
+ * 🚦 GET /emails/traffic-light/dashboard - Dashboard del semaforo
  */
 @Get('traffic-light/dashboard')
 @ApiOperation({ 
-  summary: 'Dashboard del semáforo de emails',
-  description: 'Obtiene estadísticas del semáforo agrupadas por cuenta Gmail del usuario.'
+  summary: 'Dashboard del semaforo de emails',
+  description: 'Obtiene estadísticas del semaforo agrupadas por cuenta Gmail del usuario.'
 })
 @ApiOkResponse({ 
-  description: 'Estadísticas del semáforo obtenidas exitosamente',
+  description: 'Estadísticas del semaforo obtenidas exitosamente',
   schema: {
     type: 'object',
     properties: {
@@ -685,23 +687,23 @@ async getTrafficLightDashboard(
     throw new UnauthorizedException('Token JWT requerido en Authorization header');
   }
 
-  console.log('Obteniendo dashboard del semáforo');
+  console.log('Obteniendo dashboard del semaforo');
   
   return await this.emailsService.getTrafficLightDashboard(authHeader);
 }
 
 /**
- * 🚦 GET /emails/traffic-light/:status - Emails por estado del semáforo
+ * 🚦 GET /emails/traffic-light/:status - Emails por estado del semaforo
  */
 @Get('traffic-light/:status')
 @ApiOperation({ 
-  summary: 'Obtener emails por estado del semáforo',
-  description: 'Obtiene emails filtrados por color del semáforo (green, yellow, orange, red).'
+  summary: 'Obtener emails por estado del semaforo',
+  description: 'Obtiene emails filtrados por color del semaforo (green, yellow, orange, red).'
 })
 @ApiParam({ 
   name: 'status', 
   enum: TrafficLightStatus,
-  description: 'Color del semáforo',
+  description: 'Color del semaforo',
   example: 'red'
 })
 @ApiQuery({ 
@@ -749,7 +751,7 @@ async getTrafficLightDashboard(
   }
 })
 @ApiBadRequestResponse({ 
-  description: 'Estado del semáforo inválido',
+  description: 'Estado del semaforo inválido',
   type: EmailErrorResponseDto 
 })
 async getEmailsByTrafficLight(
@@ -762,9 +764,9 @@ async getEmailsByTrafficLight(
     throw new UnauthorizedException('Token JWT requerido en Authorization header');
   }
 
-  // Validar estado del semáforo
+  // Validar estado del semaforo
   if (!Object.values(TrafficLightStatus).includes(status as TrafficLightStatus)) {
-    throw new BadRequestException('Estado del semáforo inválido. Debe ser: green, yellow, orange, red');
+    throw new BadRequestException('Estado del semaforo inválido. Debe ser: green, yellow, orange, red');
   }
 
   const trafficStatus = status as TrafficLightStatus;
@@ -790,12 +792,12 @@ async getEmailsByTrafficLight(
 }
 
 /**
- * 🔄 POST /emails/traffic-light/update - Actualizar semáforos manualmente
+ * 🔄 POST /emails/traffic-light/update - Actualizar semaforos manualmente
  */
 @Post('traffic-light/update')
 @ApiOperation({ 
-  summary: 'Actualizar semáforos de todos los emails',
-  description: 'Recalcula los estados del semáforo para todos los emails del sistema.'
+  summary: 'Actualizar semaforos de todos los emails',
+  description: 'Recalcula los estados del semaforo para todos los emails del sistema.'
 })
 @ApiOkResponse({ 
   description: 'Semáforos actualizados correctamente',
@@ -834,7 +836,7 @@ async updateTrafficLights(
     throw new UnauthorizedException('Token JWT requerido en Authorization header');
   }
 
-  console.log('Actualizando semáforos de todos los emails');
+  console.log('Actualizando semaforos de todos los emails');
   
   return await this.emailsService.updateTrafficLights(authHeader);
 }
@@ -978,6 +980,82 @@ async getEmailById(
     ...result,
     receivedDate: result.receivedDate.toISOString()
   };
+}
+/**
+ * 🗑️ DELETE /emails/:id - Eliminar un email específico
+ */
+@Delete(':id')
+@ApiOperation({ 
+  summary: 'Eliminar un email específico',
+  description: 'Marca un email como eliminado. El email se marca con estado "deleted" en el semáforo y opcionalmente se puede eliminar de Gmail API si está configurado.'
+})
+@ApiParam({ 
+  name: 'id', 
+  description: 'ID del email a eliminar', 
+  example: '1847a8e123456789' 
+})
+@ApiOkResponse({ 
+  description: 'Email eliminado exitosamente',
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      message: { type: 'string', example: 'Email eliminado exitosamente' },
+      emailId: { type: 'string', example: '1847a8e123456789' },
+      previousStatus: { 
+        type: 'string', 
+        enum: ['green', 'yellow', 'orange', 'red'],
+        example: 'red' 
+      },
+      deletedFromGmail: { type: 'boolean', example: false }
+    }
+  }
+})
+@ApiUnauthorizedResponse({ 
+  description: 'Token JWT inválido o expirado',
+  type: EmailErrorResponseDto 
+})
+@ApiNotFoundResponse({ 
+  description: 'Email no encontrado en ninguna cuenta del usuario',
+  type: EmailErrorResponseDto 
+})
+async deleteEmail(
+  @Headers() headers: Record<string, string | undefined>,
+  @Param('id') emailId: string
+): Promise<{
+  success: boolean;
+  message?: string;
+  emailId: string;
+  previousStatus?: TrafficLightStatus;
+  deletedFromGmail?: boolean;
+  error?: string;
+}> {
+  const authHeader = headers?.authorization;
+  
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido en Authorization header');
+  }
+
+  if (!emailId) {
+    throw new BadRequestException('ID del email es requerido');
+  }
+
+  console.log(`🗑️ Eliminando email ${emailId}`);
+  
+  // Llamar al método del service
+  const result = await this.emailsService.deleteEmailWithJWT(authHeader, emailId);
+  
+  if (!result.success) {
+    if (result.error?.includes('no encontrado')) {
+      throw new NotFoundException(result.error);
+    } else if (result.error?.includes('JWT inválido')) {
+      throw new UnauthorizedException(result.error);
+    } else {
+      throw new BadRequestException(result.error || 'Error eliminando email');
+    }
+  }
+  
+  return result;
 }
 
 }

@@ -26,7 +26,8 @@ import {
   EmailsByTrafficLightResponse,
   UpdateTrafficLightsResponse,
   EmailMetadataDBWithTrafficLight,
-  ReplyEmailResponse
+  ReplyEmailResponse,
+  DeleteEmailResponse
 } from './interfaces/traffic-light.interfaces';
 
 @Injectable()
@@ -1599,7 +1600,7 @@ async replyToEmailWithJWT(
         );
       }
     } catch (dbError) {
-      this.logger.error('Error actualizando semáforo (no crítico):', dbError);
+      this.logger.error('Error actualizando semaforo (no crítico):', dbError);
       // No fallar toda la operación por esto
     }
 
@@ -1631,7 +1632,7 @@ async replyToEmailWithJWT(
 }
 
 /**
- * Dashboard del semáforo
+ * Dashboard del semaforo
  */
 async getTrafficLightDashboard(authHeader: string): Promise<TrafficLightDashboardResponse> {
   try {
@@ -1646,7 +1647,7 @@ async getTrafficLightDashboard(authHeader: string): Promise<TrafficLightDashboar
       };
     }
 
-    this.logger.log(`Obteniendo dashboard de semáforo para usuario ${userId}`);
+    this.logger.log(`Obteniendo dashboard de semaforo para usuario ${userId}`);
     
     // Obtener todas las cuentas del usuario
     const cuentasGmail = await this.databaseService.obtenerCuentasGmailUsuario(userId);
@@ -1708,7 +1709,7 @@ async getTrafficLightDashboard(authHeader: string): Promise<TrafficLightDashboar
     };
     
   } catch (error) {
-    this.logger.error('Error obteniendo dashboard semáforo:', error);
+    this.logger.error('Error obteniendo dashboard semaforo:', error);
     return {
       success: false,
       dashboard: [],
@@ -1719,7 +1720,7 @@ async getTrafficLightDashboard(authHeader: string): Promise<TrafficLightDashboar
 }
 
 /**
- * Obtener emails por estado del semáforo 
+ * Obtener emails por estado del semaforo 
  */
 async getEmailsByTrafficLight(
   authHeader: string,
@@ -1796,7 +1797,7 @@ async getEmailsByTrafficLight(
     };
     
   } catch (error) {
-    this.logger.error('Error obteniendo emails por semáforo:', error);
+    this.logger.error('Error obteniendo emails por semaforo:', error);
     return {
       success: false,
       status,
@@ -1808,7 +1809,7 @@ async getEmailsByTrafficLight(
 }
 
 /**
- * Actualizar semáforos manualmente - CORREGIDO
+ * Actualizar semaforos manualmente - CORREGIDO
  */
 async updateTrafficLights(authHeader: string): Promise<UpdateTrafficLightsResponse> {
   try {
@@ -1821,9 +1822,9 @@ async updateTrafficLights(authHeader: string): Promise<UpdateTrafficLightsRespon
       };
     }
 
-    this.logger.log(`Usuario ${userId} solicitó actualización de semáforos`);
+    this.logger.log(`Usuario ${userId} solicitó actualización de semaforos`);
     
-    // Actualizar todos los semáforos del sistema
+    // Actualizar todos los semaforos del sistema
     const estadisticas = await this.databaseService.updateAllTrafficLights();
     
     this.logger.log(`Semáforos actualizados: ${estadisticas.actualizados} emails procesados`);
@@ -1835,7 +1836,7 @@ async updateTrafficLights(authHeader: string): Promise<UpdateTrafficLightsRespon
     };
     
   } catch (error) {
-    this.logger.error('Error actualizando semáforos:', error);
+    this.logger.error('Error actualizando semaforos:', error);
     return {
       success: false,
       error: (error as Error).message
@@ -1984,6 +1985,109 @@ private async sendReplyEmail(
       throw new Error(`No se pudo obtener token para cuenta Gmail ${cuentaGmailId}`);
     }
   }
+
+  /**
+ * 🗑️ ELIMINAR EMAIL CON JWT
+ */
+async deleteEmailWithJWT(
+  jwtToken: string,
+  messageId: string
+): Promise<DeleteEmailResponse> {
+  try {
+    this.logger.log(`🗑️ Iniciando eliminación del email ${messageId}`);
+
+    // 1️⃣ EXTRAER USER ID DEL JWT
+    const userId = this.extractUserIdFromJWT(jwtToken);
+    
+    if (!userId) {
+      return {
+        success: false,
+        emailId: messageId,
+        error: 'Token JWT inválido - no se pudo extraer userId'
+      };
+    }
+
+    // 2️⃣ BUSCAR EMAIL Y VERIFICAR PERTENENCIA
+    const emailResult = await this.databaseService.findEmailByIdForUser(messageId, userId);
+    
+    if (!emailResult) {
+      return {
+        success: false,
+        emailId: messageId,
+        error: `Email ${messageId} no encontrado o no pertenece al usuario`
+      };
+    }
+
+    const { email, cuentaGmail } = emailResult;
+    this.logger.log(`Email encontrado en cuenta: ${cuentaGmail.email_gmail}`);
+    console.log('🔍 DEBUG - Email a eliminar:', email);
+    
+    // 3️⃣ MARCAR COMO DELETED EN BD (usando semaforo)
+    const deleteResult = await this.databaseService.markEmailAsDeleted(messageId);
+    
+    if (!deleteResult) {
+      return {
+        success: false,
+        emailId: messageId,
+        error: 'No se pudo marcar el email como eliminado'
+      };
+    }
+
+    // 4️⃣ OPCIONAL: ELIMINAR DE GMAIL API (si está configurado)
+    let deletedFromGmail = false;
+    const DELETE_FROM_GMAIL = this.configService.get<string>('DELETE_FROM_GMAIL') === 'true';
+    
+    if (DELETE_FROM_GMAIL) {
+      try {
+        const accessToken = await this.getValidTokenForAccount(cuentaGmail.id);
+        await this.deleteFromGmailAPI(accessToken, messageId);
+        deletedFromGmail = true;
+        this.logger.log(`✅ Email eliminado también de Gmail API`);
+      } catch (gmailError) {
+        this.logger.warn(`⚠️ Error eliminando de Gmail (continuando):`, gmailError);
+        // No fallar toda la operación
+      }
+    }
+
+    // 5️⃣ LOG DE AUDITORÍA
+    this.logger.log(
+      `🗑️ EMAIL ELIMINADO - Usuario: ${userId}, Email: ${messageId}, ` +
+      `Cuenta: ${cuentaGmail.email_gmail}, Estado anterior: ${deleteResult.previousStatus}, ` +
+      `Gmail API: ${deletedFromGmail}`
+    );
+
+    return {
+      success: true,
+      message: `Email eliminado exitosamente`,
+      emailId: messageId,
+      previousStatus: deleteResult.previousStatus,
+      deletedFromGmail
+    };
+
+  } catch (error) {
+    this.logger.error('❌ Error eliminando email:', error);
+    
+    return {
+      success: false,
+      emailId: messageId,
+      error: `Error interno eliminando email: ${(error as Error).message}`
+    };
+  }
+}
+
+/**
+ * 🗑️ ELIMINAR DE GMAIL API (opcional)
+ */
+private async deleteFromGmailAPI(accessToken: string, messageId: string): Promise<void> {
+  const oauth2Client = new google.auth.OAuth2();
+  oauth2Client.setCredentials({ access_token: accessToken });
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+  await gmail.users.messages.delete({
+    userId: 'me',
+    id: messageId
+  });
+}
 
   // ================================
   // 🔧 MÉTODOS AUXILIARES

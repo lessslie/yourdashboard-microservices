@@ -651,11 +651,11 @@ async markEmailAsReplied(
 }
 
 /**
- * Actualizar semáforos de todos los emails usando función SQL
+ * Actualizar semaforos de todos los emails usando función SQL
  */
 async updateAllTrafficLights(): Promise<UpdateTrafficLightsResult> {
   try {
-    this.logger.log('🚦 Actualizando todos los semáforos...');
+    this.logger.log('🚦 Actualizando todos los semaforos...');
     
     const result = await this.query<UpdateTrafficLightsResult>(`
       SELECT * FROM update_all_traffic_lights()
@@ -676,13 +676,13 @@ async updateAllTrafficLights(): Promise<UpdateTrafficLightsResult> {
     };
     
   } catch (error) {
-    this.logger.error('❌ Error actualizando semáforos:', error);
+    this.logger.error('❌ Error actualizando semaforos:', error);
     throw error;
   }
 }
 
 /**
- * Obtener emails por estado de semáforo
+ * Obtener emails por estado de semaforo
  */
 async getEmailsByTrafficLight(
   cuentaGmailId: number,
@@ -713,13 +713,13 @@ async getEmailsByTrafficLight(
     return result.rows;
     
   } catch (error) {
-    this.logger.error(`❌ Error obteniendo emails por semáforo:`, error);
+    this.logger.error(`❌ Error obteniendo emails por semaforo:`, error);
     throw error;
   }
 }
 
 /**
- * Obtener estadísticas de semáforo por cuenta
+ * Obtener estadísticas de semaforo por cuenta
  */
 async getTrafficLightStatsByAccount(
   cuentaGmailId: number
@@ -755,13 +755,13 @@ async getTrafficLightStatsByAccount(
     return result.rows;
     
   } catch (error) {
-    this.logger.error(`❌ Error obteniendo estadísticas de semáforo:`, error);
+    this.logger.error(`❌ Error obteniendo estadísticas de semaforo:`, error);
     throw error;
   }
 }
 
 /**
- * Buscar emails con filtros de semáforo extendidos
+ * Buscar emails con filtros de semaforo extendidos
  */
 
 async searchEmailsWithTrafficLight(
@@ -791,13 +791,13 @@ async searchEmailsWithTrafficLight(
     };
 
   } catch (error) {
-    this.logger.error('Error en búsqueda con semáforo:', error);
+    this.logger.error('Error en búsqueda con semaforo:', error);
     throw error;
   }
 }
 
 /**
- * Construir condiciones de búsqueda para filtros del semáforo
+ * Construir condiciones de búsqueda para filtros del semaforo
  */
 private buildTrafficLightSearchConditions(
   filters: EmailSearchFiltersWithTrafficLight
@@ -813,7 +813,7 @@ private buildTrafficLightSearchConditions(
     paramIndex++;
   }
 
-  // Filtros del semáforo
+  // Filtros del semaforo
   const trafficConditions = this.buildTrafficLightConditions(filters, paramIndex);
   conditions.push(...trafficConditions.conditions);
   params.push(...trafficConditions.params);
@@ -828,7 +828,7 @@ private buildTrafficLightSearchConditions(
 }
 
 /**
- * Construir condiciones específicas del semáforo
+ * Construir condiciones específicas del semaforo
  */
 private buildTrafficLightConditions(
   filters: EmailSearchFiltersWithTrafficLight,
@@ -865,6 +865,60 @@ private buildTrafficLightConditions(
   }
 
   return { conditions, params };
+}
+/**
+ * 🗑️ Marcar email como eliminado usando el semaforo
+ */
+async markEmailAsDeleted(
+  gmailMessageId: string
+): Promise<{
+  email_id: number;
+  previousStatus: TrafficLightStatus;
+  success: boolean;
+} | null> {
+  try {
+    this.logger.log(`🗑️ Marcando email ${gmailMessageId} como eliminado`);
+    
+    // 1️⃣ PRIMERO: Obtener el estado actual ANTES de modificar
+    const currentState = await this.query<{
+      id: number;
+      traffic_light_status: TrafficLightStatus;
+    }>(`
+      SELECT id, traffic_light_status 
+      FROM emails_sincronizados 
+      WHERE gmail_message_id = $1
+    `, [gmailMessageId]);
+
+    if (currentState.rows.length === 0) {
+      this.logger.warn(`⚠️ Email ${gmailMessageId} no encontrado para eliminar`);
+      return null;
+    }
+
+    const currentEmail = currentState.rows[0];
+    
+    // 2️⃣ SEGUNDO: Hacer el UPDATE
+    await this.query(`
+      UPDATE emails_sincronizados 
+      SET 
+        traffic_light_status = 'deleted',
+        replied_at = NOW()
+      WHERE gmail_message_id = $1
+    `, [gmailMessageId]);
+
+    this.logger.log(
+      `✅ Email ${currentEmail.id} marcado como eliminado (era ${currentEmail.traffic_light_status})`
+    );
+    
+    return {
+      email_id: currentEmail.id,
+      previousStatus: currentEmail.traffic_light_status,  // ✅ Ahora sí es el anterior
+      success: true
+    };
+    
+  } catch (error) {
+    this.logger.error(`❌ Error marcando email como eliminado:`, error);
+    throw error;
+  }
 }
 
 /**

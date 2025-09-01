@@ -704,7 +704,7 @@ export class EmailsOrchestratorService {
    */
   async getTrafficLightDashboard(authHeader: string): Promise<OrchestratorTrafficLightDashboard> {
     try {
-      this.logger.log(`Obteniendo dashboard del semáforo`);
+      this.logger.log(`Obteniendo dashboard del semaforo`);
 
       const userId = this.extractUserIdFromJWT(authHeader);
       
@@ -723,12 +723,12 @@ export class EmailsOrchestratorService {
 
       if (!response.data.success) {
         throw new HttpException(
-          response.data.error || 'Error obteniendo dashboard del semáforo',
+          response.data.error || 'Error obteniendo dashboard del semaforo',
           HttpStatus.INTERNAL_SERVER_ERROR
         );
       }
 
-      this.logger.log(`Dashboard del semáforo obtenido exitosamente`);
+      this.logger.log(`Dashboard del semaforo obtenido exitosamente`);
       
       return {
         success: true,
@@ -741,7 +741,7 @@ export class EmailsOrchestratorService {
 
     } catch (error) {
       const apiError = error as AxiosError<{ error?: string }>;
-      this.logger.error(`Error obteniendo dashboard del semáforo:`, apiError.message);
+      this.logger.error(`Error obteniendo dashboard del semaforo:`, apiError.message);
       
       if (apiError.response?.status === 401) {
         throw new HttpException(
@@ -751,7 +751,7 @@ export class EmailsOrchestratorService {
       }
       
       throw new HttpException(
-        `Error obteniendo dashboard del semáforo: ${apiError.response?.data?.error || apiError.message}`,
+        `Error obteniendo dashboard del semaforo: ${apiError.response?.data?.error || apiError.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
@@ -793,7 +793,7 @@ export class EmailsOrchestratorService {
 
       if (!response.data.success) {
         throw new HttpException(
-          response.data.error || 'Error obteniendo emails por estado del semáforo',
+          response.data.error || 'Error obteniendo emails por estado del semaforo',
           HttpStatus.INTERNAL_SERVER_ERROR
         );
       }
@@ -812,7 +812,7 @@ export class EmailsOrchestratorService {
 
     } catch (error) {
       const apiError = error as AxiosError<{ error?: string }>;
-      this.logger.error(`Error obteniendo emails por estado del semáforo:`, apiError.message);
+      this.logger.error(`Error obteniendo emails por estado del semaforo:`, apiError.message);
       
       if (apiError.response?.status === 401) {
         throw new HttpException(
@@ -823,7 +823,7 @@ export class EmailsOrchestratorService {
       
       if (apiError.response?.status === 400) {
         throw new HttpException(
-          'Estado del semáforo inválido',
+          'Estado del semaforo inválido',
           HttpStatus.BAD_REQUEST
         );
       }
@@ -840,7 +840,7 @@ export class EmailsOrchestratorService {
    */
   async updateTrafficLights(authHeader: string): Promise<OrchestratorUpdateTrafficLights> {
     try {
-      this.logger.log(`Actualizando semáforos de todos los emails`);
+      this.logger.log(`Actualizando semaforos de todos los emails`);
 
       const userId = this.extractUserIdFromJWT(authHeader);
       
@@ -861,7 +861,7 @@ export class EmailsOrchestratorService {
 
       if (!response.data.success) {
         throw new HttpException(
-          response.data.error || 'Error actualizando semáforos',
+          response.data.error || 'Error actualizando semaforos',
           HttpStatus.INTERNAL_SERVER_ERROR
         );
       }
@@ -879,7 +879,7 @@ export class EmailsOrchestratorService {
 
     } catch (error) {
       const apiError = error as AxiosError<{ error?: string }>;
-      this.logger.error(`Error actualizando semáforos:`, apiError.message);
+      this.logger.error(`Error actualizando semaforos:`, apiError.message);
       
       if (apiError.response?.status === 401) {
         throw new HttpException(
@@ -890,15 +890,81 @@ export class EmailsOrchestratorService {
       
       if (apiError.code === 'ECONNABORTED') {
         throw new HttpException(
-          'Timeout actualizando semáforos - la operación tomó demasiado tiempo',
+          'Timeout actualizando semaforos - la operación tomó demasiado tiempo',
           HttpStatus.REQUEST_TIMEOUT
         );
       }
       
       throw new HttpException(
-        `Error actualizando semáforos: ${apiError.response?.data?.error || apiError.message}`,
+        `Error actualizando semaforos: ${apiError.response?.data?.error || apiError.message}`,
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
   }
+
+  /**
+ * ELIMINAR EMAIL - Coordina con MS-Email para eliminar email
+ */
+async deleteEmail(
+  emailId: string,
+  authHeader: string
+): Promise<{
+  success: boolean;
+  message?: string;
+  emailId: string;
+  previousStatus?: string;
+  deletedFromGmail?: boolean;
+  error?: string;
+}> {
+  try {
+    this.logger.log(`Coordinando eliminación del email ${emailId}`);
+
+    const userId = this.extractUserIdFromJWT(authHeader);
+    
+    if (!userId) {
+      throw new UnauthorizedException('Token JWT inválido');
+    }
+
+    const response = await fetch(`${this.msEmailUrl}/emails/${emailId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': authHeader
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      this.logger.error(`MS-Email error: ${response.status} - ${errorData}`);
+      
+      if (response.status === 404) {
+        throw new HttpException('Email no encontrado en ninguna cuenta del usuario', HttpStatus.NOT_FOUND);
+      } else if (response.status === 401) {
+        throw new HttpException('Token expirado o inválido', HttpStatus.UNAUTHORIZED);
+      } else {
+        throw new HttpException('Error eliminando email', HttpStatus.BAD_REQUEST);
+      }
+    }
+
+     // ✅ FIX: Tipar explícitamente la respuesta
+    const result = await response.json() as {
+      success: boolean;
+      message?: string;
+      emailId: string;
+      previousStatus?: string;
+      deletedFromGmail?: boolean;
+      error?: string;
+    };
+
+    // Invalidar caches relacionados
+    await this.invalidateEmailCaches(userId);
+
+    this.logger.log(`Email eliminado exitosamente via MS-Email`);
+
+    return result;
+
+  } catch (error) {
+    this.logger.error(`Error coordinando eliminación de email:`, error);
+    throw error;
+  }
+}
 }

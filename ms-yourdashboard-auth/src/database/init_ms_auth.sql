@@ -67,7 +67,7 @@ CREATE TABLE emails_sincronizados (
   fecha_sincronizado TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
   replied_at TIMESTAMP WITHOUT TIME ZONE, -- Fecha cuando se respondió el email (NULL = no respondido)
   days_without_reply INTEGER DEFAULT 0, -- Días transcurridos sin respuesta desde fecha_recibido
-  traffic_light_status VARCHAR(10) DEFAULT 'green' -- Estado del semáforo: green, yellow, orange, red
+  traffic_light_status VARCHAR(10) DEFAULT 'green' -- Estado del semaforo: green, yellow, orange, red
 
   -- Constraint: Un mensaje de Gmail no se puede duplicar por cuenta
   UNIQUE(cuenta_gmail_id, gmail_message_id)
@@ -185,7 +185,7 @@ CREATE INDEX idx_sesiones_activa ON sesiones_jwt(esta_activa);
 
 
 ---------------------------------------------
--- Índices para el sistema de semáforo
+-- Índices para el sistema de semaforo
 ---------------------------------------------
 CREATE INDEX idx_emails_traffic_light_status 
 ON emails_sincronizados(traffic_light_status);
@@ -386,7 +386,7 @@ $ LANGUAGE plpgsql;
 
 
 
--- Función: Calcular estado del semáforo
+-- Función: Calcular estado del semaforo
 CREATE OR REPLACE FUNCTION calculate_traffic_light_status(days_elapsed INTEGER)
 RETURNS VARCHAR(10) AS $$
 BEGIN
@@ -437,7 +437,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -------------------------------------------------
--- Función: Actualizar todos los semáforos
+-- Función: Actualizar todos los semaforos
 -------------------------------------------------
 CREATE OR REPLACE FUNCTION update_all_traffic_lights()
 RETURNS TABLE (
@@ -528,11 +528,11 @@ COMMENT ON COLUMN emails_sincronizados.destinatario_email IS 'Email del destinat
 COMMENT ON COLUMN emails_sincronizados.tamano_bytes IS 'Tamaño del email en bytes (incluye adjuntos)';
 
 ----------------------
--- comentarios semáforo
+-- comentarios semaforo
 ----------------------
 COMMENT ON COLUMN emails_sincronizados.replied_at IS 'Fecha cuando se respondió el email (NULL = no respondido)';
 COMMENT ON COLUMN emails_sincronizados.days_without_reply IS 'Días transcurridos sin respuesta desde fecha_recibido';
-COMMENT ON COLUMN emails_sincronizados.traffic_light_status IS 'Estado del semáforo: green, yellow, orange, red';
+COMMENT ON COLUMN emails_sincronizados.traffic_light_status IS 'Estado del semaforo: green, yellow, orange, red';
 
 
 -- =====================================
@@ -651,7 +651,7 @@ CREATE INDEX idx_messages_account ON messages(whatsapp_account_id);
 
 
 -- EJECUTAR ESTE SCRIPT UNA SOLA VEZ PARA INICIALIZAR SEMAFORO CON LOS DATOS EXISTENTES(si asi lo deseas)
--- Inicializar sistema de semáforo para datos existentes
+-- Inicializar sistema de semaforo para datos existentes
 DO $$
 DECLARE
     result_record RECORD;
@@ -659,7 +659,7 @@ BEGIN
     IF EXISTS (SELECT 1 FROM emails_sincronizados WHERE traffic_light_status IS NULL LIMIT 1) THEN
         SELECT * INTO result_record FROM update_all_traffic_lights();
         
-        RAISE NOTICE 'Sistema de semáforo inicializado:';
+        RAISE NOTICE 'Sistema de semaforo inicializado:';
         RAISE NOTICE '- Emails procesados: %', result_record.actualizados;
         RAISE NOTICE '- Distribución: %', result_record.por_estado;
     END IF;

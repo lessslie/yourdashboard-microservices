@@ -1,14 +1,15 @@
 // src/emails/interfaces/traffic-light.interfaces.ts
 
-// Enum para colores del semáforo
+// Enum para colores del semaforo
 export enum TrafficLightStatus {
-  GREEN = 'green',
+  GREEN = 'green', 
   YELLOW = 'yellow',
   ORANGE = 'orange',
-  RED = 'red'
+  RED = 'red',
+  DELETED = 'deleted',
 }
 
-// Extender EmailMetadataDB con campos del semáforo
+// Extender EmailMetadataDB con campos del semaforo
 export interface EmailMetadataDBWithTrafficLight {
   id?: number;
   cuenta_gmail_id: number;
@@ -37,7 +38,7 @@ export interface MarkEmailRepliedResult {
   days_saved: number;
 }
 
-// Resultado de actualización masiva de semáforos
+// Resultado de actualización masiva de semaforos
 export interface UpdateTrafficLightsResult {
   actualizados: number;
   por_estado: TrafficLightStatusCounts;
@@ -51,7 +52,7 @@ export interface TrafficLightStatusCounts {
   green?: number;
 }
 
-// Response para responder email (extendida con semáforo)
+// Response para responder email (extendida con semaforo)
 export interface ReplyEmailResponse {
   success: boolean;
   message?: string;
@@ -60,7 +61,7 @@ export interface ReplyEmailResponse {
   traffic_light_updated?: boolean;
 }
 
-// Dashboard del semáforo por cuenta
+// Dashboard del semaforo por cuenta
 export interface TrafficLightDashboardResponse {
   success: boolean;
   dashboard: TrafficLightAccountStats[];
@@ -91,7 +92,7 @@ export interface EmailsByTrafficLightResponse {
   error?: string;
 }
 
-// Request para actualizar semáforos
+// Request para actualizar semaforos
 export interface UpdateTrafficLightsRequest {
   userId?: number; // Opcional, para actualizar solo del usuario
 }
@@ -104,13 +105,13 @@ export interface UpdateTrafficLightsResponse {
   error?: string;
 }
 
-// Para búsqueda de emails con semáforo
+// Para búsqueda de emails con semaforo
 export interface EmailSearchResultWithTrafficLight {
   emails: EmailMetadataDBWithTrafficLight[];
   total: number;
 }
 
-// Filtros de búsqueda extendidos con semáforo
+// Filtros de búsqueda extendidos con semaforo
 export interface EmailSearchFiltersWithTrafficLight {
   cuenta_gmail_id?: number;
   esta_leido?: boolean;
@@ -124,4 +125,14 @@ export interface EmailSearchFiltersWithTrafficLight {
   days_without_reply_min?: number;
   days_without_reply_max?: number;
   replied?: boolean; // true = solo respondidos, false = solo no respondidos
+}
+
+// Response para eliminación de email
+export interface DeleteEmailResponse {
+  success: boolean;
+  message?: string;
+  emailId: string;
+  previousStatus?: TrafficLightStatus;
+  error?: string;
+  deletedFromGmail?: boolean; // Si se configuró eliminación en Gmail
 }

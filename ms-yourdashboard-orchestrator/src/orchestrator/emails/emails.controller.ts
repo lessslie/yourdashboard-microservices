@@ -10,6 +10,7 @@ import {
   NotFoundException,
   Body,
   Logger,
+  Delete,
 } from '@nestjs/common';
 import { 
   ApiTags, 
@@ -474,16 +475,16 @@ export class EmailsOrchestratorController {
   // =================
 
   /**
-   * GET /emails/traffic-light/dashboard - Dashboard del semáforo
+   * GET /emails/traffic-light/dashboard - Dashboard del semaforo
    */
   @Get('traffic-light/dashboard')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
-    summary: 'Dashboard del semáforo de emails',
-    description: 'Obtiene estadísticas del semáforo agrupadas por cuenta Gmail del usuario autenticado.'
+    summary: 'Dashboard del semaforo de emails',
+    description: 'Obtiene estadísticas del semaforo agrupadas por cuenta Gmail del usuario autenticado.'
   })
   @ApiOkResponse({ 
-    description: 'Dashboard del semáforo obtenido exitosamente',
+    description: 'Dashboard del semaforo obtenido exitosamente',
     schema: {
       type: 'object',
       properties: {
@@ -530,30 +531,31 @@ export class EmailsOrchestratorController {
     type: OrchestratorErrorDto 
   })
   async getTrafficLightDashboard(
-    @Headers('authorization') authHeader: string
+   @Headers() headers: Record<string, string | undefined>
   ): Promise<OrchestratorTrafficLightDashboard> {
+     const authHeader = headers?.authorization;
     if (!authHeader) {
       throw new UnauthorizedException('Token JWT requerido - usa el botón Authorize');
     }
 
-    this.logger.log('Dashboard del semáforo via orchestrator');
+    this.logger.log('Dashboard del semaforo via orchestrator');
     
     return this.emailsService.getTrafficLightDashboard(authHeader);
   }
 
   /**
-   * GET /emails/traffic-light/:status - Emails por estado del semáforo
+   * GET /emails/traffic-light/:status - Emails por estado del semaforo
    */
   @Get('traffic-light/:status')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
-    summary: 'Obtener emails por estado del semáforo',
-    description: 'Obtiene emails filtrados por color del semáforo (green, yellow, orange, red) del usuario autenticado.'
+    summary: 'Obtener emails por estado del semaforo',
+    description: 'Obtiene emails filtrados por color del semaforo (green, yellow, orange, red) del usuario autenticado.'
   })
   @ApiParam({ 
     name: 'status', 
     enum: TrafficLightStatus,
-    description: 'Color del semáforo',
+    description: 'Color del semaforo',
     example: 'red'
   })
   @ApiQuery({ 
@@ -611,7 +613,7 @@ export class EmailsOrchestratorController {
     }
   })
   @ApiBadRequestResponse({ 
-    description: 'Estado del semáforo inválido',
+    description: 'Estado del semaforo inválido',
     type: OrchestratorErrorDto 
   })
   @ApiUnauthorizedResponse({ 
@@ -619,18 +621,19 @@ export class EmailsOrchestratorController {
     type: OrchestratorErrorDto 
   })
   async getEmailsByTrafficLight(
-    @Headers('authorization') authHeader: string,
+    @Headers() headers: Record<string, string | undefined>,
     @Param('status') status: string,
     @Query('cuentaId') cuentaId?: string,
     @Query('limit') limit?: string
   ): Promise<OrchestratorEmailsByTrafficLight> {
+    const authHeader = headers?.authorization;
     if (!authHeader) {
       throw new UnauthorizedException('Token JWT requerido - usa el botón Authorize');
     }
 
-    // Validar estado del semáforo
+    // Validar estado del semaforo
     if (!Object.values(TrafficLightStatus).includes(status as TrafficLightStatus)) {
-      throw new BadRequestException('Estado del semáforo inválido. Debe ser: green, yellow, orange, red');
+      throw new BadRequestException('Estado del semaforo inválido. Debe ser: green, yellow, orange, red');
     }
 
     const trafficStatus = status as TrafficLightStatus;
@@ -656,13 +659,13 @@ export class EmailsOrchestratorController {
   }
 
   /**
-   * POST /emails/traffic-light/update - Actualizar semáforos manualmente
+   * POST /emails/traffic-light/update - Actualizar semaforos manualmente
    */
   @Post('traffic-light/update')
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
-    summary: 'Actualizar semáforos de todos los emails',
-    description: 'Recalcula los estados del semáforo para todos los emails del usuario autenticado.'
+    summary: 'Actualizar semaforos de todos los emails',
+    description: 'Recalcula los estados del semaforo para todos los emails del usuario autenticado.'
   })
   @ApiOkResponse({ 
     description: 'Semáforos actualizados correctamente',
@@ -701,13 +704,14 @@ export class EmailsOrchestratorController {
     type: OrchestratorErrorDto 
   })
   async updateTrafficLights(
-    @Headers('authorization') authHeader: string
+     @Headers() headers: Record<string, string | undefined>,
   ): Promise<OrchestratorUpdateTrafficLights> {
+    const authHeader = headers?.authorization;
     if (!authHeader) {
       throw new UnauthorizedException('Token JWT requerido - usa el botón Authorize');
     }
 
-    this.logger.log('Actualizando semáforos via orchestrator');
+    this.logger.log('Actualizando semaforos via orchestrator');
     
     return this.emailsService.updateTrafficLights(authHeader);
   }
@@ -730,8 +734,9 @@ export class EmailsOrchestratorController {
   async replyToEmail(
     @Param('id') emailId: string,
     @Body() replyData: ReplyEmailRequest,
-    @Headers('authorization') authHeader: string
+    @Headers() headers: Record<string, string | undefined>,
   ): Promise<ReplyEmailResponse> {
+    const authHeader = headers?.authorization|| undefined;
     try {
       this.logger.log(`DEBUG - authHeader: ${authHeader ? 'presente' : 'undefined'}`);
 
@@ -823,8 +828,9 @@ export class EmailsOrchestratorController {
   })
   async getEmailById(
     @Param('id') emailId: string,
-    @Headers('authorization') authHeader: string
+    @Headers() headers: Record<string, string | undefined>
   ) {
+    const authHeader = headers?.authorization;
     if (!authHeader) {
       throw new UnauthorizedException('Token JWT requerido - usa el botón Authorize');
     }
@@ -837,4 +843,96 @@ export class EmailsOrchestratorController {
     
     return this.emailsService.getEmailByIdWithJWT(authHeader, emailId);
   }
+
+  /**
+ * 🗑️ DELETE /emails/:id - Eliminar un email específico
+ */
+@Delete(':id')
+@ApiBearerAuth('JWT-auth')
+@ApiOperation({ 
+  summary: 'Eliminar un email específico',
+  description: `
+    **Funcionalidad:** Marca un email como eliminado usando el sistema de semáforo.
+    
+    **Comportamiento:**
+    - El email se marca con estado "deleted" en la base de datos
+    - Se mantiene auditoría del estado anterior
+    - Opcionalmente se elimina de Gmail API (configurable via DELETE_FROM_GMAIL)
+    - Se invalida automáticamente el cache del usuario
+    
+    **Requisitos:**
+    - Token JWT válido en Authorization header
+    - El email debe pertenecer al usuario autenticado
+    
+    **Casos de uso:** Eliminar emails spam, promocionales o irrelevantes del dashboard.
+  `
+})
+@ApiParam({ 
+  name: 'id', 
+  description: 'ID único del email en Gmail (messageId). Ejemplo: mensaje de Temu con ID 1636a01f584c48c1', 
+  example: '1847a8e123456789' 
+})
+@ApiOkResponse({ 
+  description: 'Email eliminado exitosamente',
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      message: { type: 'string', example: 'Email eliminado exitosamente' },
+      emailId: { type: 'string', example: '1847a8e123456789' },
+      previousStatus: { 
+        type: 'string', 
+        enum: ['green', 'yellow', 'orange', 'red'],
+        example: 'red' 
+      },
+      deletedFromGmail: { type: 'boolean', example: false }
+    }
+  }
+})
+@ApiBadRequestResponse({ 
+  description: 'Parámetros inválidos o email ya eliminado',
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: false },
+      message: { type: 'string', example: 'ID del email es requerido' },
+      statusCode: { type: 'number', example: 400 },
+      timestamp: { type: 'string', example: '2025-09-01T15:30:00Z' }
+    }
+  }
+})
+@ApiUnauthorizedResponse({ 
+  description: 'Token JWT inválido o expirado',
+  type: OrchestratorErrorDto 
+})
+@ApiNotFoundResponse({ 
+  description: 'Email no encontrado en ninguna cuenta del usuario',
+  type: OrchestratorErrorDto 
+})
+async deleteEmail(
+  @Headers() headers: Record<string, string | undefined>,
+  @Param('id') emailId: string
+): Promise<{
+  success: boolean;
+  message?: string;
+  emailId: string;
+  previousStatus?: string;
+  deletedFromGmail?: boolean;
+  error?: string;
+}> {
+  const authHeader = headers?.authorization;
+  
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido - usa el botón Authorize');
+  }
+
+  if (!emailId) {
+    throw new BadRequestException('ID del email es requerido');
+  }
+
+  this.logger.log(`🗑️ Eliminando email ${emailId} via orchestrator`);
+  
+  // Llamar al método del service
+  return this.emailsService.deleteEmail(emailId, authHeader);
+}
 }

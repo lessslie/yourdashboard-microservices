@@ -1,6 +1,6 @@
 // src/orchestrator/interfaces/traffic-light.interfaces.ts
 
-// Enum para colores del semáforo
+// Enum para colores del semaforo
 export enum TrafficLightStatus {
   GREEN = 'green',
   YELLOW = 'yellow',
@@ -8,7 +8,7 @@ export enum TrafficLightStatus {
   RED = 'red'
 }
 
-// Email extendido con campos del semáforo
+// Email extendido con campos del semaforo
 export interface EmailWithTrafficLight {
   id?: number;
   cuenta_gmail_id: number;
@@ -29,7 +29,7 @@ export interface EmailWithTrafficLight {
   traffic_light_status: TrafficLightStatus;
 }
 
-// Estadísticas por estado del semáforo
+// Estadísticas por estado del semaforo
 export interface TrafficLightStatusCount {
   traffic_light_status: TrafficLightStatus;
   count: string; // PostgreSQL COUNT devuelve string
@@ -45,7 +45,7 @@ export interface TrafficLightAccountStats {
   total_sin_responder: number;
 }
 
-// Response del dashboard del semáforo
+// Response del dashboard del semaforo
 export interface TrafficLightDashboardResponse {
   success: boolean;
   dashboard: TrafficLightAccountStats[];
@@ -62,7 +62,7 @@ export interface EmailsByTrafficLightResponse {
   error?: string;
 }
 
-// Resultado de actualización masiva de semáforos
+// Resultado de actualización masiva de semaforos
 export interface UpdateTrafficLightsResult {
   actualizados: number;
   por_estado: TrafficLightStatusCounts;
@@ -84,7 +84,7 @@ export interface UpdateTrafficLightsResponse {
   error?: string;
 }
 
-// Respuestas del orchestrator para semáforos
+// Respuestas del orchestrator para semaforos
 export interface OrchestratorTrafficLightDashboard {
   success: boolean;
   source: string;
