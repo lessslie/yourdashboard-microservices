@@ -25,6 +25,7 @@ export interface EmailMetadataDB {
   etiquetas_gmail?: string[];
   tamano_bytes?: number;
   fecha_sincronizado?: Date;
+  
 }
 
 export interface EmailSearchFilters {
@@ -229,36 +230,46 @@ async getActiveGmailAccounts(
   // 🔍 BÚSQUEDAS EN BD LOCAL
   // ================================
 
-  /**
-   * 📖 Obtener emails con paginación desde BD local
-   */
-  async getEmailsPaginated(
-    cuentaGmailId: number,
-    page: number = 1,
-    limit: number = 10,
-    soloNoLeidos: boolean = false
-  ): Promise<EmailSearchResult> {
+/**
+ * 📖 Obtener emails con paginación desde BD local
+ */
+async getEmailsPaginated(
+  cuentaGmailId: number, 
+  page: number = 1, 
+  limit: number = 10,
+  includeTrafficLight: boolean = true
+): Promise<{ 
+  emails: EmailMetadataDBWithTrafficLight[], 
+  total: number 
+}> {
+  try {
     const offset = (page - 1) * limit;
-    const filtroLeidos = soloNoLeidos ? 'AND esta_leido = FALSE' : '';
 
+    // Query principal con campos del semáforo
     const queryEmails = `
       SELECT 
-        id, gmail_message_id, asunto, remitente_email, remitente_nombre,
-        destinatario_email, fecha_recibido, esta_leido, tiene_adjuntos,
-        etiquetas_gmail, tamano_bytes, fecha_sincronizado
-      FROM emails_sincronizados 
-      WHERE cuenta_gmail_id = $1 ${filtroLeidos}
-      ORDER BY fecha_recibido DESC NULLS LAST
+        id, cuenta_gmail_id, gmail_message_id, asunto,
+        remitente_email, remitente_nombre, destinatario_email,
+        fecha_recibido, esta_leido, tiene_adjuntos,
+        etiquetas_gmail, tamano_bytes, fecha_sincronizado,
+        replied_at, days_without_reply, traffic_light_status
+      FROM emails_sincronizados
+      WHERE cuenta_gmail_id = $1 
+        AND traffic_light_status != 'deleted'
+      ORDER BY fecha_recibido DESC
       LIMIT $2 OFFSET $3
     `;
 
+    // Query para el total
     const queryTotal = `
-      SELECT COUNT(*) as total FROM emails_sincronizados 
-      WHERE cuenta_gmail_id = $1 ${filtroLeidos}
+      SELECT COUNT(*) as total 
+      FROM emails_sincronizados 
+      WHERE cuenta_gmail_id = $1 
+        AND traffic_light_status != 'deleted'
     `;
 
     const [emailsResult, totalResult] = await Promise.all([
-      this.query<EmailMetadataDB>(queryEmails, [cuentaGmailId, limit, offset]),
+      this.query<EmailMetadataDBWithTrafficLight>(queryEmails, [cuentaGmailId, limit, offset]),
       this.query<{ total: string }>(queryTotal, [cuentaGmailId])
     ]);
 
@@ -266,25 +277,33 @@ async getActiveGmailAccounts(
       emails: emailsResult.rows,
       total: parseInt(totalResult.rows[0].total)
     };
-  }
 
-  /**
-   * 🔍 Búsqueda avanzada en BD local
-   */
-  async searchEmailsInDB(
-    cuentaGmailId: number,
-    filters: EmailSearchFilters,
-    page: number = 1,
-    limit: number = 10
-  ): Promise<EmailSearchResult> {
-    const offset = (page - 1) * limit;
-    
-    // 🎯 CONSTRUIR QUERY DINÁMICO
-    const conditions: string[] = ['cuenta_gmail_id = $1'];
+  } catch (error) {
+    this.logger.error('Error obteniendo emails paginados:', error);
+    throw error;
+  }
+}
+/**
+ * 🔍 Búsqueda avanzada en BD local
+ */
+async searchEmailsInDB(
+  cuentaGmailId: number,
+  filters: EmailSearchFilters,
+  page: number = 1,
+  limit: number = 10
+): Promise<{ emails: EmailMetadataDBWithTrafficLight[]; total: number }> {
+  const offset = (page - 1) * limit;
+  
+  try {
+    // Construir query dinámico
+    const conditions: string[] = [
+      'cuenta_gmail_id = $1', 
+      'traffic_light_status != \'deleted\''
+    ];
     const params: any[] = [cuentaGmailId];
     let paramIndex = 2;
 
-    // Filtro por texto (buscar en asunto, remitente, destinatario)
+    // Filtro por texto
     if (filters.busqueda_texto) {
       conditions.push(`(
         LOWER(asunto) LIKE $${paramIndex} OR 
@@ -317,7 +336,7 @@ async getActiveGmailAccounts(
       paramIndex++;
     }
 
-    // Filtro por rango de fechas
+    // Filtros de fecha
     if (filters.fecha_desde) {
       conditions.push(`fecha_recibido >= $${paramIndex}`);
       params.push(filters.fecha_desde);
@@ -332,38 +351,42 @@ async getActiveGmailAccounts(
 
     const whereClause = conditions.join(' AND ');
 
-    // Queries para emails y count total
+    // Query principal con campos del semáforo
     const queryEmails = `
       SELECT 
-        id, gmail_message_id, asunto, remitente_email, remitente_nombre,
-        destinatario_email, fecha_recibido, esta_leido, tiene_adjuntos,
-        etiquetas_gmail, tamano_bytes, fecha_sincronizado
+        id, cuenta_gmail_id, gmail_message_id, asunto,
+        remitente_email, remitente_nombre, destinatario_email,
+        fecha_recibido, esta_leido, tiene_adjuntos,
+        etiquetas_gmail, tamano_bytes, fecha_sincronizado,
+        replied_at, days_without_reply, traffic_light_status
       FROM emails_sincronizados 
       WHERE ${whereClause}
       ORDER BY fecha_recibido DESC NULLS LAST
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
 
+    // Query para el total
     const queryTotal = `
-      SELECT COUNT(*) as total FROM emails_sincronizados 
+      SELECT COUNT(*) as total 
+      FROM emails_sincronizados 
       WHERE ${whereClause}
     `;
 
-    const emailsParams = [...params, limit, offset];
-    const totalParams = [...params];
-
     const [emailsResult, totalResult] = await Promise.all([
-      this.query<EmailMetadataDB>(queryEmails, emailsParams),
-      this.query<{ total: string }>(queryTotal, totalParams)
+      this.query<EmailMetadataDBWithTrafficLight>(queryEmails, [...params, limit, offset]),
+      this.query<{ total: string }>(queryTotal, params)
     ]);
 
     return {
       emails: emailsResult.rows,
       total: parseInt(totalResult.rows[0].total)
     };
+
+  } catch (error) {
+    this.logger.error('Error en búsqueda de emails:', error);
+    throw error;
   }
-
-
+}
   
 /**
  * 📧 Obtener todas las cuentas Gmail de un usuario principal
