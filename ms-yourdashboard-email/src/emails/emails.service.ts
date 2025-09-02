@@ -1763,120 +1763,6 @@ export class EmailsService {
   // ================================
 
   /**
-   * 📤 ENVIAR EMAIL NUEVO CON JWT - MÉTODO PRINCIPAL
-   */
-  async sendEmailWithJWT(
-    jwtToken: string,
-    sendEmailData: SendEmailDto
-  ): Promise<SendEmailResponse> {
-    try {
-      this.logger.log(`Iniciando envío de email nuevo desde ${sendEmailData.from}`);
-      
-      // 1️⃣ EXTRAER USER ID DEL JWT TOKEN
-      const userId = this.extractUserIdFromJWT(jwtToken);
-      
-      if (!userId) {
-        throw new UnauthorizedException('Token JWT inválido - no se pudo extraer userId');
-      }
-
-      this.logger.log(`Usuario extraído del JWT: ${userId}`);
-
-      // 2️⃣ VALIDAR QUE LA CUENTA FROM PERTENEZCA AL USUARIO
-      const cuentasUsuario = await this.databaseService.obtenerCuentasGmailUsuario(userId);
-      const cuentaGmail = cuentasUsuario.find(cuenta => cuenta.email_gmail === sendEmailData.from);
-      
-      if (!cuentaGmail) {
-        throw new NotFoundException(
-          `La cuenta ${sendEmailData.from} no está asociada al usuario ${userId}`
-        );
-      }
-
-      this.logger.log(`Cuenta Gmail validada: ${cuentaGmail.email_gmail} (ID: ${cuentaGmail.id})`);
-
-      // 3️⃣ OBTENER TOKEN DE ACCESO VÁLIDO
-      const accessToken = await this.getValidTokenForAccount(cuentaGmail.id);
-      
-      if (!accessToken) {
-        throw new UnauthorizedException('No se pudo obtener token de acceso válido para Gmail');
-      }
-
-      // 4️⃣ VALIDAR QUOTA DE GMAIL (opcional pero recomendado)
-      const quotaCheck = await this.checkGmailQuota(accessToken, sendEmailData);
-      if (!quotaCheck.canSend) {
-        throw new ServiceUnavailableException({
-          success: false,
-          error: 'QUOTA_EXCEEDED',
-          message: quotaCheck.reason || 'Límite de envío excedido',
-          retryAfter: quotaCheck.retryAfter || 3600
-        });
-      }
-
-      // 5️⃣ CONSTRUIR EL EMAIL COMPLETO
-      const emailMessage = await this.buildEmailMessage(sendEmailData);
-      
-      this.logger.debug(`Email construido - Tamaño: ${emailMessage.body.length} chars, Attachments: ${emailMessage.attachments?.length || 0}`);
-
-      // 6️⃣ ENVIAR VIA GMAIL API
-      const gmailResponse = await this.sendNewEmailViaGmailAPI(
-        accessToken, 
-        emailMessage, 
-        sendEmailData.inReplyTo // Para mantener hilo si es respuesta
-      );
-
-      // 7️⃣ CONSTRUIR RESPUESTA EXITOSA
-      const response: SendEmailResponse = {
-        success: true,
-        messageId: gmailResponse.id,
-        threadId: gmailResponse.threadId,
-        sentAt: new Date().toISOString(),
-        fromEmail: sendEmailData.from,
-        toEmails: sendEmailData.to,
-        ccEmails: sendEmailData.cc,
-        bccEmails: sendEmailData.bcc,
-        subject: sendEmailData.subject,
-        priority: sendEmailData.priority || EmailPriority.NORMAL,
-        hasAttachments: !!(sendEmailData.attachments?.length),
-        attachmentCount: sendEmailData.attachments?.length || 0,
-        sizeEstimate: gmailResponse.sizeEstimate
-      };
-
-      // 8️⃣ LOG DE ÉXITO
-      this.logger.log(`✅ Email enviado exitosamente - ID: ${response.messageId}, Thread: ${response.threadId}`);
-      this.logger.log(`Desde: ${response.fromEmail}, Para: ${response.toEmails.join(', ')}, Asunto: "${response.subject}"`);
-
-      return response;
-
-    } catch (error) {
-      this.logger.error('❌ Error enviando email nuevo:', error);
-      
-      // Re-throw specific exceptions
-      if (error instanceof UnauthorizedException || 
-          error instanceof NotFoundException ||
-          error instanceof ServiceUnavailableException) {
-        throw error;
-      }
-
-      // Transform Gmail API errors
-      const gmailError = this.parseGmailApiError(error);
-      if (gmailError) {
-        throw new BadRequestException({
-          success: false,
-          error: gmailError.code,
-          message: gmailError.message,
-          details: gmailError.details
-        });
-      }
-
-      // Generic error fallback
-      throw new BadRequestException({
-        success: false,
-        error: 'SEND_FAILED',
-        message: 'Error interno enviando email'
-      });
-    }
-  }
-
-  /**
    * 🏗️ CONSTRUIR EMAIL COMPLETO (headers + body + attachments)
    */
   private async buildEmailMessage(sendEmailData: SendEmailDto): Promise<EmailMessage> {
@@ -1885,23 +1771,22 @@ export class EmailsService {
       const messageId = this.generateMessageId(sendEmailData.from);
       
       // 2️⃣ CONSTRUIR HEADERS BÁSICOS
-      const headers: EmailHeaders = {
-        'To': sendEmailData.to.join(', '),
-        'Subject': sendEmailData.subject,
-        'From': sendEmailData.from,
+      const headers = {
+        'To': this.encodeUtf8Header(sendEmailData.to.join(', ')),
+        'Subject': this.encodeUtf8Header(sendEmailData.subject),
+        'From': this.encodeUtf8Header(sendEmailData.from),
         'Message-ID': messageId,
         'Date': new Date().toUTCString(),
-        'MIME-Version': '1.0',
-        'Content-Type': 'text/plain; charset=UTF-8' // Default, puede cambiar si hay HTML o adjuntos
+        'MIME-Version': '1.0'
       };
 
       // 3️⃣ AGREGAR CC Y BCC SI EXISTEN
       if (sendEmailData.cc?.length) {
-        headers['Cc'] = sendEmailData.cc.join(', ');
+        headers['Cc'] = this.encodeUtf8Header(sendEmailData.cc.join(', '));
       }
       
       if (sendEmailData.bcc?.length) {
-        headers['Bcc'] = sendEmailData.bcc.join(', ');
+        headers['Bcc'] = this.encodeUtf8Header(sendEmailData.bcc.join(', '));
       }
 
       // 4️⃣ AGREGAR HEADERS DE PRIORIDAD
@@ -1916,37 +1801,44 @@ export class EmailsService {
       }
 
       // 6️⃣ AGREGAR HEADERS PARA MANTENER HILO
-      if (sendEmailData.inReplyTo) {
+      if (sendEmailData.inReplyTo && this.isValidMessageId(sendEmailData.inReplyTo)) {
         headers['In-Reply-To'] = sendEmailData.inReplyTo;
       }
       
       if (sendEmailData.references?.length) {
-        headers['References'] = sendEmailData.references.join(' ');
+        const validReferences = sendEmailData.references.filter(ref => this.isValidMessageId(ref));
+        if (validReferences.length > 0) {
+          headers['References'] = validReferences.join(' ');
+        }
       }
 
       // 7️⃣ CONSTRUIR CUERPO DEL EMAIL
-      const emailBody = await this.buildEmailBody(
-        sendEmailData, 
-        sendEmailData.attachments
-      );
+      const emailBody = await this.buildEmailBody(sendEmailData, sendEmailData.attachments);
 
-      // 8️⃣ ACTUALIZAR CONTENT-TYPE HEADER
-      if (sendEmailData.bodyHtml || sendEmailData.attachments?.length) {
-        const boundary = this.generateBoundary();
-        headers['Content-Type'] = `multipart/mixed; boundary="${boundary}"`;
-        
-        return {
-          headers: headers as unknown as Record<string, string>,
-          body: emailBody,
-          attachments: sendEmailData.attachments,
-          boundary,
-          messageId
-        };
+     // 8️⃣ DETERMINAR CONTENT-TYPE HEADER
+if (sendEmailData.attachments?.length) {
+  // NO generar boundary aquí - lo hace buildEmailBody
+  headers['Content-Type'] = 'multipart/mixed; boundary="PLACEHOLDER"';
+  
+  const emailBodyWithBoundary = await this.buildEmailBody(sendEmailData, sendEmailData.attachments);
+  
+  // Extraer el boundary que se usó en buildEmailBody
+  const boundaryMatch = emailBodyWithBoundary.match(/--([^-\r\n]+)/);
+  const actualBoundary = boundaryMatch ? boundaryMatch[1] : this.generateBoundary();
+  
+  headers['Content-Type'] = `multipart/mixed; boundary="${actualBoundary}"`;
+  
+  return {
+    headers: headers as Record<string, string>,
+    body: emailBodyWithBoundary,
+    attachments: sendEmailData.attachments,
+    messageId
+  };
       } else {
         headers['Content-Type'] = 'text/plain; charset=UTF-8';
         
         return {
-          headers: headers as unknown as Record<string, string>,
+          headers: headers as Record<string, string>,
           body: emailBody,
           messageId
         };
@@ -1967,22 +1859,18 @@ export class EmailsService {
     threadId?: string
   ): Promise<GmailSendResponse> {
     try {
-      // 1️⃣ CONFIGURAR GMAIL CLIENT
       const oauth2Client = new google.auth.OAuth2();
       oauth2Client.setCredentials({ access_token: accessToken });
       const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
-      // 2️⃣ CONSTRUIR EMAIL COMPLETO (headers + body)
       const fullEmail = this.combineHeadersAndBody(emailMessage);
 
-      // 3️⃣ CODIFICAR EN BASE64URL
       const encodedMessage = Buffer.from(fullEmail)
         .toString('base64')
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
         .replace(/=+$/, '');
 
-      // 4️⃣ PREPARAR REQUEST PARA GMAIL API
       const gmailRequest: GmailSendRequest = {
         userId: 'me',
         requestBody: {
@@ -1990,14 +1878,10 @@ export class EmailsService {
         }
       };
 
-      // 5️⃣ AGREGAR THREAD ID SI ES RESPUESTA
       if (threadId) {
         gmailRequest.requestBody.threadId = threadId;
       }
 
-      this.logger.debug(`Enviando email via Gmail API - ThreadId: ${threadId || 'nuevo'}`);
-
-      // 6️⃣ ENVIAR VIA GMAIL API
       const response = await gmail.users.messages.send(gmailRequest);
 
       if (!response.data.id) {
@@ -2019,10 +1903,456 @@ export class EmailsService {
       throw error;
     }
   }
+  
 
-  // ================================
-  // 🔧 MÉTODOS HELPER PRIVADOS PARA SEND
-  // ================================
+  /**
+   * 🔗 COMBINAR HEADERS Y BODY EN EMAIL COMPLETO
+   */
+  private combineHeadersAndBody(emailMessage: EmailMessage): string {
+    try {
+      const headerLines = Object.entries(emailMessage.headers)
+        .map(([key, value]) => `${key}: ${value}`)
+        .join('\r\n');
+
+      return headerLines + '\r\n\r\n' + emailMessage.body;
+
+    } catch (error) {
+      this.logger.error('❌ Error combinando headers y body:', error);
+      throw new Error(`Error combinando email: ${error.message}`);
+    }
+  }
+
+
+  /**
+   * 📤 ENVIAR EMAIL NUEVO CON JWT - MÉTODO PRINCIPAL
+   */
+ async sendEmailWithJWT(
+  jwtToken: string,
+  sendEmailData: SendEmailDto
+): Promise<SendEmailResponse> {
+  try {
+    this.logger.log(`Iniciando envío de email desde ${sendEmailData.from}`);
+    
+    // 1️⃣ EXTRAER USER ID DEL JWT TOKEN
+    const userId = this.extractUserIdFromJWT(jwtToken);
+    
+    if (!userId) {
+      throw new UnauthorizedException('Token JWT inválido - no se pudo extraer userId');
+    }
+
+    // 2️⃣ VALIDAR QUE LA CUENTA FROM PERTENEZCA AL USUARIO
+    const cuentasUsuario = await this.databaseService.obtenerCuentasGmailUsuario(userId);
+    const cuentaGmail = cuentasUsuario.find(cuenta => cuenta.email_gmail === sendEmailData.from);
+    
+    if (!cuentaGmail) {
+      throw new NotFoundException(
+        `La cuenta ${sendEmailData.from} no está asociada al usuario ${userId}`
+      );
+    }
+
+    // 3️⃣ OBTENER TOKEN DE ACCESO VÁLIDO
+    const accessToken = await this.getValidTokenForAccount(cuentaGmail.id);
+    
+    if (!accessToken) {
+      throw new UnauthorizedException('No se pudo obtener token de acceso válido para Gmail');
+    }
+
+    // 4️⃣ VALIDACIONES BÁSICAS
+    if (!sendEmailData.subject?.trim()) {
+      throw new BadRequestException('Asunto del email es requerido');
+    }
+
+    if (!sendEmailData.body?.trim()) {
+      throw new BadRequestException('Contenido del email es requerido');
+    }
+
+    // 5️⃣ POR AHORA: RECHAZAR ATTACHMENTS (implementar después)
+   if ((sendEmailData.attachments?.length ?? 0) > 5) {
+  throw new BadRequestException('Máximo 5 attachments permitidos por email');
+}
+
+
+    // 6️⃣ ENVIAR EMAIL USANDO LÓGICA SIMPLE
+    const sentMessageId = await this.sendEmailSimpleAndWorking(
+      accessToken,
+      sendEmailData
+    );
+
+    // 7️⃣ RESPUESTA EXITOSA
+    const response: SendEmailResponse = {
+      success: true,
+      messageId: sentMessageId,
+      threadId: sentMessageId,
+      sentAt: new Date().toISOString(),
+      fromEmail: sendEmailData.from,
+      toEmails: sendEmailData.to,
+      ccEmails: sendEmailData.cc,
+      bccEmails: sendEmailData.bcc,
+      subject: sendEmailData.subject,
+      priority: sendEmailData.priority || EmailPriority.NORMAL,
+      hasAttachments: !!(sendEmailData.attachments?.length),
+      attachmentCount: sendEmailData.attachments?.length || 0
+    };
+
+    this.logger.log(`✅ Email enviado exitosamente - ID: ${response.messageId}`);
+
+    return response;
+
+  } catch (error) {
+    this.logger.error('❌ Error enviando email:', error);
+    
+    // Re-throw specific exceptions
+    if (error instanceof UnauthorizedException || 
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException) {
+      throw error;
+    }
+
+    // Generic error
+    throw new BadRequestException({
+      success: false,
+      error: 'SEND_FAILED',
+      message: 'Error interno enviando email.'
+    });
+  }
+}
+
+/**
+ * 📧 ENVIAR EMAIL SIMPLE - BASADO EN sendReplyEmail QUE YA FUNCIONA
+ */
+private async sendEmailSimpleAndWorking(
+  accessToken: string,
+  sendEmailData: SendEmailDto
+): Promise<string> {
+  try {
+    // 1️⃣ CONFIGURAR GMAIL CLIENT
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: accessToken });
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+    // 2️⃣ CONSTRUIR HEADERS BÁSICOS
+    const headers = [
+      `To: ${sendEmailData.to.join(', ')}`,
+      `Subject: ${this.encodeSubject(sendEmailData.subject)}`,
+      `From: ${sendEmailData.from}`,
+      `Date: ${new Date().toUTCString()}`,
+      `Message-ID: ${this.generateSimpleMessageId(sendEmailData.from)}`,
+      `MIME-Version: 1.0`
+    ];
+
+    // CC/BCC si existen
+    if (sendEmailData.cc?.length) {
+      headers.push(`Cc: ${sendEmailData.cc.join(', ')}`);
+    }
+    
+    if (sendEmailData.bcc?.length) {
+      headers.push(`Bcc: ${sendEmailData.bcc.join(', ')}`);
+    }
+
+    // 3️⃣ CONSTRUIR CUERPO DEL EMAIL
+    let emailContent = '';
+
+    // CASO 1: Solo texto plano, sin attachments
+    if (!sendEmailData.bodyHtml && !sendEmailData.attachments?.length) {
+      headers.push('Content-Type: text/plain; charset=UTF-8');
+      emailContent = headers.join('\r\n') + '\r\n\r\n' + sendEmailData.body;
+    }
+    // CASO 2: HTML sin attachments  
+    else if (sendEmailData.bodyHtml && !sendEmailData.attachments?.length) {
+      const boundary = this.generateUniqueBoundary();
+      
+      headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
+      emailContent = headers.join('\r\n') + '\r\n\r\n';
+      
+      // Texto plano
+      emailContent += `--${boundary}\r\n`;
+      emailContent += 'Content-Type: text/plain; charset=UTF-8\r\n\r\n';
+      emailContent += sendEmailData.body + '\r\n\r\n';
+      
+      // HTML
+      emailContent += `--${boundary}\r\n`;
+      emailContent += 'Content-Type: text/html; charset=UTF-8\r\n\r\n';
+      emailContent += sendEmailData.bodyHtml + '\r\n\r\n';
+      
+      emailContent += `--${boundary}--`;
+    }
+    // CASO 3: Con attachments (con o sin HTML)
+    else if (sendEmailData.attachments?.length) {
+      const mainBoundary = this.generateUniqueBoundary();
+      
+      headers.push(`Content-Type: multipart/mixed; boundary="${mainBoundary}"`);
+      emailContent = headers.join('\r\n') + '\r\n\r\n';
+
+      // PARTE 1: Contenido del mensaje
+      if (sendEmailData.bodyHtml) {
+        // Contenido multipart/alternative anidado
+        const contentBoundary = this.generateUniqueBoundary();
+        
+        emailContent += `--${mainBoundary}\r\n`;
+        emailContent += `Content-Type: multipart/alternative; boundary="${contentBoundary}"\r\n\r\n`;
+        
+        // Texto plano
+        emailContent += `--${contentBoundary}\r\n`;
+        emailContent += 'Content-Type: text/plain; charset=UTF-8\r\n\r\n';
+        emailContent += sendEmailData.body + '\r\n\r\n';
+        
+        // HTML
+        emailContent += `--${contentBoundary}\r\n`;
+        emailContent += 'Content-Type: text/html; charset=UTF-8\r\n\r\n';
+        emailContent += sendEmailData.bodyHtml + '\r\n\r\n';
+        
+        emailContent += `--${contentBoundary}--\r\n\r\n`;
+      } else {
+        // Solo texto plano
+        emailContent += `--${mainBoundary}\r\n`;
+        emailContent += 'Content-Type: text/plain; charset=UTF-8\r\n\r\n';
+        emailContent += sendEmailData.body + '\r\n\r\n';
+      }
+
+      // PARTE 2: Attachments
+      for (const attachment of sendEmailData.attachments) {
+        emailContent += await this.buildAttachmentSimple(attachment, mainBoundary);
+      }
+
+      // Cerrar multipart principal
+      emailContent += `--${mainBoundary}--`;
+    }
+
+    // 4️⃣ CODIFICAR PARA GMAIL API
+    const encodedMessage = Buffer.from(emailContent)
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+
+    // 5️⃣ ENVIAR VIA GMAIL API
+    const response = await gmail.users.messages.send({
+      userId: 'me',
+      requestBody: {
+        raw: encodedMessage
+      }
+    });
+
+    if (!response.data.id) {
+      throw new Error('Gmail API no retornó ID del mensaje');
+    }
+
+    return response.data.id;
+    
+  } catch (error) {
+    this.logger.error('❌ Error en Gmail API:', error);
+    throw error;
+  }
+}
+
+/**
+ * 📎 CONSTRUIR ATTACHMENT SIMPLE Y CORRECTO
+ */
+private async buildAttachmentSimple(
+  attachment: EmailAttachmentDto, 
+  boundary: string
+): Promise<string> {
+  try {
+    // Validaciones básicas
+    if (!attachment.filename || !attachment.content || !attachment.mimeType) {
+      throw new Error('Attachment incompleto');
+    }
+
+    // Validar base64
+    if (!this.isValidBase64Simple(attachment.content)) {
+      throw new Error(`Attachment ${attachment.filename}: contenido no es base64 válido`);
+    }
+
+    let attachmentPart = `--${boundary}\r\n`;
+    attachmentPart += `Content-Type: ${attachment.mimeType}\r\n`;
+    attachmentPart += `Content-Disposition: attachment; filename="${this.sanitizeFilename(attachment.filename)}"\r\n`;
+    attachmentPart += 'Content-Transfer-Encoding: base64\r\n\r\n';
+    
+    // Dividir base64 en líneas de 76 caracteres
+    const base64Lines = attachment.content.match(/.{1,76}/g) || [];
+    attachmentPart += base64Lines.join('\r\n') + '\r\n\r\n';
+
+    return attachmentPart;
+
+  } catch (error) {
+    this.logger.error(`❌ Error procesando attachment ${attachment.filename}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * 🔧 MÉTODOS HELPER SIMPLIFICADOS
+ */
+
+private generateUniqueBoundary(): string {
+  const timestamp = Date.now();
+  const random1 = Math.random().toString(36).substring(2, 8);
+  const random2 = Math.random().toString(36).substring(2, 8);
+  return `----=_Part_${timestamp}_${random1}_${random2}`;
+}
+
+private isValidBase64Simple(str: string): boolean {
+  try {
+    return Buffer.from(str, 'base64').toString('base64') === str;
+  } catch {
+    return false;
+  }
+}
+
+
+
+// MÉTODOS HELPER SIMPLIFICADOS
+
+/**
+ * 🏷️ CODIFICAR SUBJECT UTF-8
+ */
+private encodeSubject(subject: string): string {
+  // Si es ASCII simple, no hacer nada
+  if (/^[\x00-\x7F]*$/.test(subject)) {
+    return subject;
+  }
+  
+  // Para caracteres especiales, usar encoding RFC 2047
+  return `=?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`;
+}
+
+/**
+ * 🆔 GENERAR MESSAGE ID SIMPLE
+ */
+private generateSimpleMessageId(fromEmail: string): string {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 8);
+  const domain = fromEmail.split('@')[1] || 'gmail.com';
+  return `<${timestamp}.${random}@${domain}>`;
+}
+
+ /**
+   * 🏗️ CONSTRUIR CUERPO DEL EMAIL (texto + HTML + attachments) - CORREGIDO
+   */
+  private async buildEmailBody(
+    sendEmailData: SendEmailDto, 
+    attachments?: EmailAttachmentDto[]
+  ): Promise<string> {
+    try {
+      // 1️⃣ EMAIL SIMPLE (solo texto plano, sin attachments ni HTML)
+      if (!sendEmailData.bodyHtml && !attachments?.length) {
+        return sendEmailData.body;
+      }
+
+      // 2️⃣ EMAIL MULTIPART - ESTRUCTURA CORRECTA
+      const mainBoundary = this.generateBoundary();
+
+      // ✅ CASO 1: Solo HTML (sin attachments)
+      if (sendEmailData.bodyHtml && !attachments?.length) {
+        return this.buildAlternativeBody(sendEmailData, mainBoundary);
+      }
+
+      // ✅ CASO 2: Solo attachments (sin HTML)
+      if (!sendEmailData.bodyHtml && attachments?.length) {
+        return this.buildMixedBodyTextOnly(sendEmailData, attachments || [], mainBoundary);
+      }
+
+      // ✅ CASO 3: HTML + attachments (estructura anidada completa)
+      return this.buildFullMixedBody(sendEmailData, attachments || [], mainBoundary);
+
+    } catch (error) {
+      this.logger.error('❌ Error construyendo cuerpo del email:', error);
+      throw new Error(`Error construyendo cuerpo: ${error.message}`);
+    }
+  }
+
+  /**
+   * 📝 CONSTRUIR CUERPO SOLO CON TEXTO + HTML (multipart/alternative)
+   */
+  private buildAlternativeBody(sendEmailData: SendEmailDto, boundary: string): string {
+    let emailBody = '';
+    
+    // Texto plano
+    emailBody += `--${boundary}\r\n`;
+    emailBody += 'Content-Type: text/plain; charset=UTF-8\r\n';
+    emailBody += 'Content-Transfer-Encoding: 7bit\r\n\r\n';
+    emailBody += sendEmailData.body + '\r\n\r\n';
+
+    // HTML
+    emailBody += `--${boundary}\r\n`;
+    emailBody += 'Content-Type: text/html; charset=UTF-8\r\n';
+    emailBody += 'Content-Transfer-Encoding: 7bit\r\n\r\n';
+    emailBody += sendEmailData.bodyHtml + '\r\n\r\n';
+
+    // Cerrar multipart
+    emailBody += `--${boundary}--\r\n`;
+    
+    return emailBody;
+  }
+
+  /**
+   * 📎 CONSTRUIR CUERPO CON TEXTO + ATTACHMENTS (multipart/mixed simple)
+   */
+  private async buildMixedBodyTextOnly(
+    sendEmailData: SendEmailDto, 
+    attachments: EmailAttachmentDto[], 
+    boundary: string
+  ): Promise<string> {
+    let emailBody = '';
+    
+    // Parte de texto
+    emailBody += `--${boundary}\r\n`;
+    emailBody += 'Content-Type: text/plain; charset=UTF-8\r\n';
+    emailBody += 'Content-Transfer-Encoding: 7bit\r\n\r\n';
+    emailBody += sendEmailData.body + '\r\n\r\n';
+
+    // Attachments
+    for (const attachment of attachments) {
+      emailBody += await this.buildAttachmentPart(attachment, boundary);
+    }
+
+    // Cerrar multipart
+    emailBody += `--${boundary}--\r\n`;
+    
+    return emailBody;
+  }
+
+  /**
+   * 🎯 CONSTRUIR CUERPO COMPLETO: HTML + ATTACHMENTS (estructura anidada correcta)
+   */
+  private async buildFullMixedBody(
+    sendEmailData: SendEmailDto, 
+    attachments: EmailAttachmentDto[], 
+    mainBoundary: string
+  ): Promise<string> {
+    let emailBody = '';
+    const alternativeBoundary = this.generateBoundary();
+
+    // 1️⃣ COMENZAR CONTENEDOR PRINCIPAL (multipart/mixed)
+    emailBody += `--${mainBoundary}\r\n`;
+    emailBody += `Content-Type: multipart/alternative; boundary="${alternativeBoundary}"\r\n`;
+    emailBody += `\r\n`;
+
+    // 2️⃣ PARTE ALTERNATIVA: TEXTO PLANO
+    emailBody += `--${alternativeBoundary}\r\n`;
+    emailBody += 'Content-Type: text/plain; charset=UTF-8\r\n';
+    emailBody += 'Content-Transfer-Encoding: 7bit\r\n\r\n';
+    emailBody += sendEmailData.body + '\r\n\r\n';
+
+    // 3️⃣ PARTE ALTERNATIVA: HTML
+    emailBody += `--${alternativeBoundary}\r\n`;
+    emailBody += 'Content-Type: text/html; charset=UTF-8\r\n';
+    emailBody += 'Content-Transfer-Encoding: 7bit\r\n\r\n';
+    emailBody += sendEmailData.bodyHtml + '\r\n\r\n';
+
+    // 4️⃣ CERRAR PARTE ALTERNATIVA
+    emailBody += `--${alternativeBoundary}--\r\n\r\n`;
+
+    // 5️⃣ AGREGAR ATTACHMENTS AL CONTENEDOR PRINCIPAL
+    for (const attachment of attachments) {
+      emailBody += await this.buildAttachmentPart(attachment, mainBoundary);
+    }
+
+    // 6️⃣ CERRAR CONTENEDOR PRINCIPAL
+    emailBody += `--${mainBoundary}--\r\n`;
+    
+    return emailBody;
+  }
 
   /**
    * 🎯 GENERAR MESSAGE ID ÚNICO
@@ -2035,9 +2365,52 @@ export class EmailsService {
   }
 
   /**
+   * 🔤 CODIFICAR HEADERS UTF-8 CORRECTAMENTE
+   */
+  private encodeUtf8Header(value: string): string {
+    if (!value || typeof value !== 'string') {
+      return '';
+    }
+
+    try {
+      // Si solo contiene ASCII, no necesita encoding
+      if (/^[\x00-\x7F]*$/.test(value)) {
+        return value;
+      }
+      
+      // Para caracteres no-ASCII, usar RFC 2047 encoded-word
+      const maxLength = 50;
+      
+      if (value.length <= maxLength) {
+        return `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`;
+      }
+      
+      // Para textos largos, dividir en múltiples encoded-words
+      const chunks: string[] = [];
+      let remaining = value;
+      
+      while (remaining.length > 0) {
+        let chunk = remaining.substring(0, maxLength);
+        while (chunk.length > 0 && Buffer.byteLength(chunk, 'utf8') > maxLength) {
+          chunk = chunk.substring(0, chunk.length - 1);
+        }
+        
+        chunks.push(`=?UTF-8?B?${Buffer.from(chunk, 'utf8').toString('base64')}?=`);
+        remaining = remaining.substring(chunk.length);
+      }
+      
+      return chunks.join(' ');
+      
+    } catch (error) {
+      this.logger.warn(`Error encoding header: ${value}, usando original`);
+      return value;
+    }
+  }
+
+  /**
    * 🎨 OBTENER HEADERS DE PRIORIDAD
    */
-  private getPriorityHeaders(priority: EmailPriority): Partial<EmailHeaders> {
+  private getPriorityHeaders(priority: EmailPriority): Record<string, string> {
     switch (priority) {
       case EmailPriority.HIGH:
         return {
@@ -2062,72 +2435,50 @@ export class EmailsService {
   }
 
   /**
+   * ✅ VALIDAR MESSAGE ID PARA HILOS
+   */
+  private isValidMessageId(messageId: string): boolean {
+    if (!messageId || typeof messageId !== 'string') {
+      return false;
+    }
+    
+    const messageIdRegex = /^<[^<>@]+@[^<>@]+\.[^<>@]+>$/;
+    return messageIdRegex.test(messageId) && messageId.length <= 998;
+  }
+
+  /**
    * 📦 GENERAR BOUNDARY PARA MULTIPART
    */
   private generateBoundary(): string {
-    return '----=_Part_' + Date.now() + '_' + Math.random().toString(36).substring(2, 15);
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 15);
+    const uuid = Math.random().toString(36).substring(2, 8);
+    return `----=_Part_${timestamp}_${random}_${uuid}`;
   }
 
   /**
-   * 🏗️ CONSTRUIR CUERPO DEL EMAIL (texto + HTML + attachments)
+   * 🆔 GENERAR REQUEST ID PARA TRACKING
    */
-  private async buildEmailBody(
-    sendEmailData: SendEmailDto, 
-    attachments?: EmailAttachmentDto[]
-  ): Promise<string> {
-    try {
-      // 1️⃣ EMAIL SIMPLE (solo texto plano, sin attachments ni HTML)
-      if (!sendEmailData.bodyHtml && !attachments?.length) {
-        return sendEmailData.body;
-      }
-
-      // 2️⃣ EMAIL MULTIPART
-      const boundary = this.generateBoundary();
-      let emailBody = '';
-
-      // Texto plano siempre va primero
-      emailBody += `--${boundary}\r\n`;
-      emailBody += 'Content-Type: text/plain; charset=UTF-8\r\n';
-      emailBody += 'Content-Transfer-Encoding: 7bit\r\n\r\n';
-      emailBody += sendEmailData.body + '\r\n\r\n';
-
-      // HTML si existe
-      if (sendEmailData.bodyHtml) {
-        emailBody += `--${boundary}\r\n`;
-        emailBody += 'Content-Type: text/html; charset=UTF-8\r\n';
-        emailBody += 'Content-Transfer-Encoding: 7bit\r\n\r\n';
-        emailBody += sendEmailData.bodyHtml + '\r\n\r\n';
-      }
-
-      // Attachments si existen
-      if (attachments?.length) {
-        for (const attachment of attachments) {
-          emailBody += await this.buildAttachmentPart(attachment, boundary);
-        }
-      }
-
-      // Cerrar multipart
-      emailBody += `--${boundary}--\r\n`;
-
-      return emailBody;
-
-    } catch (error) {
-      this.logger.error('❌ Error construyendo cuerpo del email:', error);
-      throw new Error(`Error construyendo cuerpo: ${error.message}`);
-    }
+  private generateRequestId(): string {
+    return 'req_' + Date.now() + '_' + Math.random().toString(36).substring(2, 10);
   }
 
   /**
-   * 📎 CONSTRUIR PARTE DE ATTACHMENT
+   * 📎 CONSTRUIR PARTE DE ATTACHMENT - MEJORADO
    */
   private async buildAttachmentPart(
     attachment: EmailAttachmentDto, 
     boundary: string
   ): Promise<string> {
     try {
-      // Validar attachment
+      // Validar attachment completo
       if (!attachment.filename || !attachment.content || !attachment.mimeType) {
         throw new Error('Attachment incompleto: falta filename, content o mimeType');
+      }
+
+      // Validar filename seguro
+      if (!this.isValidFilename(attachment.filename)) {
+        throw new Error(`Filename inválido: ${attachment.filename}`);
       }
 
       // Validar que el contenido sea base64 válido
@@ -2135,16 +2486,29 @@ export class EmailsService {
         throw new Error(`Attachment ${attachment.filename}: contenido no es base64 válido`);
       }
 
+      // Validar tamaño del attachment
+      const attachmentSizeBytes = (attachment.content.length * 3) / 4; // Tamaño real decodificado
+      const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024; // 20MB por archivo
+      
+      if (attachmentSizeBytes > MAX_ATTACHMENT_SIZE) {
+        throw new Error(`Attachment ${attachment.filename} demasiado grande: ${Math.round(attachmentSizeBytes / 1024 / 1024)}MB. Límite: 20MB`);
+      }
+
+      // Validar MIME type
+      if (!this.isValidMimeType(attachment.mimeType)) {
+        throw new Error(`MIME type inválido o peligroso: ${attachment.mimeType}`);
+      }
+
       let attachmentPart = `--${boundary}\r\n`;
-      attachmentPart += `Content-Type: ${attachment.mimeType}; name="${attachment.filename}"\r\n`;
-      attachmentPart += `Content-Disposition: attachment; filename="${attachment.filename}"\r\n`;
+      attachmentPart += `Content-Type: ${attachment.mimeType}; name="${this.sanitizeFilename(attachment.filename)}"\r\n`;
+      attachmentPart += `Content-Disposition: attachment; filename="${this.sanitizeFilename(attachment.filename)}"\r\n`;
       attachmentPart += 'Content-Transfer-Encoding: base64\r\n\r\n';
       
       // Dividir base64 en líneas de 76 caracteres (estándar MIME)
       const base64Lines = attachment.content.match(/.{1,76}/g) || [];
       attachmentPart += base64Lines.join('\r\n') + '\r\n\r\n';
 
-      this.logger.debug(`Attachment procesado: ${attachment.filename} (${attachment.mimeType})`);
+      this.logger.debug(`Attachment procesado: ${attachment.filename} (${attachment.mimeType}) - ${Math.round(attachmentSizeBytes / 1024)}KB`);
       
       return attachmentPart;
 
@@ -2155,22 +2519,86 @@ export class EmailsService {
   }
 
   /**
-   * 🔗 COMBINAR HEADERS Y BODY EN EMAIL COMPLETO
+   * 📂 VALIDAR FILENAME SEGURO
    */
-  private combineHeadersAndBody(emailMessage: EmailMessage): string {
-    try {
-      // Convertir headers object a string
-      const headerLines = Object.entries(emailMessage.headers)
-        .map(([key, value]) => `${key}: ${value}`)
-        .join('\r\n');
+  private isValidFilename(filename: string): boolean {
+    // Rechazar nombres de archivo peligrosos
+    const dangerousPatterns = [
+      /\.\./,                    // Path traversal
+      /^\.+$/,                   // Solo puntos
+      /[\u0000-\u001F\u007F]/,   // Caracteres de control
+      /[<>:"|?*]/,              // Caracteres problemáticos en Windows
+      /\.(exe|bat|cmd|scr|pif|com|pdb|dll|vbs|js)$/i, // Ejecutables peligrosos
+    ];
 
-      // Combinar headers + body
-      return headerLines + '\r\n\r\n' + emailMessage.body;
+    if (filename.length === 0 || filename.length > 255) return false;
+    
+    return !dangerousPatterns.some(pattern => pattern.test(filename));
+  }
 
-    } catch (error) {
-      this.logger.error('❌ Error combinando headers y body:', error);
-      throw new Error(`Error combinando email: ${error.message}`);
+  /**
+   * 🧹 SANITIZAR FILENAME
+   */
+private sanitizeFilename(filename: string): string {
+  return filename
+    .replace(/[<>:"|?*\u0000-\u001F\u007F]/g, '_')
+    .replace(/^\.+/, '_')
+    .substring(0, 100);
+}
+
+  /**
+   * 🎭 VALIDAR MIME TYPE SEGURO
+   */
+  private isValidMimeType(mimeType: string): boolean {
+    // Lista blanca de MIME types seguros
+    const allowedMimeTypes = [
+      // Documentos
+      'text/plain',
+      'text/csv',
+      'application/pdf',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      
+      // Imágenes
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'image/svg+xml',
+      
+      // Archivos comprimidos
+      'application/zip',
+      'application/x-zip-compressed',
+      'application/gzip',
+      'application/x-rar-compressed',
+      
+      // Otros seguros
+      'application/json',
+      'text/xml',
+      'application/xml',
+    ];
+
+    // MIME types peligrosos que siempre rechazar
+    const dangerousMimeTypes = [
+      'application/x-msdownload',
+      'application/x-msdos-program', 
+      'application/x-executable',
+      'application/x-winexe',
+      'application/x-javascript',
+      'text/javascript',
+      'application/javascript',
+    ];
+
+    if (dangerousMimeTypes.includes(mimeType.toLowerCase())) {
+      return false;
     }
+
+    return allowedMimeTypes.includes(mimeType.toLowerCase());
   }
 
   /**
@@ -2181,22 +2609,22 @@ export class EmailsService {
     sendEmailData: SendEmailDto
   ): Promise<SendEmailQuotaCheck> {
     try {
-      // 1️⃣ CALCULAR TAMAÑO ESTIMADO DEL EMAIL
-      const estimatedSize = this.estimateEmailSize(sendEmailData);
-      
-      // 2️⃣ LÍMITES CONOCIDOS DE GMAIL
-      const GMAIL_DAILY_LIMIT = 500; // Emails por día para cuentas normales
-      const GMAIL_SIZE_LIMIT = 25 * 1024 * 1024; // 25MB por email
-      const MAX_RECIPIENTS_PER_EMAIL = 100; // Variable usada
+      // 1️⃣ VALIDAR EMAILS DESTINATARIOS ANTES DE ENVIAR
+      const allRecipients = [
+        ...sendEmailData.to,
+        ...(sendEmailData.cc || []),
+        ...(sendEmailData.bcc || [])
+      ];
 
-      // 3️⃣ VERIFICAR TAMAÑO
-      if (estimatedSize > GMAIL_SIZE_LIMIT) {
+      // Validar cada email con regex más estricto
+      const invalidEmails = allRecipients.filter(email => !this.isValidEmailFormat(email));
+      if (invalidEmails.length > 0) {
         return {
           canSend: false,
-          reason: `Email demasiado grande: ${Math.round(estimatedSize / 1024 / 1024)}MB. Límite: 25MB`,
+          reason: `Emails inválidos detectados: ${invalidEmails.join(', ')}`,
           quotaInfo: {
-            dailyQuotaLimit: GMAIL_DAILY_LIMIT,
-            dailyQuotaUsed: 0, // No podemos obtener este dato sin API adicional
+            dailyQuotaLimit: 500,
+            dailyQuotaUsed: 0,
             rateLimitPerMinute: 10,
             rateLimitUsed: 0,
             canSendEmail: false
@@ -2204,10 +2632,31 @@ export class EmailsService {
         };
       }
 
-      // 4️⃣ VERIFICAR NÚMERO DE DESTINATARIOS
-      const totalRecipients = sendEmailData.to.length + 
-                             (sendEmailData.cc?.length || 0) + 
-                             (sendEmailData.bcc?.length || 0);
+      // 2️⃣ CALCULAR TAMAÑO ESTIMADO DEL EMAIL
+      const estimatedSize = this.estimateEmailSize(sendEmailData);
+      
+      // 3️⃣ LÍMITES CONOCIDOS DE GMAIL
+      const GMAIL_DAILY_LIMIT = 500; // Emails por día para cuentas normales
+      const GMAIL_SIZE_LIMIT = 25 * 1024 * 1024; // 25MB por email
+      const MAX_RECIPIENTS_PER_EMAIL = 100;
+
+      // 4️⃣ VERIFICAR TAMAÑO
+      if (estimatedSize > GMAIL_SIZE_LIMIT) {
+        return {
+          canSend: false,
+          reason: `Email demasiado grande: ${Math.round(estimatedSize / 1024 / 1024)}MB. Límite: 25MB`,
+          quotaInfo: {
+            dailyQuotaLimit: GMAIL_DAILY_LIMIT,
+            dailyQuotaUsed: 0,
+            rateLimitPerMinute: 10,
+            rateLimitUsed: 0,
+            canSendEmail: false
+          }
+        };
+      }
+
+      // 5️⃣ VERIFICAR NÚMERO DE DESTINATARIOS
+      const totalRecipients = allRecipients.length;
       
       if (totalRecipients > MAX_RECIPIENTS_PER_EMAIL) {
         return {
@@ -2223,12 +2672,12 @@ export class EmailsService {
         };
       }
 
-      // 5️⃣ TOD0-OK - PUEDE ENVIAR
+      // 6️⃣ TODO OK - PUEDE ENVIAR
       return {
         canSend: true,
         quotaInfo: {
           dailyQuotaLimit: GMAIL_DAILY_LIMIT,
-          dailyQuotaUsed: 0, // Estimado
+          dailyQuotaUsed: 0,
           rateLimitPerMinute: 10,
           rateLimitUsed: 0,
           canSendEmail: true
@@ -2250,6 +2699,42 @@ export class EmailsService {
         }
       };
     }
+  }
+
+  /**
+   * ✉️ VALIDAR FORMATO DE EMAIL MÁS ESTRICTAMENTE
+   */
+  private isValidEmailFormat(email: string): boolean {
+    // Regex más estricto que incluye dominios válidos
+    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+    
+    if (!emailRegex.test(email)) {
+      return false;
+    }
+
+    // Validaciones adicionales
+    const parts = email.split('@');
+    if (parts.length !== 2) return false;
+    
+    const [local, domain] = parts;
+    
+    // Validar parte local (antes del @)
+    if (local.length === 0 || local.length > 64) return false;
+    if (local.startsWith('.') || local.endsWith('.')) return false;
+    if (local.includes('..')) return false;
+    
+    // Validar dominio
+    if (domain.length === 0 || domain.length > 255) return false;
+    if (domain.startsWith('-') || domain.endsWith('-')) return false;
+    if (domain.startsWith('.') || domain.endsWith('.')) return false;
+    
+    // Rechazar dominios obviamente falsos
+    const fakeDomains = ['ejemplo.com', 'example.com', 'test.com', 'fake.com'];
+    if (fakeDomains.includes(domain.toLowerCase())) {
+      return false;
+    }
+    
+    return true;
   }
 
   /**
@@ -2360,9 +2845,10 @@ export class EmailsService {
     try {
       // En Node.js usar Buffer
       return Buffer.from(str, 'base64').toString('base64') === str;
-    } catch {
-      return false;
-    }
+    } catch (error) {
+  this.logger.debug(`Base64 validation failed:`, error);
+  return false;
+}
   }
 
   // Type guards helper
@@ -2372,13 +2858,11 @@ export class EmailsService {
 
   private getErrorCode(error: unknown): number {
     if (typeof error === 'object' && error !== null) {
-      const errorObj = error as any; // Uso justificado para extraer código
+      const errorObj = error as any;
       return errorObj.code || errorObj.response?.status || 0;
     }
     return 0;
   }
-
-
 
   // ================================
   // 📤 MÉTODOS REPLY EMAIL (EXISTENTES)
@@ -2862,7 +3346,6 @@ export class EmailsService {
 
   /**
    * 🔑 Obtener token válido para una cuenta específica
-   * 🎯 NUEVO: Helper para obtener tokens por cuenta
    */
   private async getValidTokenForAccount(
     cuentaGmailId: number,
@@ -3270,7 +3753,6 @@ export class EmailsService {
 
   /**
    * 🎮 Cambiar entre modo BD y API dinámicamente
-   * Útil para demos y pruebas de performance
    */
   toggleDatabaseMode(): { mode: string; USE_DATABASE: boolean } {
     this.USE_DATABASE = !this.USE_DATABASE;
