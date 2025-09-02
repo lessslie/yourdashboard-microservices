@@ -86,6 +86,29 @@ export class WhatsappAccountsService {
     return result.rows[0];
   }
 
+  async getPhoneNumberIdFromMeta(phone: string, token: string): Promise<string> {
+    const url = `https://graph.facebook.com/v19.0/${process.env.WHATSAPP_BUSINESS_ACCOUNT_ID}/phone_numbers`;
+    const { data } = await axios.get(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    // Normalizamos el número ingresado
+    const normalize = (num: string) => num.replace(/\D/g, ''); // deja solo dígitos
+
+    const phoneNormalized = normalize(phone);
+    console.log(data.data)
+    const match = data.data.find(
+      (num: any) => normalize(num.display_phone_number) === phoneNormalized,
+    );
+
+    if (!match) {
+      console.error('Lista de números devueltos por Meta:', data.data);
+      throw new Error(`No se encontró phone_number_id para el número ${phone}`);
+    }
+
+    return match.id; // este es el phone_number_id
+  }
+
   async updateTokenAccount(
     id: string,
     newToken: string,
@@ -167,8 +190,7 @@ export class WhatsappAccountsService {
       return updated;
     } catch (error: any) {
       throw new Error(
-        `Error refrescando token de cuenta ${id}: ${
-          error.response?.data?.error?.message || error.message
+        `Error refrescando token de cuenta ${id}: ${error.response?.data?.error?.message || error.message
         }`,
       );
     }

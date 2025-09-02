@@ -31,7 +31,7 @@ export class WebhookController {
     private readonly gateway: MessagesGateway,
     private readonly whatsappService: WhatsappService,
     private readonly whatsappAccountsService: WhatsappAccountsService,
-  ) {}
+  ) { }
 
   @Get()
   verifyWebhook(
@@ -69,43 +69,30 @@ export class WebhookController {
       const messages = value?.messages;
       const contacts = value?.contacts;
       const phoneNumberId = value?.metadata?.phone_number_id;
-      const displayPhoneNumber = value?.metadata?.display_phone_number;
 
       if (!phoneNumberId) {
         console.warn('Falta phone_number_id en el webhook');
         return res.sendStatus(200);
       }
 
-      // hardcodeamos el usuario, pero en un principio seria el access token
-      const usuarioPrincipalId = 1;
-
-      let cuenta =
-        await this.whatsappAccountsService.findByPhoneNumberId(phoneNumberId);
+      // Buscar cuenta vinculada previamente
+      const cuenta = await this.whatsappAccountsService.findByPhoneNumberId(phoneNumberId);
 
       if (!cuenta) {
-        console.log(
-          'No existe cuenta, insertando nueva cuenta en whatsapp_accounts',
+        console.warn(
+          `No existe cuenta vinculada para phone_number_id: ${phoneNumberId}`,
         );
-        cuenta = await this.whatsappAccountsService.createAccount({
-          usuario_principal_id: usuarioPrincipalId,
-          phone: displayPhoneNumber,
-          nombre_cuenta: `Cuenta ${displayPhoneNumber}`,
-          token: process.env.WHATSAPP_TOKEN || '',
-          alias_personalizado: null,
-          phone_number_id: phoneNumberId,
-        });
-      } else {
-        console.log('Cuenta encontrada en whatsapp_accounts');
+        return res.sendStatus(200);
       }
 
       if (messages?.length && contacts?.length) {
-        const message = messages[0];
-        const contact = contacts[0];
+        const message = messages[0] as { from: string; text?: { body: string }; timestamp: string };
+        const contact = contacts[0] as { profile?: { name?: string } };
 
-        const from = message.from;
-        const msgBody = message.text?.body || '';
-        const timestamp = Number(message.timestamp) * 1000;
-        const name = contact.profile?.name || null;
+        const from: string = message.from;
+        const msgBody: string = message.text?.body || '';
+        const timestamp: number = Number(message.timestamp) * 1000;
+        const name: string | null = contact.profile?.name || null;
 
         console.log(`Mensaje de ${from}: ${msgBody}`);
 
@@ -141,6 +128,7 @@ export class WebhookController {
     }
   }
 
+
   @Post('/send')
   async sendMessage(
     @Body() body: { to: string; message: string; cuentaId: string },
@@ -155,10 +143,6 @@ export class WebhookController {
           .json({ error: 'Faltan parámetros: to, message o cuentaId' });
       }
 
-      console.log(
-        `Enviando mensaje a ${to} desde la cuenta ${cuentaId}: "${message}"`,
-      );
-
       const cuenta = await this.whatsappAccountsService.findById(cuentaId);
 
       if (!cuenta) {
@@ -171,8 +155,6 @@ export class WebhookController {
         to,
         message,
       );
-
-      console.log('Mensaje enviado correctamente:', response);
 
       return res.status(200).json(response);
     } catch (error) {
@@ -195,13 +177,98 @@ export class WebhookController {
   @Post('/cuentas')
   async createAccount(@Body() body: CreateAccountDTO, @Res() res: Response) {
     try {
-      console.log('Body recibido en /cuentas:', body);
-
       const cuenta = await this.whatsappAccountsService.createAccount(body);
       return res.status(201).json(cuenta);
     } catch (error) {
       console.error('Error creando cuenta:', error);
       return res.status(500).json({ error: 'No se pudo crear la cuenta' });
+    }
+  }
+
+  @Post('/cuentas/vincular')
+  async vincularCuenta(
+    @Body() body: Partial<CreateAccountDTO>,
+    @Res() res: Response,
+  ) {
+    try {
+      if (!body.usuario_principal_id || !body.phone || !body.phone_number_id) {
+        return res.status(400).json({
+          error:
+            'Faltan parámetros obligatorios: usuario_principal_id, phone, phone_number_id',
+        });
+      }
+
+      let cuenta = await this.whatsappAccountsService.findByPhoneNumberId(
+        body.phone_number_id,
+      );
+
+      if (!cuenta) {
+        cuenta = await this.whatsappAccountsService.createAccount({
+          usuario_principal_id: body.usuario_principal_id,
+          phone: body.phone,
+          nombre_cuenta: body.nombre_cuenta || `Cuenta ${body.phone}`,
+          token: body.token || process.env.WHATSAPP_TOKEN || '',
+          alias_personalizado: body.alias_personalizado || null,
+          phone_number_id: body.phone_number_id,
+        });
+      } else {
+        cuenta = await this.whatsappAccountsService.updateAccount(cuenta.id, {
+          usuario_principal_id: body.usuario_principal_id,
+        });
+      }
+
+      return res.status(201).json(cuenta);
+    } catch (error) {
+      console.error('Error vinculando cuenta:', error);
+      return res.status(500).json({ error: 'No se pudo vincular la cuenta' });
+    }
+  }
+
+  @Post('/cuentas/vincular-por-numero')
+  async vincularPorNumero(
+    @Body()
+    body: { usuario_principal_id: number; phone: string; token?: string },
+    @Res() res: Response,
+  ) {
+    try {
+      const { usuario_principal_id, phone, token } = body;
+
+      if (!usuario_principal_id || !phone) {
+        return res.status(400).json({
+          error: 'Faltan parámetros: usuario_principal_id o phone',
+        });
+      }
+
+      const phone_number_id =
+        await this.whatsappAccountsService.getPhoneNumberIdFromMeta(
+          phone,
+          token || process.env.WHATSAPP_TOKEN || '',
+        );
+
+      let cuenta =
+        await this.whatsappAccountsService.findByPhoneNumberId(phone_number_id);
+
+      if (!cuenta) {
+        cuenta = await this.whatsappAccountsService.createAccount({
+          usuario_principal_id,
+          phone,
+          nombre_cuenta: `Cuenta ${phone}`,
+          token: token || process.env.WHATSAPP_TOKEN || '',
+          alias_personalizado: null,
+          phone_number_id,
+        });
+      } else {
+        cuenta = await this.whatsappAccountsService.updateAccount(cuenta.id, {
+          usuario_principal_id,
+        });
+      }
+
+      return res.status(201).json(cuenta);
+    } catch (error) {
+      console.error('Error vinculando cuenta por número:', error);
+      return res
+        .status(500)
+        .json({ error: 'No se pudo vincular la cuenta por número' });
     }
   }
 
@@ -212,10 +279,7 @@ export class WebhookController {
     @Res() res: Response,
   ) {
     try {
-      const cuenta = await this.whatsappAccountsService.updateAccount(
-        id,
-        body,
-      );
+      const cuenta = await this.whatsappAccountsService.updateAccount(id, body);
 
       if (!cuenta) {
         return res
@@ -235,3 +299,4 @@ export class WebhookController {
     return this.whatsappAccountsService.refreshToken(id);
   }
 }
+
