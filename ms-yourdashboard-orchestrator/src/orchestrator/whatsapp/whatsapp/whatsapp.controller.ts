@@ -9,9 +9,9 @@ import {
   Param,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { ConversationsService } from 'src/controlador-conversaciones/conversations/conversations.service';
+import { ConversationsService } from '../controlador-conversaciones/conversations/conversations.service';
 import { WhatsAppWebhookPayload } from './whatsapp-webhook.dto';
-import { MessagesGateway } from 'src/messages/messages.gateway';
+import { MessagesGateway } from '../messages/messages.gateway';
 import { WhatsappService } from './whatsapp.service';
 import { WhatsappAccountsService } from './whatsapp-accounts.service';
 
@@ -299,4 +299,3 @@ export class WebhookController {
     return this.whatsappAccountsService.refreshToken(id);
   }
 }
-
