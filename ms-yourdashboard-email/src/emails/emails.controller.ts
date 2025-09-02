@@ -10,7 +10,8 @@ import {
   Logger,
   Body,
   NotFoundException,
-  Delete
+  Delete,
+  ServiceUnavailableException
 } from '@nestjs/common';
 import { 
   ApiTags, 
@@ -21,7 +22,9 @@ import {
   ApiUnauthorizedResponse,
   ApiBadRequestResponse,
   ApiNotFoundResponse,
-  ApiBody
+  ApiBody,
+  ApiForbiddenResponse,
+  ApiServiceUnavailableResponse
 } from '@nestjs/swagger';
 import { EmailsService } from './emails.service';
 import { 
@@ -40,6 +43,8 @@ import {
   UpdateTrafficLightsResponse,
   
 } from './interfaces/traffic-light.interfaces';
+import { SendEmailResponse } from './interfaces/email.interfaces-send';
+import { SendEmailDto } from './dto/send-email.dto';
 
 
 @ApiTags('Emails')
@@ -928,6 +933,235 @@ async replyToEmail(
     success: result.success,
     message: result.message,
     sentMessageId: result.sentMessageId ?? ''
+  };
+}
+
+/**
+ * 📤 POST /emails/send - Enviar email nuevo
+ */
+@Post('send')
+@ApiOperation({ 
+  summary: 'Enviar email nuevo',
+  description: 'Crea y envía un email completamente nuevo (no respuesta) usando Gmail API.'
+})
+@ApiBody({
+  description: 'Datos del email a enviar',
+  type: SendEmailDto
+})
+@ApiOkResponse({ 
+  description: 'Email enviado exitosamente',
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      messageId: { type: 'string', example: '1847a8e123456789' },
+      threadId: { type: 'string', example: '1847a8e123456789' },
+      sentAt: { type: 'string', example: '2024-01-15T10:30:00Z' },
+      fromEmail: { type: 'string', example: 'agata.backend@gmail.com' },
+      toEmails: { type: 'array', items: { type: 'string' }, example: ['cliente@empresa.com'] },
+      ccEmails: { type: 'array', items: { type: 'string' }, example: ['jefe@empresa.com'] },
+      bccEmails: { type: 'array', items: { type: 'string' }, example: [] },
+      subject: { type: 'string', example: 'Propuesta comercial' },
+      priority: { type: 'string', enum: ['low', 'normal', 'high'], example: 'normal' },
+      hasAttachments: { type: 'boolean', example: false },
+      attachmentCount: { type: 'number', example: 0 },
+      sizeEstimate: { type: 'number', example: 2048 }
+    }
+  }
+})
+@ApiUnauthorizedResponse({ 
+  description: 'Token JWT inválido o expirado',
+  type: EmailErrorResponseDto 
+})
+@ApiBadRequestResponse({ 
+  description: 'Datos del email inválidos',
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: false },
+      error: { type: 'string', example: 'INVALID_EMAIL' },
+      message: { type: 'string', example: 'El email cliente@empresa..com es inválido' },
+      field: { type: 'string', example: 'to[0]' }
+    }
+  }
+})
+@ApiForbiddenResponse({ 
+  description: 'Cuenta Gmail no pertenece al usuario',
+  schema: {
+    type: 'object', 
+    properties: {
+      success: { type: 'boolean', example: false },
+      error: { type: 'string', example: 'INVALID_ACCOUNT' },
+      message: { type: 'string', example: 'La cuenta agata.backend@gmail.com no está asociada a tu usuario' }
+    }
+  }
+})
+@ApiServiceUnavailableResponse({
+  description: 'Límite de quota de Gmail excedido',
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: false },
+      error: { type: 'string', example: 'QUOTA_EXCEEDED' },
+      message: { type: 'string', example: 'Límite diario de envío excedido. Podés enviar más emails mañana a las 00:00' },
+      retryAfter: { type: 'number', example: 86400 }
+    }
+  }
+})
+/**
+ * 📤 POST /emails/send - Enviar email nuevo (REFACTORIZADO)
+ */
+@Post('send')
+@ApiOperation({ 
+  summary: 'Enviar email nuevo',
+  description: 'Crea y envía un email completamente nuevo (no respuesta) usando Gmail API.'
+})
+@ApiBody({ description: 'Datos del email a enviar', type: SendEmailDto })
+@ApiOkResponse({ 
+  description: 'Email enviado exitosamente',
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      messageId: { type: 'string', example: '1847a8e123456789' },
+      threadId: { type: 'string', example: '1847a8e123456789' },
+      sentAt: { type: 'string', example: '2024-01-15T10:30:00Z' },
+      fromEmail: { type: 'string', example: 'agata.backend@gmail.com' },
+      toEmails: { type: 'array', items: { type: 'string' }, example: ['cliente@empresa.com'] },
+      subject: { type: 'string', example: 'Propuesta comercial' },
+      priority: { type: 'string', enum: ['low', 'normal', 'high'], example: 'normal' },
+      hasAttachments: { type: 'boolean', example: false }
+    }
+  }
+})
+@ApiUnauthorizedResponse({ description: 'Token JWT inválido', type: EmailErrorResponseDto })
+@ApiBadRequestResponse({ description: 'Datos inválidos', type: EmailErrorResponseDto })
+@ApiForbiddenResponse({ description: 'Cuenta no autorizada', type: EmailErrorResponseDto })
+@ApiServiceUnavailableResponse({ description: 'Límite de quota excedido', type: EmailErrorResponseDto })
+async sendEmail(
+  @Headers('authorization') authHeader: string,
+  @Body() sendEmailData: SendEmailDto
+): Promise<SendEmailResponse> {
+  
+  // 🔒 VALIDACIONES BÁSICAS (extraídas a método privado)
+  this.validateSendEmailRequest(authHeader, sendEmailData);
+
+  // 📝 LOGGING DE LA REQUEST
+  this.logSendEmailRequest(sendEmailData);
+
+  try {
+    // 🚀 ENVIAR EMAIL
+    const result = await this.emailsService.sendEmailWithJWT(authHeader, sendEmailData);
+    
+    this.logger.log(`✅ Email enviado exitosamente - ID: ${result.messageId}`);
+    return result;
+
+  } catch (error) {
+    // 🚨 MANEJO DE ERRORES (extraído a método privado)
+    this.handleSendEmailError(error, sendEmailData);
+  }
+}
+
+// ================================
+// 🔧 MÉTODOS PRIVADOS EXTRAÍDOS
+// ================================
+
+/**
+ * ✅ VALIDAR REQUEST DE SEND EMAIL
+ */
+private validateSendEmailRequest(authHeader: string, sendEmailData: SendEmailDto): void {
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido en Authorization header');
+  }
+
+  if (!sendEmailData.from) {
+    throw new BadRequestException('Email remitente (from) es requerido');
+  }
+
+  if (!sendEmailData.to || sendEmailData.to.length === 0) {
+    throw new BadRequestException('Al menos un destinatario (to) es requerido');
+  }
+
+  if (!sendEmailData.subject?.trim()) {
+    throw new BadRequestException('Asunto del email es requerido');
+  }
+
+  if (!sendEmailData.body?.trim()) {
+    throw new BadRequestException('Contenido del email (body) es requerido');
+  }
+}
+
+/**
+ * 📝 LOGGING DE REQUEST
+ */
+private logSendEmailRequest(sendEmailData: SendEmailDto): void {
+  this.logger.log(`📤 Enviando email desde ${sendEmailData.from} a ${sendEmailData.to.length} destinatario(s)`);
+  this.logger.debug(`Destinatarios: ${sendEmailData.to.join(', ')}`);
+  this.logger.debug(`Asunto: ${sendEmailData.subject}`);
+  this.logger.debug(`Prioridad: ${sendEmailData.priority || 'normal'}`);
+  this.logger.debug(`Attachments: ${sendEmailData.attachments?.length || 0}`);
+}
+
+/**
+ * 🚨 MANEJO DE ERRORES ESPECÍFICOS
+ */
+private handleSendEmailError(error: any, sendEmailData: SendEmailDto): never {
+  this.logger.error('❌ Error enviando email:', error);
+  
+  // Re-throw specific exceptions
+  if (this.isKnownException(error)) {
+    throw error;
+  }
+
+  // Transform Gmail API errors
+  const gmailError = this.parseErrorMessage(error?.message || 'Error desconocido');
+  throw new BadRequestException(gmailError);
+}
+
+/**
+ * 🔍 VERIFICAR SI ES EXCEPCIÓN CONOCIDA
+ */
+private isKnownException(error: any): boolean {
+  return error instanceof UnauthorizedException ||
+         error instanceof BadRequestException ||
+         error instanceof NotFoundException ||
+         error instanceof ServiceUnavailableException;
+}
+
+/**
+ * 🎯 PARSEAR MENSAJE DE ERROR
+ */
+private parseErrorMessage(errorMessage: string): object {
+  if (errorMessage.includes('quota') || errorMessage.includes('limit')) {
+    return {
+      success: false,
+      error: 'QUOTA_EXCEEDED',
+      message: 'Límite de envío de Gmail excedido. Inténtalo más tarde.',
+      retryAfter: 3600
+    };
+  }
+
+  if (errorMessage.includes('Invalid recipients')) {
+    return {
+      success: false,
+      error: 'INVALID_RECIPIENTS',
+      message: 'Uno o más destinatarios tienen emails inválidos',
+      field: 'to'
+    };
+  }
+
+  if (errorMessage.includes('permission') || errorMessage.includes('access')) {
+    return {
+      success: false,
+      error: 'INVALID_ACCOUNT',
+      message: 'No tienes permisos para enviar desde esta cuenta'
+    };
+  }
+
+  return {
+    success: false,
+    error: 'SEND_FAILED',
+    message: 'Error interno enviando email. Inténtalo nuevamente.'
   };
 }
   //************************************************ */

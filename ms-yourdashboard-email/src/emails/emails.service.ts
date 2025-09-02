@@ -4,12 +4,13 @@ import {
   NotFoundException,
   Logger,
   UnauthorizedException,
+  ServiceUnavailableException,
+  BadRequestException,
 } from '@nestjs/common';
 import { google, gmail_v1 } from 'googleapis';
 import { ConfigService } from '@nestjs/config';
 import {
   DatabaseService,
-  EmailMetadataDB,
   EmailSearchFilters,
 } from '../database/database.service';
 import { SyncService, SyncOptions } from './sync.service';
@@ -34,6 +35,16 @@ import {
   ReplyEmailResponse,
   DeleteEmailResponse,
 } from './interfaces/traffic-light.interfaces';
+import { EmailAttachmentDto, EmailPriority, SendEmailDto } from './dto/send-email.dto';
+import { 
+  EmailHeaders, 
+  EmailMessage, 
+  GmailSendRequest, 
+  GmailSendResponse, 
+  SendEmailError, 
+  SendEmailQuotaCheck, 
+  SendEmailResponse 
+} from './interfaces/email.interfaces-send';
 
 @Injectable()
 export class EmailsService {
@@ -650,6 +661,7 @@ export class EmailsService {
       return null;
     }
   }
+
   // ================================
   // 🌍 BÚSQUEDA GLOBAL - MÉTODO ROUTER PRINCIPAL
   // ================================
@@ -1627,21 +1639,21 @@ export class EmailsService {
   /**
    * 🔄 Convertir EmailMetadataDB → EmailMetadata (para compatibilidad API)
    */
- private convertDBToEmailMetadata(dbEmail: EmailMetadataDBWithTrafficLight): EmailMetadata {
-  return {
-    id: dbEmail.gmail_message_id,
-    messageId: dbEmail.gmail_message_id,
-    subject: dbEmail.asunto || 'Sin asunto',
-    fromEmail: dbEmail.remitente_email || '',
-    fromName: dbEmail.remitente_nombre || '',
-    receivedDate: dbEmail.fecha_recibido || new Date(),
-    isRead: dbEmail.esta_leido,
-    hasAttachments: dbEmail.tiene_adjuntos,
-    // para compatibilidad con API semaforo:
-    trafficLightStatus: dbEmail.traffic_light_status || 'green',
-    daysWithoutReply: dbEmail.days_without_reply || 0,
-    repliedAt: dbEmail.replied_at || null
-  };
+  private convertDBToEmailMetadata(dbEmail: EmailMetadataDBWithTrafficLight): EmailMetadata {
+    return {
+      id: dbEmail.gmail_message_id,
+      messageId: dbEmail.gmail_message_id,
+      subject: dbEmail.asunto || 'Sin asunto',
+      fromEmail: dbEmail.remitente_email || '',
+      fromName: dbEmail.remitente_nombre || '',
+      receivedDate: dbEmail.fecha_recibido || new Date(),
+      isRead: dbEmail.esta_leido,
+      hasAttachments: dbEmail.tiene_adjuntos,
+      // para compatibilidad con API semaforo:
+      trafficLightStatus: dbEmail.traffic_light_status || 'green',
+      daysWithoutReply: dbEmail.days_without_reply || 0,
+      repliedAt: dbEmail.replied_at || null
+    };
   }
 
   /**
@@ -1746,7 +1758,631 @@ export class EmailsService {
     };
   }
 
-  //********************************************************** */
+  // ================================
+  // 📤 MÉTODOS PARA SEND EMAIL
+  // ================================
+
+  /**
+   * 📤 ENVIAR EMAIL NUEVO CON JWT - MÉTODO PRINCIPAL
+   */
+  async sendEmailWithJWT(
+    jwtToken: string,
+    sendEmailData: SendEmailDto
+  ): Promise<SendEmailResponse> {
+    try {
+      this.logger.log(`Iniciando envío de email nuevo desde ${sendEmailData.from}`);
+      
+      // 1️⃣ EXTRAER USER ID DEL JWT TOKEN
+      const userId = this.extractUserIdFromJWT(jwtToken);
+      
+      if (!userId) {
+        throw new UnauthorizedException('Token JWT inválido - no se pudo extraer userId');
+      }
+
+      this.logger.log(`Usuario extraído del JWT: ${userId}`);
+
+      // 2️⃣ VALIDAR QUE LA CUENTA FROM PERTENEZCA AL USUARIO
+      const cuentasUsuario = await this.databaseService.obtenerCuentasGmailUsuario(userId);
+      const cuentaGmail = cuentasUsuario.find(cuenta => cuenta.email_gmail === sendEmailData.from);
+      
+      if (!cuentaGmail) {
+        throw new NotFoundException(
+          `La cuenta ${sendEmailData.from} no está asociada al usuario ${userId}`
+        );
+      }
+
+      this.logger.log(`Cuenta Gmail validada: ${cuentaGmail.email_gmail} (ID: ${cuentaGmail.id})`);
+
+      // 3️⃣ OBTENER TOKEN DE ACCESO VÁLIDO
+      const accessToken = await this.getValidTokenForAccount(cuentaGmail.id);
+      
+      if (!accessToken) {
+        throw new UnauthorizedException('No se pudo obtener token de acceso válido para Gmail');
+      }
+
+      // 4️⃣ VALIDAR QUOTA DE GMAIL (opcional pero recomendado)
+      const quotaCheck = await this.checkGmailQuota(accessToken, sendEmailData);
+      if (!quotaCheck.canSend) {
+        throw new ServiceUnavailableException({
+          success: false,
+          error: 'QUOTA_EXCEEDED',
+          message: quotaCheck.reason || 'Límite de envío excedido',
+          retryAfter: quotaCheck.retryAfter || 3600
+        });
+      }
+
+      // 5️⃣ CONSTRUIR EL EMAIL COMPLETO
+      const emailMessage = await this.buildEmailMessage(sendEmailData);
+      
+      this.logger.debug(`Email construido - Tamaño: ${emailMessage.body.length} chars, Attachments: ${emailMessage.attachments?.length || 0}`);
+
+      // 6️⃣ ENVIAR VIA GMAIL API
+      const gmailResponse = await this.sendNewEmailViaGmailAPI(
+        accessToken, 
+        emailMessage, 
+        sendEmailData.inReplyTo // Para mantener hilo si es respuesta
+      );
+
+      // 7️⃣ CONSTRUIR RESPUESTA EXITOSA
+      const response: SendEmailResponse = {
+        success: true,
+        messageId: gmailResponse.id,
+        threadId: gmailResponse.threadId,
+        sentAt: new Date().toISOString(),
+        fromEmail: sendEmailData.from,
+        toEmails: sendEmailData.to,
+        ccEmails: sendEmailData.cc,
+        bccEmails: sendEmailData.bcc,
+        subject: sendEmailData.subject,
+        priority: sendEmailData.priority || EmailPriority.NORMAL,
+        hasAttachments: !!(sendEmailData.attachments?.length),
+        attachmentCount: sendEmailData.attachments?.length || 0,
+        sizeEstimate: gmailResponse.sizeEstimate
+      };
+
+      // 8️⃣ LOG DE ÉXITO
+      this.logger.log(`✅ Email enviado exitosamente - ID: ${response.messageId}, Thread: ${response.threadId}`);
+      this.logger.log(`Desde: ${response.fromEmail}, Para: ${response.toEmails.join(', ')}, Asunto: "${response.subject}"`);
+
+      return response;
+
+    } catch (error) {
+      this.logger.error('❌ Error enviando email nuevo:', error);
+      
+      // Re-throw specific exceptions
+      if (error instanceof UnauthorizedException || 
+          error instanceof NotFoundException ||
+          error instanceof ServiceUnavailableException) {
+        throw error;
+      }
+
+      // Transform Gmail API errors
+      const gmailError = this.parseGmailApiError(error);
+      if (gmailError) {
+        throw new BadRequestException({
+          success: false,
+          error: gmailError.code,
+          message: gmailError.message,
+          details: gmailError.details
+        });
+      }
+
+      // Generic error fallback
+      throw new BadRequestException({
+        success: false,
+        error: 'SEND_FAILED',
+        message: 'Error interno enviando email'
+      });
+    }
+  }
+
+  /**
+   * 🏗️ CONSTRUIR EMAIL COMPLETO (headers + body + attachments)
+   */
+  private async buildEmailMessage(sendEmailData: SendEmailDto): Promise<EmailMessage> {
+    try {
+      // 1️⃣ GENERAR MESSAGE ID ÚNICO
+      const messageId = this.generateMessageId(sendEmailData.from);
+      
+      // 2️⃣ CONSTRUIR HEADERS BÁSICOS
+      const headers: EmailHeaders = {
+        'To': sendEmailData.to.join(', '),
+        'Subject': sendEmailData.subject,
+        'From': sendEmailData.from,
+        'Message-ID': messageId,
+        'Date': new Date().toUTCString(),
+        'MIME-Version': '1.0',
+        'Content-Type': 'text/plain; charset=UTF-8' // Default, puede cambiar si hay HTML o adjuntos
+      };
+
+      // 3️⃣ AGREGAR CC Y BCC SI EXISTEN
+      if (sendEmailData.cc?.length) {
+        headers['Cc'] = sendEmailData.cc.join(', ');
+      }
+      
+      if (sendEmailData.bcc?.length) {
+        headers['Bcc'] = sendEmailData.bcc.join(', ');
+      }
+
+      // 4️⃣ AGREGAR HEADERS DE PRIORIDAD
+      if (sendEmailData.priority && sendEmailData.priority !== EmailPriority.NORMAL) {
+        const priorityHeaders = this.getPriorityHeaders(sendEmailData.priority);
+        Object.assign(headers, priorityHeaders);
+      }
+
+      // 5️⃣ AGREGAR CONFIRMACIÓN DE LECTURA
+      if (sendEmailData.requestReadReceipt) {
+        headers['Disposition-Notification-To'] = sendEmailData.from;
+      }
+
+      // 6️⃣ AGREGAR HEADERS PARA MANTENER HILO
+      if (sendEmailData.inReplyTo) {
+        headers['In-Reply-To'] = sendEmailData.inReplyTo;
+      }
+      
+      if (sendEmailData.references?.length) {
+        headers['References'] = sendEmailData.references.join(' ');
+      }
+
+      // 7️⃣ CONSTRUIR CUERPO DEL EMAIL
+      const emailBody = await this.buildEmailBody(
+        sendEmailData, 
+        sendEmailData.attachments
+      );
+
+      // 8️⃣ ACTUALIZAR CONTENT-TYPE HEADER
+      if (sendEmailData.bodyHtml || sendEmailData.attachments?.length) {
+        const boundary = this.generateBoundary();
+        headers['Content-Type'] = `multipart/mixed; boundary="${boundary}"`;
+        
+        return {
+          headers: headers as unknown as Record<string, string>,
+          body: emailBody,
+          attachments: sendEmailData.attachments,
+          boundary,
+          messageId
+        };
+      } else {
+        headers['Content-Type'] = 'text/plain; charset=UTF-8';
+        
+        return {
+          headers: headers as unknown as Record<string, string>,
+          body: emailBody,
+          messageId
+        };
+      }
+
+    } catch (error) {
+      this.logger.error('❌ Error construyendo email:', error);
+      throw new Error(`Error construyendo email: ${error.message}`);
+    }
+  }
+
+  /**
+   * 📤 ENVIAR EMAIL VIA GMAIL API
+   */
+  private async sendNewEmailViaGmailAPI(
+    accessToken: string, 
+    emailMessage: EmailMessage,
+    threadId?: string
+  ): Promise<GmailSendResponse> {
+    try {
+      // 1️⃣ CONFIGURAR GMAIL CLIENT
+      const oauth2Client = new google.auth.OAuth2();
+      oauth2Client.setCredentials({ access_token: accessToken });
+      const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+      // 2️⃣ CONSTRUIR EMAIL COMPLETO (headers + body)
+      const fullEmail = this.combineHeadersAndBody(emailMessage);
+
+      // 3️⃣ CODIFICAR EN BASE64URL
+      const encodedMessage = Buffer.from(fullEmail)
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+
+      // 4️⃣ PREPARAR REQUEST PARA GMAIL API
+      const gmailRequest: GmailSendRequest = {
+        userId: 'me',
+        requestBody: {
+          raw: encodedMessage
+        }
+      };
+
+      // 5️⃣ AGREGAR THREAD ID SI ES RESPUESTA
+      if (threadId) {
+        gmailRequest.requestBody.threadId = threadId;
+      }
+
+      this.logger.debug(`Enviando email via Gmail API - ThreadId: ${threadId || 'nuevo'}`);
+
+      // 6️⃣ ENVIAR VIA GMAIL API
+      const response = await gmail.users.messages.send(gmailRequest);
+
+      if (!response.data.id) {
+        throw new Error('Gmail API no retornó ID del mensaje enviado');
+      }
+
+      return {
+        id: response.data.id,
+        threadId: response.data.threadId || response.data.id,
+        labelIds: response.data.labelIds || undefined,
+        snippet: response.data.snippet || undefined,
+        sizeEstimate: response.data.sizeEstimate || undefined,
+        historyId: response.data.historyId || undefined,
+        internalDate: response.data.internalDate || undefined
+      };
+
+    } catch (error) {
+      this.logger.error('❌ Error en Gmail API send:', error);
+      throw error;
+    }
+  }
+
+  // ================================
+  // 🔧 MÉTODOS HELPER PRIVADOS PARA SEND
+  // ================================
+
+  /**
+   * 🎯 GENERAR MESSAGE ID ÚNICO
+   */
+  private generateMessageId(fromEmail: string): string {
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 15);
+    const domain = fromEmail.split('@')[1] || 'gmail.com';
+    return `<${timestamp}.${random}@${domain}>`;
+  }
+
+  /**
+   * 🎨 OBTENER HEADERS DE PRIORIDAD
+   */
+  private getPriorityHeaders(priority: EmailPriority): Partial<EmailHeaders> {
+    switch (priority) {
+      case EmailPriority.HIGH:
+        return {
+          'X-Priority': '1',
+          'X-MSMail-Priority': 'High',
+          'Importance': 'high'
+        };
+      case EmailPriority.LOW:
+        return {
+          'X-Priority': '5', 
+          'X-MSMail-Priority': 'Low',
+          'Importance': 'low'
+        };
+      case EmailPriority.NORMAL:
+      default:
+        return {
+          'X-Priority': '3',
+          'X-MSMail-Priority': 'Normal', 
+          'Importance': 'normal'
+        };
+    }
+  }
+
+  /**
+   * 📦 GENERAR BOUNDARY PARA MULTIPART
+   */
+  private generateBoundary(): string {
+    return '----=_Part_' + Date.now() + '_' + Math.random().toString(36).substring(2, 15);
+  }
+
+  /**
+   * 🏗️ CONSTRUIR CUERPO DEL EMAIL (texto + HTML + attachments)
+   */
+  private async buildEmailBody(
+    sendEmailData: SendEmailDto, 
+    attachments?: EmailAttachmentDto[]
+  ): Promise<string> {
+    try {
+      // 1️⃣ EMAIL SIMPLE (solo texto plano, sin attachments ni HTML)
+      if (!sendEmailData.bodyHtml && !attachments?.length) {
+        return sendEmailData.body;
+      }
+
+      // 2️⃣ EMAIL MULTIPART
+      const boundary = this.generateBoundary();
+      let emailBody = '';
+
+      // Texto plano siempre va primero
+      emailBody += `--${boundary}\r\n`;
+      emailBody += 'Content-Type: text/plain; charset=UTF-8\r\n';
+      emailBody += 'Content-Transfer-Encoding: 7bit\r\n\r\n';
+      emailBody += sendEmailData.body + '\r\n\r\n';
+
+      // HTML si existe
+      if (sendEmailData.bodyHtml) {
+        emailBody += `--${boundary}\r\n`;
+        emailBody += 'Content-Type: text/html; charset=UTF-8\r\n';
+        emailBody += 'Content-Transfer-Encoding: 7bit\r\n\r\n';
+        emailBody += sendEmailData.bodyHtml + '\r\n\r\n';
+      }
+
+      // Attachments si existen
+      if (attachments?.length) {
+        for (const attachment of attachments) {
+          emailBody += await this.buildAttachmentPart(attachment, boundary);
+        }
+      }
+
+      // Cerrar multipart
+      emailBody += `--${boundary}--\r\n`;
+
+      return emailBody;
+
+    } catch (error) {
+      this.logger.error('❌ Error construyendo cuerpo del email:', error);
+      throw new Error(`Error construyendo cuerpo: ${error.message}`);
+    }
+  }
+
+  /**
+   * 📎 CONSTRUIR PARTE DE ATTACHMENT
+   */
+  private async buildAttachmentPart(
+    attachment: EmailAttachmentDto, 
+    boundary: string
+  ): Promise<string> {
+    try {
+      // Validar attachment
+      if (!attachment.filename || !attachment.content || !attachment.mimeType) {
+        throw new Error('Attachment incompleto: falta filename, content o mimeType');
+      }
+
+      // Validar que el contenido sea base64 válido
+      if (!this.isValidBase64(attachment.content)) {
+        throw new Error(`Attachment ${attachment.filename}: contenido no es base64 válido`);
+      }
+
+      let attachmentPart = `--${boundary}\r\n`;
+      attachmentPart += `Content-Type: ${attachment.mimeType}; name="${attachment.filename}"\r\n`;
+      attachmentPart += `Content-Disposition: attachment; filename="${attachment.filename}"\r\n`;
+      attachmentPart += 'Content-Transfer-Encoding: base64\r\n\r\n';
+      
+      // Dividir base64 en líneas de 76 caracteres (estándar MIME)
+      const base64Lines = attachment.content.match(/.{1,76}/g) || [];
+      attachmentPart += base64Lines.join('\r\n') + '\r\n\r\n';
+
+      this.logger.debug(`Attachment procesado: ${attachment.filename} (${attachment.mimeType})`);
+      
+      return attachmentPart;
+
+    } catch (error) {
+      this.logger.error(`❌ Error procesando attachment ${attachment.filename}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 🔗 COMBINAR HEADERS Y BODY EN EMAIL COMPLETO
+   */
+  private combineHeadersAndBody(emailMessage: EmailMessage): string {
+    try {
+      // Convertir headers object a string
+      const headerLines = Object.entries(emailMessage.headers)
+        .map(([key, value]) => `${key}: ${value}`)
+        .join('\r\n');
+
+      // Combinar headers + body
+      return headerLines + '\r\n\r\n' + emailMessage.body;
+
+    } catch (error) {
+      this.logger.error('❌ Error combinando headers y body:', error);
+      throw new Error(`Error combinando email: ${error.message}`);
+    }
+  }
+
+  /**
+   * 📊 VERIFICAR QUOTA DE GMAIL (prevenir errores de límite)
+   */
+  private async checkGmailQuota(
+    accessToken: string, 
+    sendEmailData: SendEmailDto
+  ): Promise<SendEmailQuotaCheck> {
+    try {
+      // 1️⃣ CALCULAR TAMAÑO ESTIMADO DEL EMAIL
+      const estimatedSize = this.estimateEmailSize(sendEmailData);
+      
+      // 2️⃣ LÍMITES CONOCIDOS DE GMAIL
+      const GMAIL_DAILY_LIMIT = 500; // Emails por día para cuentas normales
+      const GMAIL_SIZE_LIMIT = 25 * 1024 * 1024; // 25MB por email
+      const MAX_RECIPIENTS_PER_EMAIL = 100; // Variable usada
+
+      // 3️⃣ VERIFICAR TAMAÑO
+      if (estimatedSize > GMAIL_SIZE_LIMIT) {
+        return {
+          canSend: false,
+          reason: `Email demasiado grande: ${Math.round(estimatedSize / 1024 / 1024)}MB. Límite: 25MB`,
+          quotaInfo: {
+            dailyQuotaLimit: GMAIL_DAILY_LIMIT,
+            dailyQuotaUsed: 0, // No podemos obtener este dato sin API adicional
+            rateLimitPerMinute: 10,
+            rateLimitUsed: 0,
+            canSendEmail: false
+          }
+        };
+      }
+
+      // 4️⃣ VERIFICAR NÚMERO DE DESTINATARIOS
+      const totalRecipients = sendEmailData.to.length + 
+                             (sendEmailData.cc?.length || 0) + 
+                             (sendEmailData.bcc?.length || 0);
+      
+      if (totalRecipients > MAX_RECIPIENTS_PER_EMAIL) {
+        return {
+          canSend: false,
+          reason: `Demasiados destinatarios: ${totalRecipients}. Límite: ${MAX_RECIPIENTS_PER_EMAIL}`,
+          quotaInfo: {
+            dailyQuotaLimit: GMAIL_DAILY_LIMIT,
+            dailyQuotaUsed: 0,
+            rateLimitPerMinute: 10,
+            rateLimitUsed: 0,
+            canSendEmail: false
+          }
+        };
+      }
+
+      // 5️⃣ TOD0-OK - PUEDE ENVIAR
+      return {
+        canSend: true,
+        quotaInfo: {
+          dailyQuotaLimit: GMAIL_DAILY_LIMIT,
+          dailyQuotaUsed: 0, // Estimado
+          rateLimitPerMinute: 10,
+          rateLimitUsed: 0,
+          canSendEmail: true
+        }
+      };
+
+    } catch (error) {
+      this.logger.warn('⚠️ Error verificando quota, permitiendo envío:', error);
+      
+      // Si falla la verificación, permitir envío (fail-open)
+      return {
+        canSend: true,
+        quotaInfo: {
+          dailyQuotaLimit: 500,
+          dailyQuotaUsed: 0,
+          rateLimitPerMinute: 10,
+          rateLimitUsed: 0,
+          canSendEmail: true
+        }
+      };
+    }
+  }
+
+  /**
+   * 📏 ESTIMAR TAMAÑO DEL EMAIL
+   */
+  private estimateEmailSize(sendEmailData: SendEmailDto): number {
+    try {
+      let totalSize = 0;
+
+      // Headers (estimado)
+      totalSize += 1024; // ~1KB para headers
+
+      // Body texto
+      totalSize += Buffer.byteLength(sendEmailData.body, 'utf8');
+
+      // Body HTML
+      if (sendEmailData.bodyHtml) {
+        totalSize += Buffer.byteLength(sendEmailData.bodyHtml, 'utf8');
+      }
+
+      // Attachments
+      if (sendEmailData.attachments?.length) {
+        for (const attachment of sendEmailData.attachments) {
+          // Base64 añade ~33% de overhead
+          const attachmentSize = (attachment.content.length * 3) / 4; // Decodificado
+          totalSize += attachmentSize * 1.33; // Con overhead de encoding
+        }
+      }
+
+      this.logger.debug(`Tamaño estimado del email: ${Math.round(totalSize / 1024)}KB`);
+      
+      return Math.round(totalSize);
+
+    } catch (error) {
+      this.logger.warn('⚠️ Error estimando tamaño, usando default:', error);
+      return 10 * 1024; // 10KB default
+    }
+  }
+
+  /**
+   * 🔍 PARSEAR ERRORES DE GMAIL API
+   */
+  private parseGmailApiError(error: unknown): SendEmailError | null {
+    try {
+      // Type guard seguro
+      const errorObj = this.isErrorWithMessage(error) ? error : { message: 'Unknown error' };
+      const errorMessage = errorObj.message || '';
+      const errorCode = this.getErrorCode(error);
+
+      // Errores conocidos de Gmail API
+      if (errorMessage.includes('Invalid recipients') || errorMessage.includes('invalid_recipient')) {
+        return {
+          code: 'INVALID_RECIPIENTS',
+          message: 'Uno o más destinatarios tienen direcciones de email inválidas',
+          timestamp: new Date().toISOString(),
+          gmailApiError: { code: errorCode, message: errorMessage }
+        };
+      }
+
+      if (errorMessage.includes('quota') || errorMessage.includes('limit') || errorCode === 429) {
+        return {
+          code: 'QUOTA_EXCEEDED',
+          message: 'Límite de envío de Gmail excedido. Inténtalo más tarde.',
+          timestamp: new Date().toISOString(),
+          gmailApiError: { code: errorCode, message: errorMessage }
+        };
+      }
+
+      if (errorMessage.includes('permission') || errorMessage.includes('access') || errorCode === 403) {
+        return {
+          code: 'ACCESS_DENIED',
+          message: 'No tienes permisos para enviar desde esta cuenta Gmail',
+          timestamp: new Date().toISOString(),
+          gmailApiError: { code: errorCode, message: errorMessage }
+        };
+      }
+
+      if (errorMessage.includes('authentication') || errorMessage.includes('token') || errorCode === 401) {
+        return {
+          code: 'AUTH_FAILED',
+          message: 'Token de Gmail inválido o expirado',
+          timestamp: new Date().toISOString(),
+          gmailApiError: { code: errorCode, message: errorMessage }
+        };
+      }
+
+      if (errorMessage.includes('size') || errorMessage.includes('too large')) {
+        return {
+          code: 'EMAIL_TOO_LARGE',
+          message: 'El email excede el tamaño máximo permitido (25MB)',
+          timestamp: new Date().toISOString(),
+          gmailApiError: { code: errorCode, message: errorMessage }
+        };
+      }
+
+      // Si no es un error conocido, devolver null
+      return null;
+
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * ✅ VALIDAR BASE64
+   */
+  private isValidBase64(str: string): boolean {
+    try {
+      // En Node.js usar Buffer
+      return Buffer.from(str, 'base64').toString('base64') === str;
+    } catch {
+      return false;
+    }
+  }
+
+  // Type guards helper
+  private isErrorWithMessage(error: unknown): error is { message: string } {
+    return typeof error === 'object' && error !== null && 'message' in error;
+  }
+
+  private getErrorCode(error: unknown): number {
+    if (typeof error === 'object' && error !== null) {
+      const errorObj = error as any; // Uso justificado para extraer código
+      return errorObj.code || errorObj.response?.status || 0;
+    }
+    return 0;
+  }
+
+
+
+  // ================================
+  // 📤 MÉTODOS REPLY EMAIL (EXISTENTES)
+  // ================================
 
   /**
    * Responder email con JWT - ACTUALIZADO CON SEMÁFORO
@@ -2111,6 +2747,7 @@ export class EmailsService {
       };
     }
   }
+
   /**
    * 📤 ENVIAR RESPUESTA USANDO GMAIL API
    */
