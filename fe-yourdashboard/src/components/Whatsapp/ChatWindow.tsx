@@ -19,7 +19,7 @@ export default function ChatWindow({
   contact: initialContact,
 }: ChatWindowProps) {
   const [messages, setMessages] = useState<UIMessage[]>([]);
-  const [contact, setContact] = useState(initialContact);
+  const [contact, setContact] = useState(initialContact ?? null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const myPhone =
@@ -39,9 +39,13 @@ export default function ChatWindow({
         if (source.length > 0) {
           const lastMsg = source[source.length - 1];
           setContact({
-            name: lastMsg.name,
-            phone: lastMsg.phone,
+            name: lastMsg.name || initialContact?.name || "Contacto",
+            phone: lastMsg.phone || initialContact?.phone || "",
+            avatar: initialContact?.avatar,
           });
+        } else {
+          // si no hay mensajes, usa el contacto inicial
+          setContact(initialContact ?? null);
         }
 
         const formatted: UIMessage[] = source.map((msg) => ({
@@ -58,8 +62,9 @@ export default function ChatWindow({
         setMessages(formatted);
       } catch (error) {
         console.error("Error fetching messages:", error);
+        setContact(initialContact ?? null); // fallback al contacto inicial
 
-        // fallback a mock en caso de error
+        // fallback a mock
         const fallback = mockMessages[chatId] || [];
         if (fallback.length > 0) {
           const lastMsg = fallback[fallback.length - 1];
@@ -84,7 +89,7 @@ export default function ChatWindow({
     };
 
     fetchMessages();
-  }, [chatId, myPhone]);
+  }, [chatId, myPhone, initialContact]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -96,7 +101,7 @@ export default function ChatWindow({
       <Header
         style={{
           position: "sticky",
-          top: 20,
+          top: 0,
           zIndex: 10,
           backgroundColor: "#fff",
           display: "flex",
@@ -106,7 +111,9 @@ export default function ChatWindow({
           paddingInline: 16,
         }}
       >
-        <Avatar style={{ marginRight: 14 }} src={contact?.avatar} />
+        <Avatar style={{ marginRight: 14 }} src={contact?.avatar}>
+          {contact?.name?.[0] || "?"}
+        </Avatar>
         <div style={{ display: "flex", flexDirection: "column" }}>
           <Typography.Text strong style={{ fontSize: 19, color: "#222" }}>
             {contact?.name || "Contacto"}
@@ -131,58 +138,54 @@ export default function ChatWindow({
         }}
       >
         <List
-  dataSource={messages}
-  renderItem={(msg) => {
-  
-    return (
-      <div
-        style={{
-          display: "flex",
-          justifyContent: msg.from === "me" ? "flex-end" : "flex-start",
-          marginBottom: 6,
-        }}
-      >
-        <div
-          style={{
-            backgroundColor: msg.from === "me" ? "#7faff1" : "#f0f0f0",
-            color: msg.from === "me" ? "#fff" : "black",
-            padding: "8px 12px",
-            borderRadius: 16,
-            maxWidth: "60%",
-            wordBreak: "break-word",
-            textAlign: "left",
-            marginLeft: msg.from === "me" ? 40 : 0,
-            marginRight: msg.from === "me" ? 0 : 40,
-          }}
-        >
-          {msg.from !== "me" && (
+          dataSource={messages}
+          renderItem={(msg) => (
             <div
               style={{
-                fontWeight: 600,
-                fontSize: 13,
-                marginBottom: 4,
+                display: "flex",
+                justifyContent: msg.from === "me" ? "flex-end" : "flex-start",
+                marginBottom: 6,
               }}
             >
-              {msg.name}
+              <div
+                style={{
+                  backgroundColor: msg.from === "me" ? "#7faff1" : "#f0f0f0",
+                  color: msg.from === "me" ? "#fff" : "black",
+                  padding: "8px 12px",
+                  borderRadius: 16,
+                  maxWidth: "60%",
+                  wordBreak: "break-word",
+                  textAlign: "left",
+                  marginLeft: msg.from === "me" ? 40 : 0,
+                  marginRight: msg.from === "me" ? 0 : 40,
+                }}
+              >
+                {msg.from !== "me" && (
+                  <div
+                    style={{
+                      fontWeight: 600,
+                      fontSize: 13,
+                      marginBottom: 4,
+                    }}
+                  >
+                    {msg.name}
+                  </div>
+                )}
+                <div>{msg.text}</div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: msg.from === "me" ? "#e0e0e0" : "#999",
+                    marginTop: 4,
+                    textAlign: "right",
+                  }}
+                >
+                  {msg.time}
+                </div>
+              </div>
             </div>
           )}
-          <div>{msg.text}</div>
-          <div
-            style={{
-              fontSize: 11,
-              color: msg.from === "me" ? "#e0e0e0" : "#999",
-              marginTop: 4,
-              textAlign: "right",
-            }}
-          >
-            {msg.time}
-          </div>
-        </div>
-      </div>
-    );
-  }}
-/>
-
+        />
         <div ref={messagesEndRef} />
       </Content>
 

@@ -8,10 +8,12 @@ import {
 } from "../../../services/emails/emails";
 import { IDataEmail, IEmail, IEmailBack } from "@/interfaces/interfacesEmails";
 import { ICuentaGmail } from "@/interfaces/interfacesAuth";
+import { useAuthStore } from "@/store/authStore";
 
 export const useEmails = (cuentasGmail: ICuentaGmail[], userId: number) => {
   const [initLoading, setInitLoading] = useState(true);
   const [viewAll, setViewAll] = useState(true);
+  const { accessToken } = useAuthStore();
 
   const [list, setList] = useState<IDataEmail>({
     emails: [],
@@ -36,7 +38,7 @@ export const useEmails = (cuentasGmail: ICuentaGmail[], userId: number) => {
 
   const handleSync = async (cuentaGmailId: string) => {
     setInitLoading(true);
-    const token = localStorage.getItem("token");
+    const token = accessToken;
     if (!token || !cuentaGmailId) return;
 
     try {
@@ -63,7 +65,7 @@ export const useEmails = (cuentasGmail: ICuentaGmail[], userId: number) => {
   };
 
   const handleCheck = async () => {
-    const token = localStorage.getItem("token");
+    const token = accessToken;
     if (!token || searchTerm === "") return;
 
     setInitLoading(true);
@@ -115,7 +117,7 @@ export const useEmails = (cuentasGmail: ICuentaGmail[], userId: number) => {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = accessToken;
     if (!token || !userId || searchTerm !== "") return;
 
     setInitLoading(true);

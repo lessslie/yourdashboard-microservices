@@ -1,57 +1,51 @@
 import { useEffect, useState } from "react";
-import { getGmailCuentas, getUserData } from "../../../services/auth/auth";
-import {
-  ICuentaGmail,
-  ICuentaGmailBack,
-  IUser,
-  IUserBack,
-} from "@/interfaces/interfacesAuth";
+import { useAuthStore } from "@/store/authStore";
+import { getGmailCuentas, getUserData } from "@/services/auth/auth";
+import { ICuentaGmail, IUser } from "@/interfaces/interfacesAuth";
 
 export const useAuth = () => {
-  const [token, setToken] = useState("");
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-
-    if (token) {
-      setToken(token);
-    }
-  }, []);
+  const { accessToken, setToken, clearAuth } = useAuthStore();
 
   const saveToken = (token: string) => {
-    localStorage.setItem("token", token);
     setToken(token);
   };
 
   const remuveToken = () => {
-    localStorage.removeItem("token");
-    setToken("");
+    clearAuth();
   };
 
-  return { token, saveToken, remuveToken };
+  return {
+    token: accessToken || "",
+    accessToken,
+    saveToken,
+    remuveToken,
+    clearAuth,
+  };
 };
 
 export const useUserData = () => {
   const [loadingProfile, setLoadingProfile] = useState(true);
-  const [userData, setUserData] = useState<IUser>({} as IUser);
+  const { userProfile, setUserProfile, accessToken } = useAuthStore();
+
+  const userData: IUser = userProfile
+    ? {
+        id: userProfile.usuario.id,
+        name: userProfile.usuario.nombre,
+        email: userProfile.usuario.email,
+        state: userProfile.usuario.estado,
+        isEmailVerified: userProfile.usuario.email_verificado,
+        createdAt: userProfile.usuario.fecha_registro,
+      }
+    : ({} as IUser);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
+    if (accessToken && !userProfile) {
       const getUser = async () => {
         try {
-          const userResponse = await getUserData(token);
-          const userData = userResponse.usuario as IUserBack;
+          const userResponse = await getUserData(accessToken);
+          console.log("userResponse", userResponse);
 
-          const user: IUser = {
-            id: userData.id,
-            name: userData.nombre,
-            email: userData.email,
-            state: userData.estado,
-            isEmailVerified: userData.email_verificado,
-            createdAt: userData.fecha_registro,
-          };
-
-          setUserData(user);
+          setUserProfile(userResponse);
         } catch (error) {
           console.log(error);
         } finally {
@@ -59,37 +53,41 @@ export const useUserData = () => {
         }
       };
       getUser();
+    } else if (userProfile) {
+      setLoadingProfile(false);
     }
-  }, []);
+  }, [accessToken, userProfile, setUserProfile]);
 
   return { userData, loadingProfile };
 };
 
 export const useCuentasGmail = () => {
-  const [cuentasGmail, setCuentasGmail] = useState<ICuentaGmail[]>([]);
+  const { getGmailAccounts, setGmailAccounts, accessToken, setUserProfile } =
+    useAuthStore();
+  const cuentasGmail: ICuentaGmail[] = getGmailAccounts().map((cuenta) => ({
+    id: cuenta.id.toString(),
+    emailGmail: cuenta.email_gmail,
+    nameGmail: cuenta.nombre_cuenta,
+    alias: cuenta.alias_personalizado || "Sin alias",
+    createdAt: cuenta.fecha_conexion,
+    lastSync: cuenta.ultima_sincronizacion || "Sin sincronizar",
+    isActive: cuenta.esta_activa ? "Activo" : "Inactivo",
+    emailsCount: cuenta.emails_count,
+  }));
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = accessToken;
     if (token) {
       const getCuentasGmail = async () => {
         const gmailResponse = await getGmailCuentas(token);
-        const cuentas = gmailResponse.cuentas as ICuentaGmailBack[];
-        const cuentasGmail: ICuentaGmail[] = cuentas.map((cuenta) => ({
-          id: cuenta.id.toString(),
-          emailGmail: cuenta.email_gmail,
-          nameGmail: cuenta.nombre_cuenta,
-          alias: cuenta.alias_personalizado || "Sin alias",
-          createdAt: cuenta.fecha_conexion,
-          lastSync: cuenta.ultima_sincronizacion || "Sin sincronizar",
-          isActive: cuenta.esta_activa ? "Activo" : "Inactivo",
-          emailsCount: parseInt(cuenta.emails_count),
-        }));
-        setCuentasGmail(cuentasGmail);
-        // console.log("📧 Cuentas Gmail:", gmailResponse.cuentas);
+        const cuentas = gmailResponse.cuentas;
+
+        setGmailAccounts(cuentas);
+        setUserProfile(gmailResponse.user);
       };
       getCuentasGmail();
     }
-  }, []);
+  }, [accessToken, setGmailAccounts, setUserProfile]);
 
   return {
     cuentasGmail,

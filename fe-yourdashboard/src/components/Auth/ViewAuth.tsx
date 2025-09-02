@@ -5,9 +5,12 @@ import Image from "next/image";
 import { Footer } from "antd/es/layout/layout";
 import FormLogin from "./FormLogin";
 import FormRegister from "./FormRegister";
+import { SpinerGlobal, useCargando } from "@/utils/cargando";
 
 const ViewAuth = () => {
   const [changeForm, setChangeForm] = useState(false);
+  const { loading } = useCargando();
+  if (loading) return <SpinerGlobal />;
   return (
     <Layout
       style={{

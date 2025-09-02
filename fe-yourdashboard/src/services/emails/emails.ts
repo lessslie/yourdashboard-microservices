@@ -6,14 +6,13 @@ export const handleConnectService = async (token: string) => {
   try {
     const authUrl = `${MS_ORCHES_URL}/auth/google?token=${encodeURIComponent(
       token
-    )}`;
+    )}&service=gmail`;
     window.location.href = authUrl;
   } catch (error) {
     console.error("❌ Error iniciando OAuth:", error);
   }
 };
 
-// peticiones de emails
 export const getAllEmails = async (
   token: string,
   userId: string,
@@ -63,7 +62,6 @@ export const getEmails = async (
   }
 };
 
-// peticiones de busqueda de emails
 export const getAllSearchEmails = async (
   token: string,
   userId: string,
@@ -137,7 +135,7 @@ export const postEmailSync = async (token: string, cuentaGmailId: string) => {
   try {
     const response = await axios.post(
       `${MS_ORCHES_URL}/emails/sync/incremental`,
-      {}, // body vacío
+      {},
       {
         headers: {
           Authorization: `Bearer ${token}`,

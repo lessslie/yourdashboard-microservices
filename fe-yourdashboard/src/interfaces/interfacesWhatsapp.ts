@@ -4,14 +4,18 @@ export interface Conversation {
   name: string;
   last_message: string;
   last_message_date: string;
+  whatsapp_account_id: string;
+  matched_message?: string; // Mensaje que coincide con la búsqueda
+  matched_messages_id?: string; // IDs de mensajes que coinciden con la búsqueda
 }
 
 export interface ConversationListItem {
-  id: string;
-  phone: string;
-  name: string;
+  conversation_id: string,
+  name: string,
+  phone: string,
   last_message: string;
   last_message_date: string;
+  whatsapp_account_id: string;
 }
 
 export interface Message {

@@ -33,6 +33,7 @@ export default function ConversationList({
         let data: ConversationListItem[] = [];
         if (accountId === "1") {
           data = await getConversations();
+          console.log("Fetched conversations from back:", data);
         }
 
         // si no hay nada del back, usa mock
@@ -57,20 +58,21 @@ export default function ConversationList({
     <p>Cargando conversaciones...</p>
   ) : (
     <List
-      itemLayout="horizontal"
-      dataSource={conversations}
-      renderItem={(chat) => (
-        <List.Item
-          style={{
-            backgroundColor: selectedChatId === chat.id ? "#188fff44" : "transparent",
-            padding: "10px 16px",
-            cursor: "pointer",
-          }}
-          onClick={() => onSelectChat(chat.id)}
-        >
-          <List.Item.Meta title={chat.name} description={chat.last_message} />
-        </List.Item>
-      )}
-    />
+  itemLayout="horizontal"
+  dataSource={conversations}
+  renderItem={(chat) => (
+    <List.Item
+      style={{
+        backgroundColor: selectedChatId === chat.conversation_id ? "#188fff44" : "transparent",
+        padding: "10px 16px",
+        cursor: "pointer",
+      }}
+      onClick={() => onSelectChat(chat.conversation_id)}
+    >
+      <List.Item.Meta title={chat.name} description={chat.last_message} />
+    </List.Item>
+  )}
+/>
+
   );
 }
