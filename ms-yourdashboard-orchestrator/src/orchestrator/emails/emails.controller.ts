@@ -11,6 +11,8 @@ import {
   Body,
   Logger,
   Delete,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { 
   ApiTags, 
@@ -23,6 +25,8 @@ import {
   ApiUnauthorizedResponse,
   ApiBody,
   ApiBearerAuth,
+  ApiForbiddenResponse,
+  ApiServiceUnavailableResponse,
 } from '@nestjs/swagger';
 import { EmailsOrchestratorService } from './emails.service';
 import {
@@ -31,9 +35,11 @@ import {
   OrchestratorErrorDto,
   ReplyEmailDto,
   ReplyResponseDto,
+  OrchestratorSendEmailResponseDto,
 } from './dto';
 import { ReplyEmailRequest, ReplyEmailResponse } from './interfaces/emails.interfaces';
 import { OrchestratorEmailsByTrafficLight, OrchestratorTrafficLightDashboard, OrchestratorUpdateTrafficLights, TrafficLightStatus } from './interfaces';
+import { SendEmailDto } from './dto/send-email.dto';
 
 @Controller('emails')
 @ApiTags('Emails')
@@ -777,6 +783,293 @@ export class EmailsOrchestratorController {
     }
   }
 
+  //*************************************** */
+  // ENVIAR EMAIL NUEVO
+  //*************************************** */
+
+/**
+ * 📤 POST /emails/send - Enviar email nuevo
+ */
+@Post('send')
+@ApiBearerAuth('JWT-auth')
+@ApiOperation({ 
+  summary: 'Enviar email nuevo',
+  description: `
+    **Funcionalidad:** Crea y envía un email completamente nuevo (no respuesta) coordinando MS-Auth + MS-Email.
+    
+    **Diferencia con REPLY:**
+    - REPLY responde a emails existentes (usa In-Reply-To, References, threadId)
+    - SEND crea emails nuevos desde cero (headers simples, nuevo threadId)
+    
+    **Proceso interno:**
+    1. Valida token JWT y extrae userId
+    2. Valida que la cuenta FROM pertenezca al usuario autenticado
+    3. Coordina con MS-Auth para obtener tokens válidos
+    4. Delega a MS-Email para construcción y envío via Gmail API
+    5. Invalida caches automáticamente
+    
+    **Características soportadas:**
+    - Múltiples destinatarios (TO, CC, BCC)
+    - Contenido HTML y texto plano
+    - Archivos adjuntos (máximo 10 archivos, 25MB total)
+    - Prioridades de email (low, normal, high)
+    - Confirmación de lectura
+    - Validaciones de seguridad y límites
+  `
+})
+@ApiBody({
+  description: 'Datos completos del email a enviar',
+  type: SendEmailDto,
+  examples: {
+    'email-simple': {
+      summary: 'Email simple sin attachments',
+      description: 'Ejemplo básico de email con texto plano y HTML',
+      value: {
+        from: 'agata.backend@gmail.com',
+        to: ['cliente@empresa.com'],
+        subject: 'Propuesta comercial - Proyecto ABC',
+        body: 'Hola, espero que estés bien. Te envío la propuesta que discutimos...',
+        bodyHtml: '<p>Hola,</p><p>Espero que estés bien. Te envío la propuesta que discutimos...</p>',
+        priority: 'normal'
+      }
+    },
+    'email-completo': {
+      summary: 'Email completo con CC, BCC y attachments',
+      description: 'Ejemplo avanzado con múltiples destinatarios y archivos',
+      value: {
+        from: 'agata.backend@gmail.com',
+        to: ['cliente@empresa.com', 'socio@empresa.com'],
+        cc: ['jefe@empresa.com'],
+        bcc: ['supervisor@empresa.com'],
+        subject: 'Propuesta comercial con documentos - Proyecto ABC',
+        body: 'Adjunto encuentran la propuesta detallada y los documentos técnicos.',
+        bodyHtml: '<p>Adjunto encuentran la <strong>propuesta detallada</strong> y los documentos técnicos.</p>',
+        priority: 'high',
+        requestReadReceipt: true,
+        attachments: [
+          {
+            filename: 'propuesta.pdf',
+            content: 'JVBERi0xLjQKJdP...',
+            mimeType: 'application/pdf'
+          }
+        ]
+      }
+    }
+  }
+})
+@ApiOkResponse({ 
+  description: 'Email enviado exitosamente',
+  type: OrchestratorSendEmailResponseDto,
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      source: { type: 'string', example: 'orchestrator' },
+      data: {
+        type: 'object',
+        properties: {
+          messageId: { type: 'string', example: '1847a8e123456789' },
+          threadId: { type: 'string', example: '1847a8e123456789' },
+          sentAt: { type: 'string', example: '2024-01-15T10:30:00Z' },
+          fromEmail: { type: 'string', example: 'agata.backend@gmail.com' },
+          toEmails: { type: 'array', items: { type: 'string' }, example: ['cliente@empresa.com'] },
+          ccEmails: { type: 'array', items: { type: 'string' }, example: ['jefe@empresa.com'] },
+          subject: { type: 'string', example: 'Propuesta comercial' },
+          priority: { type: 'string', enum: ['low', 'normal', 'high'], example: 'normal' },
+          hasAttachments: { type: 'boolean', example: true },
+          attachmentCount: { type: 'number', example: 1 },
+          sizeEstimate: { type: 'number', example: 2048000 }
+        }
+      }
+    }
+  }
+})
+@ApiUnauthorizedResponse({ 
+  description: 'Token JWT inválido o expirado',
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: false },
+      error: { type: 'string', example: 'TOKEN_EXPIRED' },
+      message: { type: 'string', example: 'Token JWT inválido o expirado' },
+      timestamp: { type: 'string', example: '2024-01-15T10:30:00Z' }
+    }
+  }
+})
+@ApiBadRequestResponse({ 
+  description: 'Datos del email inválidos',
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: false },
+      error: { type: 'string', example: 'INVALID_RECIPIENTS' },
+      message: { type: 'string', example: 'El email cliente@empresa..com es inválido' },
+      field: { type: 'string', example: 'to[0]' },
+      timestamp: { type: 'string', example: '2024-01-15T10:30:00Z' }
+    }
+  }
+})
+@ApiForbiddenResponse({ 
+  description: 'Cuenta Gmail no pertenece al usuario',
+  schema: {
+    type: 'object', 
+    properties: {
+      success: { type: 'boolean', example: false },
+      error: { type: 'string', example: 'ACCOUNT_NOT_AUTHORIZED' },
+      message: { type: 'string', example: 'La cuenta agata.backend@gmail.com no está asociada a tu usuario' },
+      timestamp: { type: 'string', example: '2024-01-15T10:30:00Z' }
+    }
+  }
+})
+@ApiServiceUnavailableResponse({
+  description: 'Límite de quota de Gmail excedido o servicio no disponible',
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: false },
+      error: { type: 'string', example: 'QUOTA_EXCEEDED' },
+      message: { type: 'string', example: 'Límite diario de envío excedido. Podrás enviar más emails mañana a las 00:00' },
+      retryAfter: { type: 'number', example: 86400 },
+      timestamp: { type: 'string', example: '2024-01-15T10:30:00Z' }
+    }
+  }
+})
+async sendEmail(
+  @Headers() headers: Record<string, string | undefined>,
+  @Body() sendEmailData: SendEmailDto
+): Promise<OrchestratorSendEmailResponseDto> {
+  const authHeader = headers?.authorization;
+  
+  try {
+    // 1️⃣ VALIDACIONES DE ENTRADA
+    if (!authHeader) {
+      throw new UnauthorizedException('Token JWT requerido - usa el botón Authorize');
+    }
+
+    this.validateSendEmailRequest(authHeader, sendEmailData);
+
+    // 2️⃣ LOGGING DE LA REQUEST
+    this.logSendEmailControllerRequest(sendEmailData);
+
+    // 3️⃣ DELEGAR AL SERVICE
+    const result = await this.emailsService.sendEmail(authHeader, sendEmailData);
+    
+    this.logger.log(`✅ Email enviado exitosamente via orchestrator - ID: ${result.data?.messageId}`);
+    
+    return {
+      success: true,
+      source: 'orchestrator',
+      data: result.data!
+    };
+
+  } catch (error) {
+    // 4️⃣ MANEJO ESPECÍFICO DE ERRORES
+    this.handleSendEmailError(error, sendEmailData);
+  }
+}
+
+// ================================
+// 🔧 MÉTODOS PRIVADOS PARA EL ENDPOINT SEND
+// ================================
+
+/**
+ * ✅ VALIDAR REQUEST DE SEND EMAIL
+ */
+private validateSendEmailRequest(authHeader: string, sendEmailData: SendEmailDto): void {
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido en Authorization header');
+  }
+
+  if (!sendEmailData.from) {
+    throw new BadRequestException('Email remitente (from) es requerido');
+  }
+
+  if (!sendEmailData.to || sendEmailData.to.length === 0) {
+    throw new BadRequestException('Al menos un destinatario (to) es requerido');
+  }
+
+  if (!sendEmailData.subject?.trim()) {
+    throw new BadRequestException('Asunto del email es requerido');
+  }
+
+  if (!sendEmailData.body?.trim()) {
+    throw new BadRequestException('Contenido del email (body) es requerido');
+  }
+
+  // Validación adicional de límites del controller
+  const totalRecipients = sendEmailData.to.length + 
+                          (sendEmailData.cc?.length || 0) + 
+                          (sendEmailData.bcc?.length || 0);
+  if (totalRecipients > 100) {
+    throw new BadRequestException(`Demasiados destinatarios: ${totalRecipients}. Límite: 100 total`);
+  }
+
+  if (sendEmailData.attachments && sendEmailData.attachments.length > 10) {
+    throw new BadRequestException('Máximo 10 archivos adjuntos permitidos');
+  }
+}
+
+/**
+ * 📝 LOGGING DE REQUEST EN CONTROLLER
+ */
+private logSendEmailControllerRequest(sendEmailData: SendEmailDto): void {
+  this.logger.log(`📤 ORCHESTRATOR - Enviando email desde ${sendEmailData.from} a ${sendEmailData.to.length} destinatario(s)`);
+  this.logger.debug(`Destinatarios: ${sendEmailData.to.join(', ')}`);
+  this.logger.debug(`Asunto: ${sendEmailData.subject}`);
+  this.logger.debug(`Prioridad: ${sendEmailData.priority || 'normal'}`);
+  this.logger.debug(`Attachments: ${sendEmailData.attachments?.length || 0}`);
+  this.logger.debug(`CC: ${sendEmailData.cc?.length || 0}, BCC: ${sendEmailData.bcc?.length || 0}`);
+}
+
+/**
+ * 🚨 MANEJO DE ERRORES ESPECÍFICOS DE SEND
+ */
+private handleSendEmailError(error: any, sendEmailData: SendEmailDto): never {
+  this.logger.error('❌ Error enviando email via orchestrator:', error);
+  console.log(sendEmailData);
+  
+  // Re-throw specific exceptions
+  if (this.isKnownHttpException(error)) {
+    throw error;
+  }
+
+  // Transform otros errores conocidos
+  if (error instanceof Error) {
+    const errorMessage = error.message;
+    
+    if (errorMessage.includes('fetch')) {
+      throw new HttpException(
+        'Error de conexión con el servicio de email',
+        HttpStatus.SERVICE_UNAVAILABLE
+      );
+    }
+    
+    if (errorMessage.includes('timeout') || errorMessage.includes('AbortError')) {
+      throw new HttpException(
+        'Timeout enviando email - el proceso tomó demasiado tiempo',
+        HttpStatus.REQUEST_TIMEOUT
+      );
+    }
+  }
+
+  // Error genérico
+  throw new BadRequestException({
+    success: false,
+    error: 'SEND_FAILED',
+    message: 'Error interno enviando email. Inténtalo nuevamente.',
+    timestamp: new Date().toISOString()
+  });
+}
+
+/**
+ * 🔍 VERIFICAR SI ES EXCEPCIÓN HTTP CONOCIDA
+ */
+private isKnownHttpException(error: any): error is HttpException {
+  return error instanceof UnauthorizedException ||
+         error instanceof BadRequestException ||
+         error instanceof NotFoundException ||
+         error instanceof HttpException;
+}
   /**
    * GET /emails/:id - Email específico coordinado
    */

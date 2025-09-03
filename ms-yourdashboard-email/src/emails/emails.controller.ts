@@ -102,11 +102,12 @@ export class EmailsController {
     type: EmailErrorResponseDto 
   })
   async syncEmails(
-    @Headers('authorization') authHeader: string,
+   @Headers() headers: Record<string, string | undefined>,
     @Query('cuentaGmailId') cuentaGmailId: string,
     @Query('maxEmails') maxEmails?: string,
     @Query('fullsync') fullsync?:string
   ) {
+    const authHeader = headers?.authorization;
     if (!cuentaGmailId) {
       throw new UnauthorizedException('cuentaGmailId is required');
     }
@@ -143,10 +144,11 @@ export class EmailsController {
     description: 'Sincronización incremental completada'
   })
   async syncIncremental(
-    @Headers('authorization') authHeader: string,
+    @Headers() headers: Record<string, string | undefined>,
     @Query('cuentaGmailId') cuentaGmailId: string,
     @Query('maxEmails') maxEmails?: string
   ) {
+    const authHeader = headers?.authorization;
     if (!cuentaGmailId) {
       throw new UnauthorizedException('cuentaGmailId is required');
     }
@@ -191,9 +193,10 @@ export class EmailsController {
     type: EmailErrorResponseDto 
   })
   async getEmailStats(
-    @Headers('authorization') authHeader: string,
+    @Headers() headers: Record<string, string | undefined>,
     @Query('cuentaGmailId') cuentaGmailId: string
   ): Promise<EmailStatsDto> {
+    const authHeader = headers?.authorization;
     if (!cuentaGmailId) {
       throw new UnauthorizedException('cuentaGmailId is required');
     }
@@ -235,11 +238,12 @@ export class EmailsController {
     type: EmailErrorResponseDto 
   })
   async getInbox(
-    @Headers('authorization') authHeader: string,
+   @Headers() headers: Record<string, string | undefined>,
     @Query('cuentaGmailId') cuentaGmailId: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string
   ): Promise<EmailListResponseDto> {
+    const authHeader = headers?.authorization;
     if (!cuentaGmailId) {
       throw new UnauthorizedException('cuentaGmailId is required');
     }
@@ -300,12 +304,13 @@ export class EmailsController {
     type: EmailErrorResponseDto 
   })
   async searchEmails(
-    @Headers('authorization') authHeader: string,
+    @Headers() headers: Record<string, string | undefined>,
     @Query('cuentaGmailId') cuentaGmailId: string,
     @Query('q') searchTerm: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string
   ): Promise<EmailListResponseDto> {
+    const authHeader = headers?.authorization;
     if (!cuentaGmailId) {
       throw new UnauthorizedException('cuentaGmailId is required');
     }
@@ -686,8 +691,9 @@ async getCronStatus() {
   type: EmailErrorResponseDto 
 })
 async getTrafficLightDashboard(
-  @Headers('authorization') authHeader: string
+  @Headers() headers: Record<string, string | undefined>
 ): Promise<TrafficLightDashboardResponse> {
+  const authHeader = headers?.authorization;
   if (!authHeader) {
     throw new UnauthorizedException('Token JWT requerido en Authorization header');
   }
@@ -760,11 +766,12 @@ async getTrafficLightDashboard(
   type: EmailErrorResponseDto 
 })
 async getEmailsByTrafficLight(
-  @Headers('authorization') authHeader: string,
+ @Headers() headers: Record<string, string | undefined>,
   @Param('status') status: string,
   @Query('cuentaId') cuentaId?: string,
   @Query('limit') limit?: string
 ): Promise<EmailsByTrafficLightResponse> {
+  const authHeader = headers?.authorization;
   if (!authHeader) {
     throw new UnauthorizedException('Token JWT requerido en Authorization header');
   }
@@ -835,8 +842,9 @@ async getEmailsByTrafficLight(
   type: EmailErrorResponseDto 
 })
 async updateTrafficLights(
-  @Headers('authorization') authHeader: string
+ @Headers() headers: Record<string, string | undefined>
 ): Promise<UpdateTrafficLightsResponse> {
+  const authHeader = headers?.authorization;
   if (!authHeader) {
     throw new UnauthorizedException('Token JWT requerido en Authorization header');
   }
@@ -902,7 +910,7 @@ async updateTrafficLights(
   type: EmailErrorResponseDto 
 })
 async replyToEmail(
-  @Headers('authorization') authHeader: string,
+  @Headers() headers: Record<string, string | undefined>,
   @Param('id') emailId: string,
   @Body() replyData: {
     body: string;
@@ -913,6 +921,7 @@ async replyToEmail(
   message?: string;
   sentMessageId: string;
 }> {
+  const authHeader = headers?.authorization;
   if (!authHeader) {
     throw new UnauthorizedException('Token JWT requerido en Authorization header');
   }
@@ -1039,11 +1048,15 @@ async replyToEmail(
 @ApiForbiddenResponse({ description: 'Cuenta no autorizada', type: EmailErrorResponseDto })
 @ApiServiceUnavailableResponse({ description: 'Límite de quota excedido', type: EmailErrorResponseDto })
 async sendEmail(
-  @Headers('authorization') authHeader: string,
+  @Headers() headers: Record<string, string | undefined >,
   @Body() sendEmailData: SendEmailDto
 ): Promise<SendEmailResponse> {
+  const authHeader = headers?.authorization;
   
   // 🔒 VALIDACIONES BÁSICAS (extraídas a método privado)
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido en Authorization header');
+  }
   this.validateSendEmailRequest(authHeader, sendEmailData);
 
   // 📝 LOGGING DE LA REQUEST
@@ -1194,9 +1207,10 @@ private parseErrorMessage(errorMessage: string): object {
     type: EmailErrorResponseDto 
   })
 async getEmailById(
-  @Headers('authorization') authHeader: string,
+  @Headers() headers: Record<string, string | undefined>,
   @Param('id') emailId: string
 ): Promise<EmailDetailDto> {
+  const authHeader = headers?.authorization;
   if (!authHeader) {
     throw new UnauthorizedException('Token JWT requerido en Authorization header');
   }

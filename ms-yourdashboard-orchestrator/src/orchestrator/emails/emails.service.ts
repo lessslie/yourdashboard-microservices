@@ -19,6 +19,17 @@ import {
   OrchestratorEmailsByTrafficLight,
   OrchestratorUpdateTrafficLights
 } from './interfaces';
+import { SendEmailDto } from './dto/send-email.dto';
+import { 
+  OrchestratorSendEmailResponse,
+  SendEmailResponse 
+} from './dto/send-email-response.dto';
+
+// 2️⃣ INTERFACE PARA MANEJO TIPADO DE ERRORES
+interface ParsedEmailError {
+  message: string;
+  code: string;
+}
 
 // Interfaces específicas para evitar any
 export interface SyncResponse {
@@ -901,6 +912,280 @@ export class EmailsOrchestratorService {
       );
     }
   }
+  // ==============================
+  // FIN MÉTODOS DEL SISTEMA SEMÁFORO
+  // ==============================
+
+  
+
+
+// 3️⃣ MÉTODO sendEmail CORREGIDO (reemplazar el existente)
+/**
+ * ENVIAR EMAIL NUEVO - Coordina con MS-Email para envío
+ */
+
+
+async sendEmail(
+  authHeader: string,
+  sendEmailData: SendEmailDto
+): Promise<OrchestratorSendEmailResponse> {
+  let userId: number;
+
+  try {
+    // 1️⃣ VALIDACIONES INICIALES
+    userId = this.validateJWTForSend(authHeader);
+    this.validateSendEmailData(sendEmailData);
+    
+    // 2️⃣ LOGGING DE REQUEST
+    this.logSendEmailRequest(sendEmailData, userId);
+
+    // 3️⃣ LLAMADA AL MICROSERVICIO MS-EMAIL
+    const response = await fetch(`${this.msEmailUrl}/emails/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authHeader
+      },
+      body: JSON.stringify(sendEmailData),
+      // Timeout más largo para emails con attachments grandes
+      signal: AbortSignal.timeout(60000) // 60 segundos
+    });
+
+    // 4️⃣ MANEJO DE ERRORES DE MS-EMAIL
+    if (!response.ok) {
+      const errorData = await response.text();
+      const { message, code } = this.parseEmailServiceError(errorData, response.status);
+      
+      this.logger.error(`MS-Email error [${code}]: ${message}`);
+      
+      // Mapear códigos HTTP a excepciones específicas
+      const statusMap: Record<number, number> = {
+        400: HttpStatus.BAD_REQUEST,
+        401: HttpStatus.UNAUTHORIZED,
+        403: HttpStatus.FORBIDDEN,
+        429: HttpStatus.TOO_MANY_REQUESTS,
+        503: HttpStatus.SERVICE_UNAVAILABLE
+      };
+
+      throw new HttpException(message, statusMap[response.status] || HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    // 5️⃣ PROCESAR RESPUESTA EXITOSA
+    const result = await response.json() as SendEmailResponse;
+    
+    // 6️⃣ LOGGING DE ÉXITO
+    this.logSendEmailSuccess(result, userId);
+
+    // 7️⃣ INVALIDAR CACHES (usar método existente)
+    await this.invalidateEmailCaches(userId);
+
+    return {
+      success: true,
+      source: 'orchestrator',
+      data: result
+    };
+
+  } catch (error) {
+    this.logger.error(`Error coordinando envío de email:`, error);
+    
+    // Re-throw HttpExceptions específicas
+    if (error instanceof HttpException) {
+      throw error;
+    }
+
+    // Manejo tipado de errores
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new HttpException(
+        'Error de conexión con el servicio de email',
+        HttpStatus.SERVICE_UNAVAILABLE
+      );
+    }
+
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new HttpException(
+        'Timeout enviando email - el email era demasiado grande o el servicio está ocupado',
+        HttpStatus.REQUEST_TIMEOUT
+      );
+    }
+
+    // Error genérico
+    throw new HttpException(
+      'Error interno enviando email',
+      HttpStatus.INTERNAL_SERVER_ERROR
+    );
+  }
+}
+
+// 4️⃣ MÉTODOS HELPER PRIVADOS (agregar al final de la clase)
+
+/**
+ * VALIDAR DATOS DE ENVÍO - Validaciones adicionales del orchestrator
+ */
+private validateSendEmailData(sendEmailData: SendEmailDto): void {
+  // Validar que no tenga destinatarios duplicados
+  const allRecipients = [
+    ...sendEmailData.to,
+    ...(sendEmailData.cc || []),
+    ...(sendEmailData.bcc || [])
+  ];
+
+  const uniqueRecipients = new Set(allRecipients.map(email => email.toLowerCase()));
+  if (uniqueRecipients.size !== allRecipients.length) {
+    throw new BadRequestException('Hay destinatarios duplicados en TO, CC o BCC');
+  }
+
+  // Validar límite total de destinatarios
+  const totalRecipients = allRecipients.length;
+  if (totalRecipients > 100) {
+    throw new BadRequestException(`Demasiados destinatarios: ${totalRecipients}. Límite: 100`);
+  }
+
+  // Validar que el remitente no esté en los destinatarios
+  const fromEmail = sendEmailData.from.toLowerCase();
+  if (allRecipients.some(email => email.toLowerCase() === fromEmail)) {
+    throw new BadRequestException('No puedes enviarte un email a ti mismo');
+  }
+
+  // Validar tamaño estimado de attachments
+  if (sendEmailData.attachments?.length) {
+    const totalAttachmentSize = sendEmailData.attachments.reduce((total, attachment) => {
+      // Estimar tamaño base64 decodificado
+      return total + (attachment.content.length * 3 / 4);
+    }, 0);
+
+    const MAX_EMAIL_SIZE = 25 * 1024 * 1024; // 25MB límite de Gmail
+    if (totalAttachmentSize > MAX_EMAIL_SIZE) {
+      const sizeMB = Math.round(totalAttachmentSize / 1024 / 1024);
+      throw new BadRequestException(
+        `Attachments demasiado grandes: ${sizeMB}MB. Límite: 25MB total`
+      );
+    }
+  }
+}
+
+/**
+ * PARSEAR ERRORES ESPECÍFICOS DE MS-EMAIL CON TIPADO SEGURO
+ */
+private parseEmailServiceError(errorData: string, statusCode: number): ParsedEmailError {
+  try {
+    const errorObj = JSON.parse(errorData) as { error?: string; message?: string };
+    
+    // Mapear códigos de error específicos de ms-email
+    if (errorObj.error === 'INVALID_RECIPIENTS') {
+      return {
+        message: 'Uno o más destinatarios tienen formato de email inválido',
+        code: 'INVALID_RECIPIENTS'
+      };
+    }
+    
+    if (errorObj.error === 'INVALID_ACCOUNT') {
+      return {
+        message: 'La cuenta Gmail especificada no pertenece al usuario o no está autorizada',
+        code: 'ACCOUNT_NOT_AUTHORIZED'
+      };
+    }
+    
+    if (errorObj.error === 'QUOTA_EXCEEDED') {
+      return {
+        message: 'Límite diario de envío de Gmail excedido. Intenta mañana.',
+        code: 'QUOTA_EXCEEDED'
+      };
+    }
+    
+    if (errorObj.error === 'EMAIL_TOO_LARGE') {
+      return {
+        message: 'El email es demasiado grande (máximo 25MB)',
+        code: 'EMAIL_TOO_LARGE'
+      };
+    }
+    
+    // Error genérico con mensaje del service
+    return {
+      message: errorObj.message || 'Error enviando email',
+      code: errorObj.error || 'SEND_FAILED'
+    };
+    
+  } catch {
+    // Si no se puede parsear, usar mensajes por código de estado
+    switch (statusCode) {
+      case 400:
+        return { message: 'Datos del email inválidos', code: 'INVALID_DATA' };
+      case 401:
+        return { message: 'Token JWT inválido o expirado', code: 'TOKEN_EXPIRED' };
+      case 403:
+        return { message: 'Cuenta Gmail no autorizada', code: 'ACCOUNT_NOT_AUTHORIZED' };
+      case 429:
+        return { message: 'Límite de envío excedido', code: 'QUOTA_EXCEEDED' };
+      case 503:
+        return { message: 'Servicio temporalmente no disponible', code: 'SERVICE_UNAVAILABLE' };
+      default:
+        return { message: 'Error interno enviando email', code: 'SEND_FAILED' };
+    }
+  }
+}
+
+/**
+ * LOGGING DETALLADO PARA DEBUGGING
+ */
+private logSendEmailRequest(sendEmailData: SendEmailDto, userId: number): void {
+  const logData = {
+    userId,
+    from: sendEmailData.from,
+    toCount: sendEmailData.to.length,
+    ccCount: sendEmailData.cc?.length || 0,
+    bccCount: sendEmailData.bcc?.length || 0,
+    subject: sendEmailData.subject.substring(0, 50) + '...',
+    priority: sendEmailData.priority || 'normal',
+    hasHtml: !!sendEmailData.bodyHtml,
+    attachmentCount: sendEmailData.attachments?.length || 0,
+    hasReadReceipt: !!sendEmailData.requestReadReceipt,
+    timestamp: new Date().toISOString()
+  };
+
+  this.logger.log(`📤 SEND EMAIL REQUEST: ${JSON.stringify(logData, null, 2)}`);
+}
+
+/**
+ * LOGGING DETALLADO PARA RESPUESTA EXITOSA
+ */
+private logSendEmailSuccess(result: SendEmailResponse, userId: number): void {
+  const logData = {
+    userId,
+    messageId: result.messageId,
+    threadId: result.threadId,
+    from: result.fromEmail,
+    toCount: result.toEmails.length,
+    hasAttachments: result.hasAttachments,
+    sizeEstimate: result.sizeEstimate ? `${Math.round(result.sizeEstimate / 1024)}KB` : 'unknown',
+    sentAt: result.sentAt,
+    timestamp: new Date().toISOString()
+  };
+
+  this.logger.log(`✅ SEND EMAIL SUCCESS: ${JSON.stringify(logData, null, 2)}`);
+}
+
+/**
+ * VALIDAR TOKEN JWT ESPECÍFICAMENTE PARA SEND
+ */
+private validateJWTForSend(authHeader: string): number {
+  if (!authHeader) {
+    throw new UnauthorizedException('Authorization header requerido para enviar emails');
+  }
+
+  if (!authHeader.startsWith('Bearer ')) {
+    throw new UnauthorizedException('Token JWT debe usar formato Bearer');
+  }
+
+  const userId = this.extractUserIdFromJWT(authHeader);
+  
+  if (!userId) {
+    throw new UnauthorizedException('Token JWT inválido o expirado');
+  }
+
+  return userId;
+}
+
+
 
   /**
  * ELIMINAR EMAIL - Coordina con MS-Email para eliminar email
