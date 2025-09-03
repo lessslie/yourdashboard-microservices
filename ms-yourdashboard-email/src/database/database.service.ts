@@ -1,6 +1,14 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
+import {
+  TrafficLightStatus,
+  EmailMetadataDBWithTrafficLight,
+  MarkEmailRepliedResult,
+  UpdateTrafficLightsResult,
+  EmailSearchResultWithTrafficLight,
+  EmailSearchFiltersWithTrafficLight
+} from '../emails/interfaces/traffic-light.interfaces';
 
 // 📧 Interfaces para metadata de emails
 export interface EmailMetadataDB {
@@ -17,6 +25,7 @@ export interface EmailMetadataDB {
   etiquetas_gmail?: string[];
   tamano_bytes?: number;
   fecha_sincronizado?: Date;
+  
 }
 
 export interface EmailSearchFilters {
@@ -221,36 +230,46 @@ async getActiveGmailAccounts(
   // 🔍 BÚSQUEDAS EN BD LOCAL
   // ================================
 
-  /**
-   * 📖 Obtener emails con paginación desde BD local
-   */
-  async getEmailsPaginated(
-    cuentaGmailId: number,
-    page: number = 1,
-    limit: number = 10,
-    soloNoLeidos: boolean = false
-  ): Promise<EmailSearchResult> {
+/**
+ * 📖 Obtener emails con paginación desde BD local
+ */
+async getEmailsPaginated(
+  cuentaGmailId: number, 
+  page: number = 1, 
+  limit: number = 10,
+  includeTrafficLight: boolean = true
+): Promise<{ 
+  emails: EmailMetadataDBWithTrafficLight[], 
+  total: number 
+}> {
+  try {
     const offset = (page - 1) * limit;
-    const filtroLeidos = soloNoLeidos ? 'AND esta_leido = FALSE' : '';
 
+    // Query principal con campos del semáforo
     const queryEmails = `
       SELECT 
-        id, gmail_message_id, asunto, remitente_email, remitente_nombre,
-        destinatario_email, fecha_recibido, esta_leido, tiene_adjuntos,
-        etiquetas_gmail, tamano_bytes, fecha_sincronizado
-      FROM emails_sincronizados 
-      WHERE cuenta_gmail_id = $1 ${filtroLeidos}
-      ORDER BY fecha_recibido DESC NULLS LAST
+        id, cuenta_gmail_id, gmail_message_id, asunto,
+        remitente_email, remitente_nombre, destinatario_email,
+        fecha_recibido, esta_leido, tiene_adjuntos,
+        etiquetas_gmail, tamano_bytes, fecha_sincronizado,
+        replied_at, days_without_reply, traffic_light_status
+      FROM emails_sincronizados
+      WHERE cuenta_gmail_id = $1 
+        AND traffic_light_status != 'deleted'
+      ORDER BY fecha_recibido DESC
       LIMIT $2 OFFSET $3
     `;
 
+    // Query para el total
     const queryTotal = `
-      SELECT COUNT(*) as total FROM emails_sincronizados 
-      WHERE cuenta_gmail_id = $1 ${filtroLeidos}
+      SELECT COUNT(*) as total 
+      FROM emails_sincronizados 
+      WHERE cuenta_gmail_id = $1 
+        AND traffic_light_status != 'deleted'
     `;
 
     const [emailsResult, totalResult] = await Promise.all([
-      this.query<EmailMetadataDB>(queryEmails, [cuentaGmailId, limit, offset]),
+      this.query<EmailMetadataDBWithTrafficLight>(queryEmails, [cuentaGmailId, limit, offset]),
       this.query<{ total: string }>(queryTotal, [cuentaGmailId])
     ]);
 
@@ -258,25 +277,33 @@ async getActiveGmailAccounts(
       emails: emailsResult.rows,
       total: parseInt(totalResult.rows[0].total)
     };
-  }
 
-  /**
-   * 🔍 Búsqueda avanzada en BD local
-   */
-  async searchEmailsInDB(
-    cuentaGmailId: number,
-    filters: EmailSearchFilters,
-    page: number = 1,
-    limit: number = 10
-  ): Promise<EmailSearchResult> {
-    const offset = (page - 1) * limit;
-    
-    // 🎯 CONSTRUIR QUERY DINÁMICO
-    const conditions: string[] = ['cuenta_gmail_id = $1'];
+  } catch (error) {
+    this.logger.error('Error obteniendo emails paginados:', error);
+    throw error;
+  }
+}
+/**
+ * 🔍 Búsqueda avanzada en BD local
+ */
+async searchEmailsInDB(
+  cuentaGmailId: number,
+  filters: EmailSearchFilters,
+  page: number = 1,
+  limit: number = 10
+): Promise<{ emails: EmailMetadataDBWithTrafficLight[]; total: number }> {
+  const offset = (page - 1) * limit;
+  
+  try {
+    // Construir query dinámico
+    const conditions: string[] = [
+      'cuenta_gmail_id = $1', 
+      'traffic_light_status != \'deleted\''
+    ];
     const params: any[] = [cuentaGmailId];
     let paramIndex = 2;
 
-    // Filtro por texto (buscar en asunto, remitente, destinatario)
+    // Filtro por texto
     if (filters.busqueda_texto) {
       conditions.push(`(
         LOWER(asunto) LIKE $${paramIndex} OR 
@@ -309,7 +336,7 @@ async getActiveGmailAccounts(
       paramIndex++;
     }
 
-    // Filtro por rango de fechas
+    // Filtros de fecha
     if (filters.fecha_desde) {
       conditions.push(`fecha_recibido >= $${paramIndex}`);
       params.push(filters.fecha_desde);
@@ -324,38 +351,42 @@ async getActiveGmailAccounts(
 
     const whereClause = conditions.join(' AND ');
 
-    // Queries para emails y count total
+    // Query principal con campos del semáforo
     const queryEmails = `
       SELECT 
-        id, gmail_message_id, asunto, remitente_email, remitente_nombre,
-        destinatario_email, fecha_recibido, esta_leido, tiene_adjuntos,
-        etiquetas_gmail, tamano_bytes, fecha_sincronizado
+        id, cuenta_gmail_id, gmail_message_id, asunto,
+        remitente_email, remitente_nombre, destinatario_email,
+        fecha_recibido, esta_leido, tiene_adjuntos,
+        etiquetas_gmail, tamano_bytes, fecha_sincronizado,
+        replied_at, days_without_reply, traffic_light_status
       FROM emails_sincronizados 
       WHERE ${whereClause}
       ORDER BY fecha_recibido DESC NULLS LAST
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
 
+    // Query para el total
     const queryTotal = `
-      SELECT COUNT(*) as total FROM emails_sincronizados 
+      SELECT COUNT(*) as total 
+      FROM emails_sincronizados 
       WHERE ${whereClause}
     `;
 
-    const emailsParams = [...params, limit, offset];
-    const totalParams = [...params];
-
     const [emailsResult, totalResult] = await Promise.all([
-      this.query<EmailMetadataDB>(queryEmails, emailsParams),
-      this.query<{ total: string }>(queryTotal, totalParams)
+      this.query<EmailMetadataDBWithTrafficLight>(queryEmails, [...params, limit, offset]),
+      this.query<{ total: string }>(queryTotal, params)
     ]);
 
     return {
       emails: emailsResult.rows,
       total: parseInt(totalResult.rows[0].total)
     };
+
+  } catch (error) {
+    this.logger.error('Error en búsqueda de emails:', error);
+    throw error;
   }
-
-
+}
   
 /**
  * 📧 Obtener todas las cuentas Gmail de un usuario principal
@@ -606,6 +637,487 @@ async updateLastSyncTime(cuentaGmailId: number): Promise<void> {
     
   } catch (error) {
     this.logger.error(`❌ Error actualizando timestamp para cuenta ${cuentaGmailId}:`, error);
+    throw error;
+  }
+}
+
+
+/**
+ * Marcar email como respondido usando función SQL
+ */
+async markEmailAsReplied(
+  gmailMessageId: string, 
+  repliedAt: Date = new Date()
+): Promise<MarkEmailRepliedResult | null> {
+  try {
+    this.logger.log(`🚦 Marcando email ${gmailMessageId} como respondido`);
+    
+    const result = await this.query<MarkEmailRepliedResult>(`
+      SELECT * FROM mark_email_as_replied($1, $2)
+    `, [gmailMessageId, repliedAt]);
+
+    if (result.rows.length > 0) {
+      const emailResult = result.rows[0];
+      this.logger.log(
+        `✅ Email ${emailResult.email_id}: ${emailResult.old_status} → ${emailResult.new_status} (${emailResult.days_saved} días ahorrados)`
+      );
+      return emailResult;
+    }
+    
+    this.logger.warn(`⚠️ Email ${gmailMessageId} no encontrado para marcar como respondido`);
+    return null;
+    
+  } catch (error) {
+    this.logger.error(`❌ Error marcando email como respondido:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Actualizar semaforos de todos los emails usando función SQL
+ */
+async updateAllTrafficLights(): Promise<UpdateTrafficLightsResult> {
+  try {
+    this.logger.log('🚦 Actualizando todos los semaforos...');
+    
+    const result = await this.query<UpdateTrafficLightsResult>(`
+      SELECT * FROM update_all_traffic_lights()
+    `);
+    
+    if (result.rows.length > 0) {
+      const stats = result.rows[0];
+      this.logger.log(`✅ Semáforos actualizados: ${stats.actualizados} emails en ${stats.tiempo_ms}ms`);
+      this.logger.log(`📊 Por estado:`, stats.por_estado);
+      return stats;
+    }
+    
+    // Fallback si no hay resultado
+    return {
+      actualizados: 0,
+      por_estado: {},
+      tiempo_ms: 0
+    };
+    
+  } catch (error) {
+    this.logger.error('❌ Error actualizando semaforos:', error);
+    throw error;
+  }
+}
+
+/**
+ * Obtener emails por estado de semaforo
+ */
+async getEmailsByTrafficLight(
+  cuentaGmailId: number,
+  status: TrafficLightStatus,
+  limit: number = 10
+): Promise<EmailMetadataDBWithTrafficLight[]> {
+  try {
+    const query = `
+      SELECT 
+        id, cuenta_gmail_id, gmail_message_id, asunto, 
+        remitente_email, remitente_nombre, destinatario_email,
+        fecha_recibido, esta_leido, tiene_adjuntos,
+        etiquetas_gmail, tamano_bytes, fecha_sincronizado,
+        replied_at, days_without_reply, traffic_light_status
+      FROM emails_sincronizados 
+      WHERE cuenta_gmail_id = $1 
+        AND traffic_light_status = $2
+      ORDER BY days_without_reply DESC, fecha_recibido ASC
+      LIMIT $3
+    `;
+
+    const result = await this.query<EmailMetadataDBWithTrafficLight>(
+      query, 
+      [cuentaGmailId, status, limit]
+    );
+
+    this.logger.log(`🚦 Encontrados ${result.rows.length} emails con estado ${status}`);
+    return result.rows;
+    
+  } catch (error) {
+    this.logger.error(`❌ Error obteniendo emails por semaforo:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Obtener estadísticas de semaforo por cuenta
+ */
+async getTrafficLightStatsByAccount(
+  cuentaGmailId: number
+): Promise<Array<{
+  traffic_light_status: TrafficLightStatus;
+  count: string;
+  avg_days: string | null;
+}>> {
+  try {
+    const query = `
+      SELECT 
+        traffic_light_status,
+        COUNT(*)::text as count,
+        AVG(days_without_reply)::text as avg_days
+      FROM emails_sincronizados 
+      WHERE cuenta_gmail_id = $1 AND replied_at IS NULL
+      GROUP BY traffic_light_status
+      ORDER BY 
+        CASE traffic_light_status 
+          WHEN 'red' THEN 1 
+          WHEN 'orange' THEN 2 
+          WHEN 'yellow' THEN 3 
+          WHEN 'green' THEN 4 
+        END
+    `;
+
+    const result = await this.query<{
+      traffic_light_status: TrafficLightStatus;
+      count: string;
+      avg_days: string | null;
+    }>(query, [cuentaGmailId]);
+
+    return result.rows;
+    
+  } catch (error) {
+    this.logger.error(`❌ Error obteniendo estadísticas de semaforo:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Buscar emails con filtros de semaforo extendidos
+ */
+
+async searchEmailsWithTrafficLight(
+  filters: EmailSearchFiltersWithTrafficLight,
+  page: number = 1,
+  limit: number = 10
+): Promise<EmailSearchResultWithTrafficLight> {
+  const offset = (page - 1) * limit;
+  
+  try {
+    const { conditions, params } = this.buildTrafficLightSearchConditions(filters);
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    
+    const queries = this.buildTrafficLightSearchQueries(whereClause, params.length);
+    
+    const emailsParams = [...params, limit, offset];
+    const totalParams = [...params];
+
+    const [emailsResult, totalResult] = await Promise.all([
+      this.query<EmailMetadataDBWithTrafficLight>(queries.emailsQuery, emailsParams),
+      this.query<{ total: string }>(queries.totalQuery, totalParams)
+    ]);
+
+    return {
+      emails: emailsResult.rows,
+      total: parseInt(totalResult.rows[0].total)
+    };
+
+  } catch (error) {
+    this.logger.error('Error en búsqueda con semaforo:', error);
+    throw error;
+  }
+}
+
+/**
+ * Construir condiciones de búsqueda para filtros del semaforo
+ */
+private buildTrafficLightSearchConditions(
+  filters: EmailSearchFiltersWithTrafficLight
+): { conditions: string[]; params: any[] } {
+  const conditions: string[] = [];
+  const params: any[] = [];
+  let paramIndex = 1;
+
+  // Filtro por cuenta
+  if (filters.cuenta_gmail_id) {
+    conditions.push(`cuenta_gmail_id = $${paramIndex}`);
+    params.push(filters.cuenta_gmail_id);
+    paramIndex++;
+  }
+
+  // Filtros del semaforo
+  const trafficConditions = this.buildTrafficLightConditions(filters, paramIndex);
+  conditions.push(...trafficConditions.conditions);
+  params.push(...trafficConditions.params);
+  paramIndex += trafficConditions.params.length;
+
+  // Filtros de texto y básicos
+  const basicConditions = this.buildBasicSearchConditions(filters, paramIndex);
+  conditions.push(...basicConditions.conditions);
+  params.push(...basicConditions.params);
+
+  return { conditions, params };
+}
+
+/**
+ * Construir condiciones específicas del semaforo
+ */
+private buildTrafficLightConditions(
+  filters: EmailSearchFiltersWithTrafficLight,
+  startIndex: number
+): { conditions: string[]; params: any[] } {
+  const conditions: string[] = [];
+  const params: any[] = [];
+  let paramIndex = startIndex;
+
+  if (filters.traffic_light_status) {
+    conditions.push(`traffic_light_status = $${paramIndex}`);
+    params.push(filters.traffic_light_status);
+    paramIndex++;
+  }
+
+  if (filters.days_without_reply_min !== undefined) {
+    conditions.push(`days_without_reply >= $${paramIndex}`);
+    params.push(filters.days_without_reply_min);
+    paramIndex++;
+  }
+
+  if (filters.days_without_reply_max !== undefined) {
+    conditions.push(`days_without_reply <= $${paramIndex}`);
+    params.push(filters.days_without_reply_max);
+    paramIndex++;
+  }
+
+  if (filters.replied !== undefined) {
+    if (filters.replied) {
+      conditions.push(`replied_at IS NOT NULL`);
+    } else {
+      conditions.push(`replied_at IS NULL`);
+    }
+  }
+
+  return { conditions, params };
+}
+/**
+ * 🗑️ Marcar email como eliminado usando el semaforo
+ */
+async markEmailAsDeleted(
+  gmailMessageId: string
+): Promise<{
+  email_id: number;
+  previousStatus: TrafficLightStatus;
+  success: boolean;
+} | null> {
+  try {
+    this.logger.log(`🗑️ Marcando email ${gmailMessageId} como eliminado`);
+    
+    // 1️⃣ PRIMERO: Obtener el estado actual ANTES de modificar
+    const currentState = await this.query<{
+      id: number;
+      traffic_light_status: TrafficLightStatus;
+    }>(`
+      SELECT id, traffic_light_status 
+      FROM emails_sincronizados 
+      WHERE gmail_message_id = $1
+    `, [gmailMessageId]);
+
+    if (currentState.rows.length === 0) {
+      this.logger.warn(`⚠️ Email ${gmailMessageId} no encontrado para eliminar`);
+      return null;
+    }
+
+    const currentEmail = currentState.rows[0];
+    
+    // 2️⃣ SEGUNDO: Hacer el UPDATE
+    await this.query(`
+      UPDATE emails_sincronizados 
+      SET 
+        traffic_light_status = 'deleted',
+        replied_at = NOW()
+      WHERE gmail_message_id = $1
+    `, [gmailMessageId]);
+
+    this.logger.log(
+      `✅ Email ${currentEmail.id} marcado como eliminado (era ${currentEmail.traffic_light_status})`
+    );
+    
+    return {
+      email_id: currentEmail.id,
+      previousStatus: currentEmail.traffic_light_status,  // ✅ Ahora sí es el anterior
+      success: true
+    };
+    
+  } catch (error) {
+    this.logger.error(`❌ Error marcando email como eliminado:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Construir condiciones básicas de búsqueda
+ */
+private buildBasicSearchConditions(
+  filters: EmailSearchFiltersWithTrafficLight,
+  startIndex: number
+): { conditions: string[]; params: any[] } {
+  const conditions: string[] = [];
+  const params: any[] = [];
+  let paramIndex = startIndex;
+
+  if (filters.busqueda_texto) {
+    conditions.push(`(
+      LOWER(asunto) LIKE $${paramIndex} OR 
+      LOWER(remitente_email) LIKE $${paramIndex} OR 
+      LOWER(remitente_nombre) LIKE $${paramIndex} OR
+      LOWER(destinatario_email) LIKE $${paramIndex}
+    )`);
+    params.push(`%${filters.busqueda_texto.toLowerCase()}%`);
+    paramIndex++;
+  }
+
+  if (filters.esta_leido !== undefined) {
+    conditions.push(`esta_leido = $${paramIndex}`);
+    params.push(filters.esta_leido);
+    paramIndex++;
+  }
+
+  if (filters.tiene_adjuntos !== undefined) {
+    conditions.push(`tiene_adjuntos = $${paramIndex}`);
+    params.push(filters.tiene_adjuntos);
+    paramIndex++;
+  }
+
+  if (filters.remitente_email) {
+    conditions.push(`LOWER(remitente_email) = $${paramIndex}`);
+    params.push(filters.remitente_email.toLowerCase());
+    paramIndex++;
+  }
+
+  return this.addDateFilters(filters, { conditions, params }, paramIndex);
+}
+
+/**
+ * Agregar filtros de fecha
+ */
+private addDateFilters(
+  filters: EmailSearchFiltersWithTrafficLight,
+  current: { conditions: string[]; params: any[] },
+  startIndex: number
+): { conditions: string[]; params: any[] } {
+  let paramIndex = startIndex;
+
+  if (filters.fecha_desde) {
+    current.conditions.push(`fecha_recibido >= $${paramIndex}`);
+    current.params.push(filters.fecha_desde);
+    paramIndex++;
+  }
+
+  if (filters.fecha_hasta) {
+    current.conditions.push(`fecha_recibido <= $${paramIndex}`);
+    current.params.push(filters.fecha_hasta);
+  }
+
+  return current;
+}
+
+/**
+ * Construir queries SQL para la búsqueda
+ */
+private buildTrafficLightSearchQueries(
+  whereClause: string, 
+  paramCount: number
+): { emailsQuery: string; totalQuery: string } {
+  const emailsQuery = `
+    SELECT 
+      id, cuenta_gmail_id, gmail_message_id, asunto,
+      remitente_email, remitente_nombre, destinatario_email,
+      fecha_recibido, esta_leido, tiene_adjuntos,
+      etiquetas_gmail, tamano_bytes, fecha_sincronizado,
+      replied_at, days_without_reply, traffic_light_status
+    FROM emails_sincronizados 
+    ${whereClause}
+    ORDER BY 
+      CASE traffic_light_status 
+        WHEN 'red' THEN 1 
+        WHEN 'orange' THEN 2 
+        WHEN 'yellow' THEN 3 
+        WHEN 'green' THEN 4 
+      END,
+      days_without_reply DESC,
+      fecha_recibido DESC
+    LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}
+  `;
+
+  const totalQuery = `
+    SELECT COUNT(*)::text as total FROM emails_sincronizados 
+    ${whereClause}
+  `;
+
+  return { emailsQuery, totalQuery };
+}
+
+/**
+ * Buscar email específico por ID para responder
+ */
+async findEmailByIdForUser(
+  emailId: string,
+  userId: number
+): Promise<{
+  email: EmailMetadataDBWithTrafficLight;
+  cuentaGmail: {
+    id: number;
+    email_gmail: string;
+    nombre_cuenta: string;
+  };
+} | null> {
+  try {
+    const query = `
+      SELECT 
+        es.id, es.cuenta_gmail_id, es.gmail_message_id, es.asunto,
+        es.remitente_email, es.remitente_nombre, es.destinatario_email,
+        es.fecha_recibido, es.esta_leido, es.tiene_adjuntos,
+        es.etiquetas_gmail, es.tamano_bytes, es.fecha_sincronizado,
+        es.replied_at, es.days_without_reply, es.traffic_light_status,
+        cga.id as cuenta_id, cga.email_gmail, cga.nombre_cuenta
+      FROM emails_sincronizados es
+      INNER JOIN cuentas_gmail_asociadas cga ON es.cuenta_gmail_id = cga.id
+      WHERE es.gmail_message_id = $1 
+        AND cga.usuario_principal_id = $2
+        AND cga.esta_activa = TRUE
+      LIMIT 1
+    `;
+
+    const result = await this.query<EmailMetadataDBWithTrafficLight & {
+      cuenta_id: number;
+      email_gmail: string;
+      nombre_cuenta: string;
+    }>(query, [emailId, userId]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const row = result.rows[0];
+
+    return {
+      email: {
+        id: row.id,
+        cuenta_gmail_id: row.cuenta_gmail_id,
+        gmail_message_id: row.gmail_message_id,
+        asunto: row.asunto,
+        remitente_email: row.remitente_email,
+        remitente_nombre: row.remitente_nombre,
+        destinatario_email: row.destinatario_email,
+        fecha_recibido: row.fecha_recibido,
+        esta_leido: row.esta_leido,
+        tiene_adjuntos: row.tiene_adjuntos,
+        etiquetas_gmail: row.etiquetas_gmail,
+        tamano_bytes: row.tamano_bytes,
+        fecha_sincronizado: row.fecha_sincronizado,
+        replied_at: row.replied_at,
+        days_without_reply: row.days_without_reply,
+        traffic_light_status: row.traffic_light_status
+      },
+      cuentaGmail: {
+        id: row.cuenta_id,
+        email_gmail: row.email_gmail,
+        nombre_cuenta: row.nombre_cuenta
+      }
+    };
+
+  } catch (error) {
+    this.logger.error(`❌ Error buscando email para usuario:`, error);
     throw error;
   }
 }
