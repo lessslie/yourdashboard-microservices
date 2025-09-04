@@ -971,52 +971,56 @@ export class EmailsService {
       // 3️⃣ ESPERAR TODOS LOS RESULTADOS EN PARALELO
       const resultadosPorCuenta = await Promise.all(searchPromises);
 
-      // 4️⃣ UNIFICAR Y COMBINAR TODOS LOS EMAILS
-      const todosLosEmails = resultadosPorCuenta
-        .filter((resultado) => resultado.emails.length > 0)
-        .flatMap((resultado) => resultado.emails);
+      
+// 4️⃣ UNIFICAR Y COMBINAR TODOS LOS EMAILS
+const todosLosEmails = resultadosPorCuenta
+  .filter((resultado) => resultado.emails.length > 0)
+  .flatMap((resultado) => resultado.emails);
 
-      // 5️⃣ ORDENAR GLOBALMENTE POR FECHA (MÁS RECIENTES PRIMERO)
-      todosLosEmails.sort((a, b) => {
-        const fechaA = new Date(a.receivedDate).getTime();
-        const fechaB = new Date(b.receivedDate).getTime();
-        return fechaB - fechaA; // Descendente (más recientes primero)
-      });
+// 5️⃣ FILTRAR EMAILS CON FECHAS FUTURAS Y ORDENAR GLOBALMENTE POR FECHA
+const ahora = new Date();
+const emailsFiltradosYOrdenados = todosLosEmails
+  .filter((email) => new Date(email.receivedDate) <= ahora)
+  .sort((a, b) => {
+    const fechaA = new Date(a.receivedDate).getTime();
+    const fechaB = new Date(b.receivedDate).getTime();
+    return fechaB - fechaA; // Descendente (más recientes primero)
+  });
 
-      // 6️⃣ APLICAR PAGINACIÓN GLOBAL
-      const totalEmails = todosLosEmails.length;
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + limit;
-      const emailsPaginados = todosLosEmails.slice(startIndex, endIndex);
+// 6️⃣ APLICAR PAGINACIÓN GLOBAL
+const totalEmails = emailsFiltradosYOrdenados.length;
+const startIndex = (page - 1) * limit;
+const endIndex = startIndex + limit;
+const emailsPaginados = emailsFiltradosYOrdenados.slice(startIndex, endIndex);
 
-      // 7️⃣ CALCULAR METADATOS DE PAGINACIÓN
-      const totalPages = Math.ceil(totalEmails / limit);
-      const hasNextPage = page < totalPages;
-      const hasPreviousPage = page > 1;
+// 7️⃣ CALCULAR METADATOS DE PAGINACIÓN
+const totalPages = Math.ceil(totalEmails / limit);
+const hasNextPage = page < totalPages;
+const hasPreviousPage = page > 1;
 
-      // 8️⃣ OBTENER LISTA DE CUENTAS BUSCADAS
-      const accountsSearched = resultadosPorCuenta.map(
-        (resultado) => resultado.cuenta,
-      );
+// 8️⃣ OBTENER LISTA DE CUENTAS BUSCADAS
+const accountsSearched = resultadosPorCuenta.map(
+  (resultado) => resultado.cuenta,
+);
 
-      this.logger.log(`✅ BÚSQUEDA GLOBAL COMPLETADA:`);
-      this.logger.log(`   📊 Total emails encontrados: ${totalEmails}`);
-      this.logger.log(`   📧 Cuentas buscadas: ${accountsSearched.join(', ')}`);
-      this.logger.log(
-        `   📄 Página ${page}/${totalPages} (${emailsPaginados.length} emails)`,
-      );
+this.logger.log(`✅ BÚSQUEDA GLOBAL COMPLETADA:`);
+this.logger.log(`   📊 Total emails encontrados: ${totalEmails}`);
+this.logger.log(`   📧 Cuentas buscadas: ${accountsSearched.join(', ')}`);
+this.logger.log(
+  `   📄 Página ${page}/${totalPages} (${emailsPaginados.length} emails)`,
+);
 
-      return {
-        emails: emailsPaginados,
-        total: totalEmails,
-        page,
-        limit,
-        totalPages,
-        hasNextPage,
-        hasPreviousPage,
-        searchTerm,
-        accountsSearched,
-      };
+return {
+  emails: emailsPaginados,
+  total: totalEmails,
+  page,
+  limit,
+  totalPages,
+  hasNextPage,
+  hasPreviousPage,
+  searchTerm,
+  accountsSearched,
+};
     } catch (error) {
       this.logger.error('❌ Error en búsqueda global:', error);
       const emailError = error as EmailServiceError;
