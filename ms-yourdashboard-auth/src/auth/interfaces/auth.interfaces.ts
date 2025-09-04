@@ -65,6 +65,7 @@ export interface CuentaGmailResponse {
   ultima_sincronizacion?: Date;
   esta_activa: boolean;
   emails_count: number; // Calculado dinámicamente
+  events_count: number; // Número de eventos sincronizados
 }
 
 export interface ConectarGmailDto {
@@ -294,12 +295,17 @@ export interface EstadisticasUsuario {
   cuentas_gmail_activas: number;
   total_emails_sincronizados: number;
   emails_no_leidos: number;
+  // 🆕 NUEVOS CAMPOS DE EVENTOS
+  total_eventos_sincronizados: number;
+  eventos_proximos: number;
+  eventos_pasados: number;
   ultima_sincronizacion: Date;
   cuenta_mas_activa: {
     email_gmail: string;
     emails_count: number;
   };
 }
+
 
 export interface EstadisticasCuentaGmail {
   cuenta_gmail_id: number;

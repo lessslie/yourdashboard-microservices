@@ -201,6 +201,7 @@ export class AuthController {
           ultima_sincronizacion: cuenta.ultima_sincronizacion?.toISOString(),
           esta_activa: cuenta.esta_activa,
           emails_count: cuenta.emails_count,
+          events_count: cuenta.events_count,
         })),
         sesiones_activas: profileData.sesiones_activas.map((sesion) => ({
           id: sesion.id,
@@ -210,16 +211,19 @@ export class AuthController {
           user_agent: sesion.user_agent,
           esta_activa: sesion.esta_activa,
         })),
-        estadisticas: {
-          total_cuentas_gmail: profileData.estadisticas.total_cuentas_gmail,
-          cuentas_gmail_activas: profileData.estadisticas.cuentas_gmail_activas,
-          total_emails_sincronizados:
-            profileData.estadisticas.total_emails_sincronizados,
-          emails_no_leidos: profileData.estadisticas.emails_no_leidos,
-          ultima_sincronizacion:
-            profileData.estadisticas.ultima_sincronizacion.toISOString(),
-          cuenta_mas_activa: profileData.estadisticas.cuenta_mas_activa,
-        },
+       estadisticas: {
+  total_cuentas_gmail: profileData.estadisticas.total_cuentas_gmail,
+  cuentas_gmail_activas: profileData.estadisticas.cuentas_gmail_activas,
+  total_emails_sincronizados: profileData.estadisticas.total_emails_sincronizados,
+  emails_no_leidos: profileData.estadisticas.emails_no_leidos,
+  // 🆕 NUEVOS CAMPOS DE EVENTOS
+  total_eventos_sincronizados: profileData.estadisticas.total_eventos_sincronizados,
+  eventos_proximos: profileData.estadisticas.eventos_proximos,
+  eventos_pasados: profileData.estadisticas.eventos_pasados,
+  // CAMPOS ORIGINALES
+  ultima_sincronizacion: profileData.estadisticas.ultima_sincronizacion.toISOString(),
+  cuenta_mas_activa: profileData.estadisticas.cuenta_mas_activa,
+},
       };
     } catch (error) {
       console.error('Error obteniendo perfil:', error);
