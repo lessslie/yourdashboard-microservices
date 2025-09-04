@@ -8,8 +8,7 @@ import { AuthOrchestratorModule } from './auth/auth.module';
 import { CacheModule } from './cache/cache.module';
 import { SearchModule } from './search/search.module';
 import { CalendarOrchestratorModule } from './calendar/calendar.module';
-import { WhatsappModule } from './whatsapp/whatsapp/whatsapp.module';
-import { TokenScheduler } from './whatsapp/scheduler/token-refresh.scheduler';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
 
 
 @Module({
@@ -23,7 +22,7 @@ import { TokenScheduler } from './whatsapp/scheduler/token-refresh.scheduler';
     WhatsappModule// WhatsappModule,
   ],
   controllers: [OrchestratorController],//rutas del microservicio
-  providers: [OrchestratorService, TokenScheduler],// servicio principal que coordina la lógica de negocio
+  providers: [OrchestratorService],// servicio principal que coordina la lógica de negocio
   exports: [OrchestratorService]// Exporta el servicio para que otros módulos puedan usarlo
 })
 export class OrchestratorModule {}
