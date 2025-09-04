@@ -587,48 +587,6 @@ try {
   // 🔧 MÉTODO PRIVADO NUEVO
   // ================================
 
-  /**
-   * 🎯 Obtener scopes según el servicio
-   */
-  // private getScopesForService(service: 'gmail' | 'calendar'): string[] {
-  //   const commonScopes = [
-  //     'email',
-  //     'profile'
-  //   ];
-
-  //   if (service === 'gmail') {
-  //     return [
-  //       ...commonScopes,
-  //       'https://www.googleapis.com/auth/gmail.readonly',
-  //       'https://www.googleapis.com/auth/gmail.modify',
-  //       'https://mail.google.com/',
-  //       'https://www.googleapis.com/auth/calendar',
-  //       'https://www.googleapis.com/auth/calendar.events',
-  //       'https://www.googleapis.com/auth/calendar.events.readonly'
-  //     ];
-  //   }
-
-  //   if (service === 'calendar') {
-  //     return [
-  //       ...commonScopes,
-  //       'https://www.googleapis.com/auth/calendar',
-  //       'https://www.googleapis.com/auth/calendar.events',
-  //       'https://www.googleapis.com/auth/calendar.events.readonly'
-  //     ];
-  //   }
-
-  //   // Default: Gmail con Calendar
-  //   return [
-  //     ...commonScopes,
-  //     'https://www.googleapis.com/auth/gmail.readonly',
-  //     'https://www.googleapis.com/auth/gmail.modify',
-  //     'https://mail.google.com/',
-  //     'https://www.googleapis.com/auth/calendar',
-  //     'https://www.googleapis.com/auth/calendar.events',
-  //     'https://www.googleapis.com/auth/calendar.events.readonly'
-  //   ];
-  // }
-
   private getScopesForService(service: 'gmail' | 'calendar'): string[] {
   // ✅ TODOS LOS SERVICIOS = TODOS LOS SCOPES
   console.log(`🔍 Obteniendo scopes para servicio: ${service}`);
@@ -637,10 +595,12 @@ try {
     'profile',
     'https://www.googleapis.com/auth/gmail.readonly',
     'https://www.googleapis.com/auth/gmail.modify',
+    'https://www.googleapis.com/auth/gmail.send',
     'https://mail.google.com/',
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/calendar.events',
-    'https://www.googleapis.com/auth/calendar.events.readonly'
+    'https://www.googleapis.com/auth/calendar.events.readonly',
+    'https://www.googleapis.com/auth/calendar.acls'
   ];
 
   // 🎯 SIEMPRE RETORNAR TODOS LOS SCOPES

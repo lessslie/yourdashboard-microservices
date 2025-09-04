@@ -8,6 +8,9 @@ import { AuthOrchestratorModule } from './auth/auth.module';
 import { CacheModule } from './cache/cache.module';
 import { SearchModule } from './search/search.module';
 import { CalendarOrchestratorModule } from './calendar/calendar.module';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
+
+
 @Module({
   imports: [
     ConfigModule,//acceso a variables de entorno
@@ -16,7 +19,7 @@ import { CalendarOrchestratorModule } from './calendar/calendar.module';
     AuthOrchestratorModule,// Módulo para manejar la lógica de autenticación + coordinación con MS-Auth
     SearchModule,// Módulo para manejar la lógica de búsqueda global
     CalendarOrchestratorModule,// Módulo para manejar la lógica de Google Calendar + coordinación con MS-Auth y MS-Calendar
-    // WhatsappModule,
+    WhatsappModule// WhatsappModule,
   ],
   controllers: [OrchestratorController],//rutas del microservicio
   providers: [OrchestratorService],// servicio principal que coordina la lógica de negocio

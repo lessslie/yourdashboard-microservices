@@ -1,5 +1,17 @@
 // src/orchestrator/interfaces/orchestrator.interfaces.ts
 
+// Interfaces específicas para evitar `any` en responder emails
+export interface ReplyEmailRequest {
+  body: string;
+  bodyHtml?: string;
+}
+
+export interface ReplyEmailResponse {
+  success: boolean;
+  message: string;
+  sentMessageId: string;
+}
+
 // Respuestas de MS-Auth
 export interface TokenResponse {
   success: boolean;
