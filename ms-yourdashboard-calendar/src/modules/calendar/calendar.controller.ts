@@ -12,7 +12,8 @@ import {
   BadRequestException,
   Logger,
   HttpCode,
-  HttpStatus
+  HttpStatus,
+  NotFoundException
 } from '@nestjs/common';
 import { 
   ApiTags, 
@@ -22,13 +23,16 @@ import {
   ApiParam,
   ApiOkResponse,
   ApiBody,
-  ApiUnauthorizedResponse
+  ApiUnauthorizedResponse,
+  ApiNotFoundResponse
 } from '@nestjs/swagger';
 import { CalendarService } from './calendar.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { ShareCalendarDto } from './dto/share-calendar.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { ConfigService } from '@nestjs/config';
+import { CreateEventRequestBody, safeGetErrorCode, safeGetErrorMessage } from './interfaces/calendar-types';
+
 
 @ApiTags('Calendar')
 @Controller('calendar')
@@ -292,7 +296,7 @@ export class CalendarController {
   async createEvent(
     @Headers('authorization') authHeader: string,
     @Query('cuentaGmailId') cuentaGmailId: string,
-    @Body() eventBody: any
+    @Body() eventBody:CreateEventRequestBody
   ) {
     if (!cuentaGmailId) {
       throw new BadRequestException('cuentaGmailId is required');
@@ -383,6 +387,108 @@ export class CalendarController {
       body.userEmail,
       body.role
     );
+  }
+  /**
+   * 🚫 DELETE /calendar/share/:aclRuleId - Revocar acceso al calendar
+   */
+  @Delete('share/:aclRuleId')
+  @HttpCode(HttpStatus.OK) // 200 en lugar de 204 para devolver mensaje
+  @ApiBearerAuth('Calendar-Token')
+  @ApiOperation({ 
+    summary: 'Revocar acceso compartido al calendar',
+    description: 'Elimina los permisos de acceso de un usuario específico a un calendar compartido usando Google Calendar ACL API.'
+  })
+  @ApiParam({ 
+    name: 'aclRuleId', 
+    description: 'ID de la regla ACL (formato: user:email@domain.com)', 
+    example: 'user:amigo@gmail.com' 
+  })
+  @ApiQuery({ 
+    name: 'cuentaGmailId', 
+    description: 'ID de la cuenta Gmail propietaria del calendar', 
+    example: '78' 
+  })
+  @ApiQuery({ 
+    name: 'calendarId', 
+    description: 'ID del calendar (opcional, por defecto "primary")', 
+    example: 'primary',
+    required: false 
+  })
+  @ApiOkResponse({ 
+    description: 'Acceso revocado exitosamente',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        message: { type: 'string', example: 'Acceso al calendar revocado exitosamente' },
+        revoked_from: { type: 'string', example: 'amigo@gmail.com' },
+        calendar_id: { type: 'string', example: 'primary' }
+      }
+    }
+  })
+  @ApiUnauthorizedResponse({ 
+    description: 'Token de Calendar inválido o expirado'
+  })
+  @ApiNotFoundResponse({ 
+    description: 'Usuario no tiene acceso a este calendar o regla ACL no encontrada'
+  })
+  async unshareCalendar(
+    @Headers('authorization') authHeader: string,
+    @Param('aclRuleId') aclRuleId: string,
+    @Query('cuentaGmailId') cuentaGmailId: string,
+    @Query('calendarId') calendarId?: string
+  ) {
+    // Validaciones básicas
+    if (!cuentaGmailId) {
+      throw new BadRequestException('cuentaGmailId is required');
+    }
+
+    if (!authHeader) {
+      throw new UnauthorizedException('Authorization header is required');
+    }
+    
+    const accessToken = authHeader.replace('Bearer ', '');
+    
+    if (!accessToken) {
+      throw new UnauthorizedException('Valid Bearer token is required');
+    }
+
+    if (!aclRuleId || aclRuleId.trim() === '') {
+      throw new BadRequestException('aclRuleId is required');
+    }
+
+    // Extraer email del aclRuleId para logging y response
+    const userEmail = aclRuleId.startsWith('user:') 
+      ? aclRuleId.substring(5) 
+      : aclRuleId;
+
+    try {
+      const result = await this.calendarService.unshareCalendarWithToken(
+        accessToken,
+        cuentaGmailId,
+        calendarId || 'primary',
+        aclRuleId,
+        userEmail
+      );
+
+      return result;
+    } catch (error: any) {
+      this.logger.error(`Error revocando acceso al calendar:`, error);
+      
+      // Manejo específico de errores de Google API
+      const errorMessage = safeGetErrorMessage(error);
+      const errorCode = safeGetErrorCode(error);
+  
+  if (errorCode === 404 || errorMessage.includes('Not Found')) {
+    throw new NotFoundException(`El usuario ${userEmail} no tiene acceso`);
+  }
+  
+  if (errorCode === 403) {
+    throw new UnauthorizedException('No tienes permisos');
+  }
+  
+  throw new BadRequestException(`Error: ${errorMessage}`);
+}
   }
 
   /**
@@ -711,7 +817,7 @@ export class CalendarController {
 
     } catch (error) {
       this.logger.error('❌ Error en eventos unificados:', error);
-      throw new BadRequestException(`Error obteniendo eventos unificados: ${error.message}`);
+      throw new BadRequestException(`Error obteniendo eventos unificados: ${error}`);
     }
   }
 
@@ -892,7 +998,7 @@ export class CalendarController {
 
     } catch (error) {
       this.logger.error('❌ Error en búsqueda global:', error);
-      throw new BadRequestException(`Error en búsqueda global: ${error.message}`);
+      throw new BadRequestException(`Error en búsqueda global: ${error}`);
     }
   }
 

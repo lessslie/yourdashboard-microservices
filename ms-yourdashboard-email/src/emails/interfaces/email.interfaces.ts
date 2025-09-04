@@ -53,14 +53,19 @@ export interface EmailMetadata {
   isRead: boolean;
   hasAttachments: boolean;
   ///extras para la busqueda de emails global
-   sourceAccount?: string;      
+  sourceAccount?: string;      
   sourceAccountId?: number;
+  // ✅ CAMPOS PARA SEMÁFORO:
+  trafficLightStatus?: string;
+  daysWithoutReply?: number;
+  repliedAt?: Date | null;
 }
 
 export interface EmailDetail extends EmailMetadata {
   toEmails: string[];
   bodyText?: string;
   bodyHtml?: string;
+  
 
 }
 
