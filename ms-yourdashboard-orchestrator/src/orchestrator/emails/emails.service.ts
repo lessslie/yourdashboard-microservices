@@ -2,6 +2,7 @@ import { Injectable, HttpException, HttpStatus, Logger, BadRequestException, Una
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosResponse, AxiosError } from 'axios';
 import { CacheService } from '../cache/cache.service';
+import * as jwt from 'jsonwebtoken';
 import { 
   TokenResponse, 
   EmailListResponse, 
@@ -82,6 +83,92 @@ export class EmailsOrchestratorService {
     this.msEmailUrl = this.configService.get<string>('MS_EMAIL_URL') || 'http://localhost:3002';
   }
 
+
+
+/**
+ * GUARDAR CONTENIDO COMPLETO DE EMAIL - Coordina con MS-Email para guardar offline
+ */
+async saveEmailContent(
+  authHeader: string,
+  emailId: string
+): Promise<{
+  success: boolean;
+  source: string;
+  data: {
+    emailId: string;
+    savedAt: string;
+    contentSize: number;
+    attachmentsCount: number;
+    hasFullContent: boolean;
+    wasAlreadySaved: boolean
+  };
+}> {
+  try {
+    this.logger.log(`Coordinando guardado de contenido completo para email ${emailId}`);
+
+    // 1️⃣ VALIDAR JWT (reutilizar método existente)
+    const userId = this.extractUserIdFromJWT(authHeader);
+    
+    if (!userId) {
+      throw new UnauthorizedException('Token JWT inválido');
+    }
+
+    // 2️⃣ LLAMAR AL MICROSERVICIO MS-EMAIL
+    const response = await fetch(`${this.msEmailUrl}/emails/${emailId}/save-full-content`, {
+      method: 'POST',
+      headers: {
+        'Authorization': authHeader
+      }
+    });
+
+    // 3️⃣ MANEJO DE ERRORES
+    if (!response.ok) {
+      const errorData = await response.text();
+      this.logger.error(`MS-Email error: ${response.status} - ${errorData}`);
+      
+      if (response.status === 404) {
+        throw new HttpException('Email no encontrado o no pertenece al usuario', HttpStatus.NOT_FOUND);
+      } else if (response.status === 401) {
+        throw new HttpException('Token expirado o inválido', HttpStatus.UNAUTHORIZED);
+      } else {
+        throw new HttpException('Error guardando contenido del email', HttpStatus.BAD_REQUEST);
+      }
+    }
+
+    // 4️⃣ PROCESAR RESPUESTA EXITOSA
+    const result = await response.json() as {
+      success: boolean;
+      message: string;
+      emailId: string;
+      savedAt: string;
+      contentSize: number;
+      attachmentsCount: number;
+      hasFullContent: boolean;
+      wasAlreadySaved: boolean;
+    };
+
+    this.logger.log(`Contenido completo guardado exitosamente via MS-Email: ${result.contentSize} bytes`);
+
+    // 5️⃣ RETORNAR RESPUESTA ESTRUCTURADA (patrón orchestrator)
+    return {
+      success: true,
+      source: 'orchestrator',
+      data: {
+        emailId: result.emailId,
+        savedAt: result.savedAt,
+        contentSize: result.contentSize,
+        attachmentsCount: result.attachmentsCount,
+        hasFullContent: result.hasFullContent,
+        wasAlreadySaved: result.wasAlreadySaved
+
+      }
+    };
+
+  } catch (error) {
+    this.logger.error(`Error coordinando guardado de contenido:`, error);
+    throw error;
+  }
+}
   /**
    * Obtener token válido del ms-auth usando cuentaGmailId
    */
@@ -183,30 +270,32 @@ export class EmailsOrchestratorService {
   /**
    * Extraer User ID del JWT token - MÉTODO PÚBLICO
    */
-  extractUserIdFromJWT(authHeader: string): number | null {
-    try {
-      const token = authHeader.replace('Bearer ', '');
-      const parts = token.split('.');
-      
-      if (parts.length !== 3) return null;
-
-      const payloadBase64 = parts[1];
-      const payloadJson = Buffer.from(payloadBase64, 'base64').toString('utf-8');
-      
-      const payload = JSON.parse(payloadJson) as JWTPayload;
-      
-      if (typeof payload.sub !== 'number') {
-        this.logger.warn('JWT payload.sub no es válido');
-        return null;
-      }
-
-      return payload.sub;
-
-    } catch (error) {
-      this.logger.error('Error extrayendo userId del JWT:', error);
+public extractUserIdFromJWT(authHeader: string): number | null {
+  try {
+    const token = authHeader.replace('Bearer ', '');
+    
+    const jwtSecret = this.configService.get<string>('JWT_SECRET');
+    
+    if (!jwtSecret) {
+      this.logger.error('JWT_SECRET no configurado');
       return null;
     }
+    
+    // Usar la interface para tipado
+    const decoded = jwt.verify(token, jwtSecret) as JWTPayload;
+    
+    if (!decoded.sub || typeof decoded.sub !== 'number') {
+      this.logger.warn('Token JWT válido pero sin userId válido');
+      return null;
+    }
+    
+    return decoded.sub;
+    
+  } catch (error) {
+    this.logger.error('JWT inválido:', error.message);
+    return null;
   }
+}
 
   /**
    * Sincronizar emails manualmente
