@@ -38,7 +38,7 @@ import {
   OrchestratorSendEmailResponseDto,
 } from './dto';
 import { ReplyEmailRequest, ReplyEmailResponse } from './interfaces/emails.interfaces';
-import { OrchestratorEmailsByTrafficLight, OrchestratorTrafficLightDashboard, OrchestratorUpdateTrafficLights, TrafficLightStatus } from './interfaces';
+import { OrchestratorEmailsByTrafficLight, OrchestratorTrafficLightDashboard, OrchestratorUpdateTrafficLights, SaveFullContentResponse, TrafficLightStatus } from './interfaces';
 import { SendEmailDto } from './dto/send-email.dto';
 
 @Controller('emails')
@@ -48,10 +48,65 @@ export class EmailsOrchestratorController {
 
   constructor(private readonly emailsService: EmailsOrchestratorService) {}
 
+
+
+/**
+ * POST /emails/:id/save-full-content - Guardar contenido completo offline
+ */
+@Post(':id/save-full-content')
+@ApiBearerAuth('JWT-auth')
+@ApiOperation({ 
+  summary: 'Guardar contenido completo de email offline',
+  description: 'Descarga y guarda el contenido completo de un email para acceso offline rápido.'
+})
+@ApiParam({ 
+  name: 'id', 
+  description: 'gmail_message_id del email', 
+  example: '1847a8e123456789' 
+})
+@ApiOkResponse({ 
+  description: 'Contenido guardado exitosamente',
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      source: { type: 'string', example: 'orchestrator' },
+      data: {
+        type: 'object',
+        properties: {
+          emailId: { type: 'string', example: '1847a8e123456789' },
+          savedAt: { type: 'string', example: '2025-09-05T18:30:00Z' },
+          contentSize: { type: 'number', example: 61437 },
+          attachmentsCount: { type: 'number', example: 0 },
+          hasFullContent: { type: 'boolean', example: true }
+        }
+      }
+    }
+  }
+})
+async saveEmailContent(
+  @Headers() headers: Record<string, string | undefined>,
+  @Param('id') emailId: string
+): Promise<SaveFullContentResponse> {
+  const authHeader = headers?.authorization;
+  
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido');
+  }
+
+  if (!emailId?.trim()) {
+    throw new BadRequestException('gmail_message_id es requerido');
+  }
+
+  this.logger.log(`ORCHESTRATOR - Guardando contenido completo del email: ${emailId}`);
+  
+  return this.emailsService.saveEmailContent(authHeader, emailId);
+}
   /**
    * POST /emails/sync - Sincronización manual coordinada
    */
   @Post('sync')
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
     summary: 'Sincronizar emails manualmente',
     description: 'Coordina MS-Auth + MS-Email para ejecutar sincronización manual de emails.'
@@ -88,10 +143,15 @@ export class EmailsOrchestratorController {
     description: 'cuentaGmailId es requerido',
     type: OrchestratorErrorDto
   })
-  async syncEmails(
-    @Query('cuentaGmailId') cuentaGmailId: string,
-    @Query('maxEmails') maxEmails?: string
-  ) {
+ async syncEmails(
+  @Headers() headers: Record<string, string | undefined>,
+  @Query('cuentaGmailId') cuentaGmailId: string,
+  @Query('maxEmails') maxEmails?: string
+) {
+  const authHeader = headers?.authorization;
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido');
+  }
     if (!cuentaGmailId) {
       throw new BadRequestException('cuentaGmailId es requerido');
     }
@@ -106,6 +166,7 @@ export class EmailsOrchestratorController {
    * POST /emails/sync/incremental - Sincronización incremental coordinada
    */
   @Post('sync/incremental')
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
     summary: 'Sincronización incremental de emails',
     description: 'Coordina MS-Auth + MS-Email para sincronizar solo emails nuevos.'
@@ -137,10 +198,16 @@ export class EmailsOrchestratorController {
       }
     }
   })
-  async syncIncremental(
-    @Query('cuentaGmailId') cuentaGmailId: string,
-    @Query('maxEmails') maxEmails?: string
-  ) {
+ async syncIncremental(
+  @Headers() headers: Record<string, string | undefined>,
+  @Query('cuentaGmailId') cuentaGmailId: string,
+  @Query('maxEmails') maxEmails?: string
+) {
+  const authHeader = headers?.authorization;
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido');
+  }
+
     if (!cuentaGmailId) {
       throw new BadRequestException('cuentaGmailId es requerido');
     }
@@ -155,6 +222,7 @@ export class EmailsOrchestratorController {
    * GET /emails/inbox - Obtener inbox coordinado
    */
   @Get('inbox')
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
     summary: 'Obtener inbox de emails',
     description: 'Coordina MS-Auth (tokens) + MS-Email (datos) para obtener la lista de emails del usuario.'
@@ -170,26 +238,33 @@ export class EmailsOrchestratorController {
     description: 'cuentaGmailId es requerido',
     type: OrchestratorErrorDto
   })
-  async getInbox(
-    @Query('cuentaGmailId') cuentaGmailId: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string
-  ) {
-    if (!cuentaGmailId) {
-      throw new BadRequestException('cuentaGmailId es requerido');
-    }
-
-    return this.emailsService.getInbox(
-      cuentaGmailId, 
-      page ? parseInt(page, 10) : 1, 
-      limit ? parseInt(limit, 10) : 10
-    );
+async getInbox(
+  @Headers() headers: Record<string, string | undefined>,
+  @Query('cuentaGmailId') cuentaGmailId: string,
+  @Query('page') page?: string,
+  @Query('limit') limit?: string
+) {  // ← Cerrar los parámetros correctamente
+  const authHeader = headers?.authorization;
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido');
   }
+
+  if (!cuentaGmailId) {
+    throw new BadRequestException('cuentaGmailId es requerido');
+  }
+
+  return this.emailsService.getInbox(
+    cuentaGmailId, 
+    page ? parseInt(page, 10) : 1, 
+    limit ? parseInt(limit, 10) : 10
+  );
+}
 
   /**
    * GET /emails/search - Buscar emails coordinado
    */
   @Get('search')
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
     summary: 'Buscar emails',
     description: 'Coordina MS-Auth + MS-Email para buscar emails por término específico con paginación.'
@@ -206,12 +281,18 @@ export class EmailsOrchestratorController {
     description: 'cuentaGmailId y q son requeridos',
     type: OrchestratorErrorDto 
   })
-  async searchEmails(
-    @Query('cuentaGmailId') cuentaGmailId: string,
-    @Query('q') searchTerm: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string
-  ) {
+ async searchEmails(
+  @Headers() headers: Record<string, string | undefined>,
+  @Query('cuentaGmailId') cuentaGmailId: string,
+  @Query('q') searchTerm: string,
+  @Query('page') page?: string,
+  @Query('limit') limit?: string
+) {
+  const authHeader = headers?.authorization;
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido');
+  }
+
     if (!cuentaGmailId) {
       throw new BadRequestException('cuentaGmailId es requerido');
     }
@@ -245,6 +326,7 @@ export class EmailsOrchestratorController {
    * GET /emails/search-all-accounts - Buscar emails (TODAS LAS CUENTAS)
    */
   @Get('search-all-accounts')
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
     summary: 'Buscar emails en TODAS las cuentas Gmail del usuario',
     description: 'Coordina MS-Auth + MS-Email para buscar emails en TODAS las cuentas Gmail asociadas al usuario principal. Unifica resultados y los ordena por fecha globalmente.'
@@ -320,12 +402,17 @@ export class EmailsOrchestratorController {
     description: 'userId y q son requeridos',
     type: OrchestratorErrorDto 
   })
-  async searchAllAccountsEmails(
-    @Query('userId') userId: string,
-    @Query('q') searchTerm: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string
-  ) {
+ async searchAllAccountsEmails(
+  @Headers() headers: Record<string, string | undefined>,
+  @Query('userId') userId: string,
+  @Query('q') searchTerm: string,
+  @Query('page') page?: string,
+  @Query('limit') limit?: string
+) {
+  const authHeader = headers?.authorization;
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido');
+  }
     if (!userId) {
       throw new BadRequestException('userId es requerido');
     }
@@ -361,6 +448,7 @@ export class EmailsOrchestratorController {
    * GET /emails/inbox-all-accounts - INBOX UNIFICADO (TODAS LAS CUENTAS)
    */
   @Get('inbox-all-accounts')
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
     summary: 'Inbox unificado de TODAS las cuentas Gmail',
     description: `
@@ -435,11 +523,16 @@ export class EmailsOrchestratorController {
     description: 'userId es requerido',
     type: OrchestratorErrorDto 
   })
-  async getInboxAllAccounts(
-    @Query('userId') userId: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string
-  ) {
+async getInboxAllAccounts(
+  @Headers() headers: Record<string, string | undefined>,
+  @Query('userId') userId: string,
+  @Query('page') page?: string,
+  @Query('limit') limit?: string
+) {
+  const authHeader = headers?.authorization;
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido');
+  }
     if (!userId) {
       throw new BadRequestException('userId es requerido para inbox unificado');
     }
@@ -455,6 +548,7 @@ export class EmailsOrchestratorController {
    * GET /emails/stats - Estadísticas coordinadas
    */
   @Get('stats')
+  @ApiBearerAuth('JWT-auth')
   @ApiOperation({ 
     summary: 'Obtener estadísticas de emails',
     description: 'Coordina MS-Auth + MS-Email para obtener contadores de emails totales, leídos y no leídos.'
@@ -468,7 +562,13 @@ export class EmailsOrchestratorController {
     description: 'cuentaGmailId es requerido',
     type: OrchestratorErrorDto 
   })
-  async getEmailStats(@Query('cuentaGmailId') cuentaGmailId: string) {
+  async getEmailStats(
+    @Headers() headers: Record<string, string | undefined>,
+    @Query('cuentaGmailId') cuentaGmailId: string) {
+    const authHeader = headers?.authorization;
+    if (!authHeader) {
+      throw new UnauthorizedException('Token JWT requerido');
+    }
     if (!cuentaGmailId) {
       throw new BadRequestException('cuentaGmailId es requerido');
     }
