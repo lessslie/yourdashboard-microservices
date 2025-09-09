@@ -667,8 +667,12 @@ private async obtenerEstadisticasEventos(usuarioId: number): Promise<{
         eventos_pasados: 0
       };
     }
-
-    const stats = result.rows[0];
+    //tipar el result.rows[0] para que no de error de any al hacer el parseInt
+    const stats = result.rows[0] as {
+      total_eventos_sincronizados: string;
+      eventos_proximos: string;
+      eventos_pasados: string;
+    };
     
     const estadisticas = {
       total_eventos_sincronizados: parseInt(stats.total_eventos_sincronizados || '0'),
