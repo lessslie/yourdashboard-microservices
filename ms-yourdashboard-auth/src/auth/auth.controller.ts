@@ -113,6 +113,7 @@ export class AuthController {
   }
 
 @Post('login')
+
 @ApiOperation({
   summary: 'Iniciar sesión',
   description: 'Autenticarse con email y contraseña. Ahora retorna JWT token + perfil completo del usuario.',
@@ -122,8 +123,8 @@ export class AuthController {
   description: 'Credenciales de acceso',
 })
 @ApiOkResponse({
-  description: 'Login exitoso con perfil completo',
-  type: AuthResponseDto, // Podríamos crear un nuevo DTO pero para mantener compatibilidad...
+  description: 'Login exitoso con perfil completo - incluye token JWT, datos básicos del usuario, cuentas Gmail asociadas y estadísticas',
+  type: AuthResponseDto,
 })
 @ApiBadRequestResponse({
   description: 'Credenciales faltantes',
