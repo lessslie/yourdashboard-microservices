@@ -155,6 +155,13 @@ export class AuthService {
 
       this.logger.log(`✅ Login exitoso: ${usuario.email}`);
 
+      // 7️⃣ OBTENER PERFIL COMPLETOPARA RETORNARLO
+      this.logger.log(`🔵 Obteniendo perfil completo para usuario ${usuario.id}`);
+      const perfilCompleto = await this.obtenerPerfil(usuario.id);
+      this.logger.log(`✅ Perfil obtenido para usuario ${usuario.id}`);
+
+      // 8️⃣ RETORNAR RESPUESTA DE LOGIN
+
       return {
         success: true,
         message: 'Login exitoso',
@@ -167,8 +174,21 @@ export class AuthService {
           email_verificado: usuario.email_verificado
         },
         token,
-        sesion_id: sesion.id
-      };
+        sesion_id: sesion.id.toString(),// Convertir a string
+// 🆕 DATOS COMPLETOS DEL PERFIL (igual que /auth/me)
+      cuentas_gmail: perfilCompleto.cuentas_gmail.map(cuenta => ({
+        ...cuenta,
+        alias_personalizado: cuenta.alias_personalizado || null, // Manejar undefined
+        ultima_sincronizacion: typeof cuenta.ultima_sincronizacion === 'undefined' ? null : cuenta.ultima_sincronizacion
+      })),
+      sesiones_activas: perfilCompleto.sesiones_activas.map(sesion => ({
+        ...sesion,
+        id: sesion.id.toString(), // Asegurar que sea string
+        ip_origen: typeof sesion.ip_origen === 'undefined' ? null : sesion.ip_origen,
+        user_agent: typeof sesion.user_agent === 'undefined' ? null : sesion.user_agent
+      })),
+      estadisticas: perfilCompleto.estadisticas
+    };
 
     } catch (error) {
       console.log(error);
@@ -416,7 +436,8 @@ try {
       
       // 🎯 MANEJAR ERROR ESPECÍFICO DE GMAIL YA CONECTADA
       if (error instanceof Error && error.message.includes('GMAIL_YA_CONECTADA')) {
-        const emailMatch = error.message.match(/La cuenta (.+) ya está conectada/);
+        const regex = /La cuenta (.+) ya está conectada/;
+        const emailMatch = regex.exec(error.message);
         const email = emailMatch ? emailMatch[1] : 'de Gmail';
         
         throw new UnauthorizedException({
