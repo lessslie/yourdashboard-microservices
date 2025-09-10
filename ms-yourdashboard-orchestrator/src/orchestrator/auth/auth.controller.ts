@@ -11,6 +11,7 @@ import {
   Query,
   UnauthorizedException,
   BadRequestException,
+  HttpCode,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { 
@@ -79,18 +80,29 @@ export class AuthOrchestratorController {
    * 🔑 POST /auth/login - Iniciar sesión
    */
   @Post('login')
-  @ApiOperation({ 
-    summary: 'Iniciar sesión',
-    description: 'Autenticarse con email y contraseña. Coordina con MS-Auth.' 
-  })
+  @HttpCode(200)
+ @ApiOperation({
+  summary: '🔑 Iniciar sesión con perfil completo',
+  description: `
+    **Autenticación optimizada que incluye:**
+    
+    - ✅ Token JWT para autenticación
+    - 👤 Datos básicos del usuario (compatibilidad)
+    - 📧 Lista completa de cuentas Gmail conectadas
+    - 📊 Estadísticas de emails y eventos sincronizados
+    - 🔐 Sesiones activas del usuario
+    
+    **Beneficio:** Elimina la necesidad de llamar a /auth/me después del login.
+  `,
+})
   @ApiBody({ 
     type: LoginDto,
     description: 'Credenciales de acceso'
   })
-  @ApiOkResponse({ 
-    description: 'Login exitoso',
-    type: AuthResponseDto 
-  })
+ @ApiOkResponse({
+  description: 'Login exitoso con perfil completo - incluye token JWT, datos básicos del usuario, cuentas Gmail asociadas y estadísticas',
+  type: AuthResponseDto,
+})
   @ApiBadRequestResponse({ 
     description: 'Credenciales faltantes',
     type: AuthErrorResponseDto 

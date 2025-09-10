@@ -6,10 +6,12 @@ import { login } from "../../services/auth/auth";
 import { useAuth } from "./hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { FormView, IFormLogin } from "@/interfaces/interfacesAuth";
+import { useAuthStore } from "@/store/authStore";
 
 const FormLogin = ({ setChangeForm }: FormView) => {
   const router = useRouter();
   const { saveToken } = useAuth();
+  const { setUserProfile } = useAuthStore();
 
   const onFinish = async (values: IFormLogin) => {
     try {
@@ -18,6 +20,7 @@ const FormLogin = ({ setChangeForm }: FormView) => {
         console.log("response", response);
 
         saveToken(response.token);
+        setUserProfile(response);
 
         router.push("/dashboard");
       }

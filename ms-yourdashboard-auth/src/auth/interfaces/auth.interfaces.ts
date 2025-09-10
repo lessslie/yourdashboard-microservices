@@ -170,9 +170,53 @@ export interface UsuarioAutenticado {
 export interface RespuestaLogin {
   success: boolean;
   message: string;
-  usuario: UsuarioPrincipalResponse;
+  usuario: {
+    id: number;
+    email: string;
+    nombre: string;
+    fecha_registro: Date;
+    estado: string;
+    email_verificado: boolean;
+  };
   token: string;
-  sesion_id: number;
+  sesion_id: string;
+  
+  // 🆕 CAMPOS ADICIONALES DEL PERFIL (opcionales para mantener compatibilidad)
+  cuentas_gmail?: Array<{
+    id: number;
+    email_gmail: string;
+    nombre_cuenta: string;
+    alias_personalizado: string | null;
+    fecha_conexion: Date;
+    ultima_sincronizacion: Date | null;
+    esta_activa: boolean;
+    emails_count: number;
+    events_count: number;
+  }>;
+  
+  sesiones_activas?: Array<{
+    id: string | number;
+    fecha_creacion: Date;
+    expira_en: Date;
+    ip_origen: string | null;
+    user_agent: string | null;
+    esta_activa: boolean;
+  }>;
+  
+  estadisticas?: {
+    total_cuentas_gmail: number;
+    cuentas_gmail_activas: number;
+    total_emails_sincronizados: number;
+    emails_no_leidos: number;
+    total_eventos_sincronizados: number;
+    eventos_proximos: number;
+    eventos_pasados: number;
+    ultima_sincronizacion: Date;
+    cuenta_mas_activa: {
+      email_gmail: string;
+      emails_count: number;
+    } | null;
+  };
 }
 
 export interface RespuestaRegistro {
