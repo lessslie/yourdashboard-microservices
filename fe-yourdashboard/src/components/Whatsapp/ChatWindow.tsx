@@ -30,10 +30,7 @@ export default function ChatWindow({
 
     const fetchMessages = async () => {
       try {
-        // Obtener mensajes del backend
         const data: Message[] = await getMessagesByConversationId(chatId);
-
-        // Usar backend o fallback a mock si no hay datos
         const source = data.length > 0 ? data : mockMessages[chatId] || [];
 
         if (source.length > 0) {
@@ -44,7 +41,6 @@ export default function ChatWindow({
             avatar: initialContact?.avatar,
           });
         } else {
-          // si no hay mensajes, usa el contacto inicial
           setContact(initialContact ?? null);
         }
 
@@ -62,29 +58,6 @@ export default function ChatWindow({
         setMessages(formatted);
       } catch (error) {
         console.error("Error fetching messages:", error);
-        setContact(initialContact ?? null); // fallback al contacto inicial
-
-        // fallback a mock
-        const fallback = mockMessages[chatId] || [];
-        if (fallback.length > 0) {
-          const lastMsg = fallback[fallback.length - 1];
-          setContact({
-            name: lastMsg.name,
-            phone: lastMsg.phone,
-          });
-        }
-        setMessages(
-          fallback.map((msg) => ({
-            from: msg.from || (msg.phone === myPhone ? "me" : "other"),
-            name: msg.phone === myPhone ? "Yo" : msg.name,
-            phone: msg.phone,
-            text: msg.message,
-            time: new Date(msg.timestamp).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-          }))
-        );
       }
     };
 
@@ -96,19 +69,24 @@ export default function ChatWindow({
   }, [messages]);
 
   return (
-    <Layout style={{ height: "100vh", background: "#fff" }}>
-      {/* Encabezado */}
+    <Layout
+      style={{
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        background: "#fff",
+      }}
+    >
+      {/* Encabezado fijo */}
       <Header
         style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
-          backgroundColor: "#fff",
+          flex: "0 0 64px",
           display: "flex",
           alignItems: "center",
           borderBottom: "1px solid #f0f0f0",
-          height: 64,
           paddingInline: 16,
+          backgroundColor: "#fff",
+          zIndex: 10,
         }}
       >
         <Avatar style={{ marginRight: 14 }} src={contact?.avatar}>
@@ -118,23 +96,18 @@ export default function ChatWindow({
           <Typography.Text strong style={{ fontSize: 19, color: "#222" }}>
             {contact?.name || "Contacto"}
           </Typography.Text>
-          <Typography.Text
-            type="secondary"
-            style={{ fontSize: 12, color: "#888" }}
-          >
+          <Typography.Text type="secondary" style={{ fontSize: 12, color: "#888" }}>
             {contact?.phone || ""}
           </Typography.Text>
         </div>
       </Header>
 
-      {/* Contenido: mensajes */}
+      {/* Contenido scrollable */}
       <Content
         style={{
+          flex: 1,
           overflowY: "auto",
           padding: "10px",
-          flex: 1,
-          minHeight: 0,
-          marginTop: 55,
         }}
       >
         <List
@@ -161,13 +134,7 @@ export default function ChatWindow({
                 }}
               >
                 {msg.from !== "me" && (
-                  <div
-                    style={{
-                      fontWeight: 600,
-                      fontSize: 13,
-                      marginBottom: 4,
-                    }}
-                  >
+                  <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
                     {msg.name}
                   </div>
                 )}
@@ -189,13 +156,13 @@ export default function ChatWindow({
         <div ref={messagesEndRef} />
       </Content>
 
-      {/* Input de chat */}
+      {/* Footer fijo */}
       <Footer
         style={{
+          flex: "0 0 80px",
           borderTop: "1px solid #eee",
-          background: "#fff",
           padding: "12px 16px",
-          height: 80,
+          background: "#fff",
         }}
       >
         <ChatInput chatId={chatId} />

@@ -67,8 +67,8 @@ export default function ConversationsPage() {
   }
 
   return (
-    <Layout style={{ height: "100vh", overflow: "hidden" }}>
-      <Content style={{ height: "100%", paddingTop: 60, overflow: "hidden" }}>
+    <Layout style={{ height: "100vh", paddingTop: 60, overflow: "hidden" }}>
+      <Content style={{ height: "100%", overflow: "hidden" }}>
         <Row style={{ height: "100%" }}>
           <Col
             span={8}
@@ -84,6 +84,7 @@ export default function ConversationsPage() {
             <div
               style={{
                 flex: 1,
+                margin: "0 10px",
                 overflowY: "auto",
                 minHeight: 0,
                 paddingTop: 30,
@@ -110,7 +111,6 @@ export default function ConversationsPage() {
                 />
               ) : (
                 <ConversationList
-                  accountId={accountId}
                   selectedChatId={selectedChatId}
                   onSelectChat={setSelectedChatId}
                   conversations={allConversations}

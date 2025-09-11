@@ -1,3 +1,16 @@
+export interface Account {
+  id: string;
+  usuario_principal_id: number;
+  phone: string;
+  nombre_cuenta: string;
+  token: string;
+  fecha_conexion: string;
+  esta_activa: boolean;
+  alias_personalizado: string | null;
+  phone_number_id: string;
+  token_updated_at: string;
+  token_expires_at: string | null;
+}
 export interface Conversation {
   conversation_id: string;
   phone: string;

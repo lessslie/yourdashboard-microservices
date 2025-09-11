@@ -35,7 +35,7 @@ export default function SearchBar({ onResults }: SearchBarProps) {
 
   return (
     <Input
-      placeholder="Buscar en todos los mensajes"
+      placeholder="Buscar un mensaje..."
       prefix={<SearchOutlined />}
       allowClear
       value={search}

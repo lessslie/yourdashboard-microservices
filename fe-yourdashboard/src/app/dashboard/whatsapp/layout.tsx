@@ -1,11 +1,12 @@
 "use client";
 
-import React from "react";
-import { Menu, Avatar, Typography, Layout } from "antd";
+import React, { useEffect } from "react";
+import { Menu, Avatar, Typography, Layout, Button } from "antd";
 import { PlusOutlined, UserOutlined } from "@ant-design/icons";
+import { useRouter } from "next/navigation";
+import { Account } from "@/interfaces/interfacesWhatsapp";
+import { getAccounts } from "@/services/whatsapp/whatsapp";
 import Link from "next/link";
-
-import { accounts } from "@/components/Whatsapp/utils/data";
 
 const { Header, Sider, Content } = Layout;
 const { Text } = Typography;
@@ -15,6 +16,30 @@ export default function WhatsappLayout({
 }: {
   children: React.ReactNode;
 }) {
+
+  const router = useRouter();
+  const [accounts, setAccounts] = React.useState<Account[]>(
+    []
+  );
+
+  useEffect(() => {
+      const fetchAccounts = async () => {
+        try {
+          const accounts = await getAccounts();
+          console.log("Cuentas obtenidas:", accounts);
+          setAccounts(accounts);
+  
+  
+        } catch (error) {
+          console.error("Error fetching conversations", error);
+      
+        }
+      };
+  
+      fetchAccounts();
+    }, []);
+
+  
   return (
     <Layout style={{ minHeight: "100vh", height: "100vh", overflow: "hidden" }}>
       <Header
@@ -34,7 +59,15 @@ export default function WhatsappLayout({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <h1 style={{ margin: 0, color: "#ee2f29ff" }}>📱 WhatsApp</h1>
+          <Button
+          type="primary"
+          onClick={() => {
+            router.push("/dashboard");
+          }}
+          >
+            Volver al Dashboard
+          </Button>
+          <h1 style={{ margin: 0, paddingLeft: "400px", color: "#4575ddff" }}>📱 WhatsApp</h1>
         </div>
       </Header>
       <Layout
@@ -88,7 +121,7 @@ export default function WhatsappLayout({
                         icon={<UserOutlined />}
                       />
                       <Text style={{ fontSize: 12, textAlign: "center" }}>
-                        {account.name}
+                        {account.nombre_cuenta}
                       </Text>
                     </div>
                   </Link>
