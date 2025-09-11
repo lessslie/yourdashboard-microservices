@@ -51,6 +51,12 @@ export class CuentaGmailResponseDto {
     example: 150
   })
   emails_count: number;
+
+  @ApiProperty({
+    description: 'Cantidad de eventos de calendario sincronizados',
+    example: 47
+  })
+  events_count: number;
 }
 
 export class SesionResponseDto {
@@ -117,6 +123,24 @@ export class EstadisticasUsuarioDto {
     example: 23
   })
   emails_no_leidos: number;
+
+  @ApiProperty({
+  description: 'Total de eventos sincronizados',
+  example: 847
+})
+total_eventos_sincronizados: number;
+
+@ApiProperty({
+  description: 'Eventos próximos (futuros)',
+  example: 125
+})
+eventos_proximos: number;
+
+@ApiProperty({
+  description: 'Eventos pasados',
+  example: 722
+})
+eventos_pasados: number;
 
   @ApiProperty({
     description: 'Última sincronización',

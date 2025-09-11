@@ -112,47 +112,100 @@ export class AuthController {
     };
   }
 
-  @Post('login')
-  @ApiOperation({
-    summary: 'Iniciar sesión',
-    description: 'Autenticarse con email y contraseña. Retorna JWT token.',
-  })
-  @ApiBody({
-    type: LoginDto,
-    description: 'Credenciales de acceso',
-  })
-  @ApiOkResponse({
-    description: 'Login exitoso',
-    type: AuthResponseDto,
-  })
-  @ApiBadRequestResponse({
-    description: 'Credenciales faltantes',
-    type: ErrorResponseDto,
-  })
-  @ApiUnauthorizedResponse({
-    description: 'Credenciales incorrectas',
-    type: ErrorResponseDto,
-  })
-  async login(@Body() loginData: LoginDto): Promise<AuthResponseDto> {
-    const result = await this.authService.loginUsuario(
-      loginData.email,
-      loginData.password,
-    );
+@Post('login')
 
-    return {
-      success: result.success,
-      message: result.message,
-      user: {
-        id: result.usuario.id,
-        email: result.usuario.email,
-        name: result.usuario.nombre,
-        isEmailVerified: result.usuario.email_verificado,
-        createdAt: result.usuario.fecha_registro.toISOString(),
-        profilePicture: null,
-      },
-      token: result.token,
-    };
-  }
+@ApiOperation({
+  summary: 'Iniciar sesión',
+  description: 'Autenticarse con email y contraseña. Ahora retorna JWT token + perfil completo del usuario.',
+})
+@ApiBody({
+  type: LoginDto,
+  description: 'Credenciales de acceso',
+})
+@ApiOkResponse({
+  description: 'Login exitoso con perfil completo - incluye token JWT, datos básicos del usuario, cuentas Gmail asociadas y estadísticas',
+  type: AuthResponseDto,
+})
+@ApiBadRequestResponse({
+  description: 'Credenciales faltantes',
+  type: ErrorResponseDto,
+})
+@ApiUnauthorizedResponse({
+  description: 'Credenciales incorretas',
+  type: ErrorResponseDto,
+})
+async login(@Body() loginData: LoginDto): Promise<any> {
+  const result = await this.authService.loginUsuario(
+    loginData.email,
+    loginData.password,
+  );
+
+  // Mapear la respuesta manteniendo estructura actual + nuevos campos
+  return {
+    success: result.success,
+    message: result.message,
+    // ESTRUCTURA ACTUAL (para compatibilidad)
+    user: {
+      id: result.usuario.id,
+      email: result.usuario.email,
+      name: result.usuario.nombre,
+      isEmailVerified: result.usuario.email_verificado,
+      createdAt: result.usuario.fecha_registro.toISOString(),
+      profilePicture: null,
+    },
+    token: result.token,
+    
+    // 🆕 NUEVOS CAMPOS DEL PERFIL (igual que /auth/me)
+    usuario: {
+      id: result.usuario.id,
+      email: result.usuario.email,
+      nombre: result.usuario.nombre,
+      fecha_registro: result.usuario.fecha_registro.toISOString(),
+      estado: result.usuario.estado,
+      email_verificado: result.usuario.email_verificado,
+    },
+    cuentas_gmail: result.cuentas_gmail?.map((cuenta) => ({
+      id: cuenta.id,
+      email_gmail: cuenta.email_gmail,
+      nombre_cuenta: cuenta.nombre_cuenta,
+      alias_personalizado: cuenta.alias_personalizado,
+      fecha_conexion: cuenta.fecha_conexion.toISOString(),
+      ultima_sincronizacion: cuenta.ultima_sincronizacion?.toISOString(),
+      esta_activa: cuenta.esta_activa,
+      emails_count: cuenta.emails_count,
+      events_count: cuenta.events_count,
+    })) || [],
+    sesiones_activas: result.sesiones_activas?.map((sesion) => ({
+      id: sesion.id.toString(),
+      fecha_creacion: sesion.fecha_creacion.toISOString(),
+      expira_en: sesion.expira_en.toISOString(),
+      ip_origen: sesion.ip_origen,
+      user_agent: sesion.user_agent,
+      esta_activa: sesion.esta_activa,
+    })) || [],
+    estadisticas: result.estadisticas ? {
+      total_cuentas_gmail: result.estadisticas.total_cuentas_gmail,
+      cuentas_gmail_activas: result.estadisticas.cuentas_gmail_activas,
+      total_emails_sincronizados: result.estadisticas.total_emails_sincronizados,
+      emails_no_leidos: result.estadisticas.emails_no_leidos,
+      total_eventos_sincronizados: result.estadisticas.total_eventos_sincronizados,
+      eventos_proximos: result.estadisticas.eventos_proximos,
+      eventos_pasados: result.estadisticas.eventos_pasados,
+      ultima_sincronizacion: result.estadisticas.ultima_sincronizacion.toISOString(),
+      cuenta_mas_activa: result.estadisticas.cuenta_mas_activa,
+    } : {
+      total_cuentas_gmail: 0,
+      cuentas_gmail_activas: 0,
+      total_emails_sincronizados: 0,
+      emails_no_leidos: 0,
+      total_eventos_sincronizados: 0,
+      eventos_proximos: 0,
+      eventos_pasados: 0,
+      ultima_sincronizacion: new Date().toISOString(),
+      cuenta_mas_activa: null,
+    },
+  };
+}
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
@@ -201,6 +254,7 @@ export class AuthController {
           ultima_sincronizacion: cuenta.ultima_sincronizacion?.toISOString(),
           esta_activa: cuenta.esta_activa,
           emails_count: cuenta.emails_count,
+          events_count: cuenta.events_count,
         })),
         sesiones_activas: profileData.sesiones_activas.map((sesion) => ({
           id: sesion.id,
@@ -210,16 +264,19 @@ export class AuthController {
           user_agent: sesion.user_agent,
           esta_activa: sesion.esta_activa,
         })),
-        estadisticas: {
-          total_cuentas_gmail: profileData.estadisticas.total_cuentas_gmail,
-          cuentas_gmail_activas: profileData.estadisticas.cuentas_gmail_activas,
-          total_emails_sincronizados:
-            profileData.estadisticas.total_emails_sincronizados,
-          emails_no_leidos: profileData.estadisticas.emails_no_leidos,
-          ultima_sincronizacion:
-            profileData.estadisticas.ultima_sincronizacion.toISOString(),
-          cuenta_mas_activa: profileData.estadisticas.cuenta_mas_activa,
-        },
+       estadisticas: {
+  total_cuentas_gmail: profileData.estadisticas.total_cuentas_gmail,
+  cuentas_gmail_activas: profileData.estadisticas.cuentas_gmail_activas,
+  total_emails_sincronizados: profileData.estadisticas.total_emails_sincronizados,
+  emails_no_leidos: profileData.estadisticas.emails_no_leidos,
+  // 🆕 NUEVOS CAMPOS DE EVENTOS
+  total_eventos_sincronizados: profileData.estadisticas.total_eventos_sincronizados,
+  eventos_proximos: profileData.estadisticas.eventos_proximos,
+  eventos_pasados: profileData.estadisticas.eventos_pasados,
+  // CAMPOS ORIGINALES
+  ultima_sincronizacion: profileData.estadisticas.ultima_sincronizacion.toISOString(),
+  cuenta_mas_activa: profileData.estadisticas.cuenta_mas_activa,
+},
       };
     } catch (error) {
       console.error('Error obteniendo perfil:', error);
@@ -488,7 +545,7 @@ private redirectToGoogleOAuth(res: Response, userId: number, service: 'gmail' | 
       } else if (service === 'calendar') {
         await this.handleCalendarCallback(req.user, userId, res);
       } else {
-        throw new Error(`Servicio no soportado: ${service}`);
+        throw new Error(`Servicio no soportado: ${service as string}`);
       }
       console.log(`✅ Callback procesado exitosamente para usuario ${userId}, servicio: ${service}`);
 
@@ -820,35 +877,6 @@ private redirectToGoogleOAuth(res: Response, userId: number, service: 'gmail' | 
 
     return { userId, service: service as 'gmail' | 'calendar' };
   }
-
-  /**
-   * 📧 Manejar callback de GMAIL
-   */
-  // private async handleGmailCallback(
-  //   googleUser: GoogleOAuthUser,
-  //   userId: number,
-  //   res: Response
-  // ): Promise<void> {
-  //   console.log(`📧 Procesando conexión Gmail para usuario ${userId}`);
-    
-  //   // Usar el método existente
-  //   await this.authService.manejarCallbackGoogle(googleUser, userId);
-
-  //   const redirectUrl = new URL(
-  //     this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000',
-  //   );
-  //   redirectUrl.pathname = '/dashboard/email';
-  //   redirectUrl.searchParams.set('auth', 'success');
-  //   redirectUrl.searchParams.set(
-  //     'message',
-  //     `Gmail ${googleUser.email} conectado exitosamente`,
-  //   );
-  //   redirectUrl.searchParams.set('gmail', googleUser.email);
-
-  //   console.log(`✅ Gmail conectado, redirigiendo: ${redirectUrl.toString()}`);
-  //   res.redirect(redirectUrl.toString());
-  // }
-// MS-Auth/auth.controller.ts - handleGmailCallback
 private async handleGmailCallback(
   googleUser: GoogleOAuthUser,
   userId: number,

@@ -249,32 +249,59 @@ export class DatabaseService implements OnModuleDestroy {
     }
   }
 
-  async obtenerCuentasGmailUsuario(usuarioId: number): Promise<CuentaGmailResponse[]> {
-    const query = `
-      SELECT 
-        cga.id,
-        cga.email_gmail,
-        cga.nombre_cuenta,
-        cga.alias_personalizado,
-        cga.fecha_conexion,
-        cga.ultima_sincronizacion,
-        cga.esta_activa,
-        0 as emails_count
-      FROM cuentas_gmail_asociadas cga
-      LEFT JOIN (
-        SELECT cuenta_gmail_id, COUNT(*) as count 
-        FROM emails_sincronizados 
-        GROUP BY cuenta_gmail_id
-      ) email_counts ON cga.id = email_counts.cuenta_gmail_id
-      WHERE cga.usuario_principal_id = $1 
-      AND cga.esta_activa = TRUE
-      ORDER BY cga.fecha_conexion DESC
-    `;
 
-    const result = await this.query<CuentaGmailResponse>(query, [usuarioId]);
-    return result.rows;
-  }
+// ms-yourdashboard-auth/src/database/database.service.ts
+// ✅ MÉTODO CORREGIDO - obtenerCuentasGmailUsuario()
 
+async obtenerCuentasGmailUsuario(usuarioId: number): Promise<CuentaGmailResponse[]> {
+  const query = `
+    SELECT 
+      cga.id,
+      cga.email_gmail,
+      cga.nombre_cuenta,
+      cga.alias_personalizado,
+      cga.fecha_conexion,
+      cga.ultima_sincronizacion,
+      cga.esta_activa,
+      COALESCE(email_counts.count, 0) as emails_count,
+      COALESCE(event_counts.count, 0) as events_count
+    FROM cuentas_gmail_asociadas cga
+    LEFT JOIN (
+      SELECT cuenta_gmail_id, COUNT(*) as count 
+      FROM emails_sincronizados 
+      GROUP BY cuenta_gmail_id
+    ) email_counts ON cga.id = email_counts.cuenta_gmail_id
+    LEFT JOIN (
+      SELECT cuenta_gmail_id, COUNT(*) as count 
+      FROM events_sincronizados 
+      GROUP BY cuenta_gmail_id
+    ) event_counts ON cga.id = event_counts.cuenta_gmail_id
+    WHERE cga.usuario_principal_id = $1 
+    AND cga.esta_activa = TRUE
+    ORDER BY cga.fecha_conexion DESC
+  `;
+
+  const result = await this.query<{
+    id: number;
+    email_gmail: string;
+    nombre_cuenta: string;
+    alias_personalizado?: string;
+    fecha_conexion: Date;
+    ultima_sincronizacion?: Date;
+    esta_activa: boolean;
+    emails_count: string; // Viene como string del COUNT
+    events_count: string; // Viene como string del COUNT
+  }>(query, [usuarioId]);
+
+  // Convertir strings a numbers
+  const cuentas = result.rows.map(cuenta => ({
+    ...cuenta,
+    emails_count: parseInt(cuenta.emails_count, 10) || 0,
+    events_count: parseInt(cuenta.events_count, 10) || 0
+  }));
+
+  return cuentas;
+}
   async obtenerCuentaGmailPorId(cuentaId: number, usuarioId: number): Promise<CuentaGmailAsociada | null> {
     const query = `
       SELECT * FROM cuentas_gmail_asociadas 
@@ -511,17 +538,21 @@ async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void>
 
     const cuentaActivaResult = await this.query<{ email_gmail: string; emails_count: string }>(queryCuentaMasActiva, [usuarioId]);
 
-    return {
-      total_cuentas_gmail: parseInt(stats?.total_cuentas_gmail || '0'),
-      cuentas_gmail_activas: parseInt(stats?.cuentas_gmail_activas || '0'),
-      total_emails_sincronizados: parseInt(stats?.total_emails_sincronizados || '0'),
-      emails_no_leidos: parseInt(stats?.emails_no_leidos || '0'),
-      ultima_sincronizacion: stats?.ultima_sincronizacion ? new Date(stats.ultima_sincronizacion) : new Date(0),
-      cuenta_mas_activa: {
-        email_gmail: cuentaActivaResult.rows[0]?.email_gmail || '',
-        emails_count: parseInt(cuentaActivaResult.rows[0]?.emails_count || '0')
-      }
-    };
+   return {
+  total_cuentas_gmail: parseInt(stats?.total_cuentas_gmail || '0'),
+  cuentas_gmail_activas: parseInt(stats?.cuentas_gmail_activas || '0'),
+  total_emails_sincronizados: parseInt(stats?.total_emails_sincronizados || '0'),
+  emails_no_leidos: parseInt(stats?.emails_no_leidos || '0'),
+  // 🆕 CAMPOS DE EVENTOS CON VALORES POR DEFECTO
+  total_eventos_sincronizados: 0,
+  eventos_proximos: 0,
+  eventos_pasados: 0,
+  ultima_sincronizacion: stats?.ultima_sincronizacion ? new Date(stats.ultima_sincronizacion) : new Date(0),
+  cuenta_mas_activa: {
+    email_gmail: cuentaActivaResult.rows[0]?.email_gmail || '',
+    emails_count: parseInt(cuentaActivaResult.rows[0]?.emails_count || '0')
+  }
+};
   }
 
   // ================================
