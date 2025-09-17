@@ -111,6 +111,7 @@ export class WebhookController {
           msgBody,
           new Date(timestamp),
           cuenta.id,
+          'whatsapp',
         );
 
         this.gateway.emitNewMessage({
@@ -143,18 +144,36 @@ export class WebhookController {
           .json({ error: 'Faltan parámetros: to, message o cuentaId' });
       }
 
+      // 1️⃣ Buscar la cuenta
       const cuenta = await this.whatsappAccountsService.findById(cuentaId);
-
       if (!cuenta) {
         console.warn(`No se encontró cuenta para cuentaId: ${cuentaId}`);
         return res.status(404).json({ error: 'Cuenta no encontrada' });
       }
 
+      // 2️⃣ Enviar el mensaje por WhatsApp
       const response = await this.whatsappService.sendMessageWithCuenta(
         cuenta,
         to,
         message,
       );
+
+      // 3️⃣ Buscar el último mensaje no respondido de ese número y cuenta
+      const mensajes = await this.conversationsService.getMessageByIdAndAccount(
+        (await this.conversationsService.getRecentConversationsByAccount(cuenta.id))
+          .find(conv => conv.phone === to)?.conversation_id || ''
+      );
+
+      if (mensajes && mensajes.length > 0) {
+        // Tomamos el último mensaje no respondido
+        const ultimoNoRespondido = mensajes
+          .filter(msg => !msg.respondido)
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+
+        if (ultimoNoRespondido) {
+          await this.conversationsService.markMessageAsResponded(ultimoNoRespondido.message_id);
+        }
+      }
 
       return res.status(200).json(response);
     } catch (error) {
@@ -162,6 +181,7 @@ export class WebhookController {
       return res.status(500).json({ error: 'No se pudo enviar el mensaje' });
     }
   }
+
 
   @Get('/cuentas')
   async getAllAccounts(@Res() res: Response) {
