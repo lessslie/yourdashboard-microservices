@@ -155,6 +155,13 @@ export class AuthService {
 
       this.logger.log(`✅ Login exitoso: ${usuario.email}`);
 
+      // 7️⃣ OBTENER PERFIL COMPLETOPARA RETORNARLO
+      this.logger.log(`🔵 Obteniendo perfil completo para usuario ${usuario.id}`);
+      const perfilCompleto = await this.obtenerPerfil(usuario.id);
+      this.logger.log(`✅ Perfil obtenido para usuario ${usuario.id}`);
+
+      // 8️⃣ RETORNAR RESPUESTA DE LOGIN
+
       return {
         success: true,
         message: 'Login exitoso',
@@ -167,8 +174,21 @@ export class AuthService {
           email_verificado: usuario.email_verificado
         },
         token,
-        sesion_id: sesion.id
-      };
+        sesion_id: sesion.id.toString(),// Convertir a string
+// 🆕 DATOS COMPLETOS DEL PERFIL (igual que /auth/me)
+      cuentas_gmail: perfilCompleto.cuentas_gmail.map(cuenta => ({
+        ...cuenta,
+        alias_personalizado: cuenta.alias_personalizado || null, // Manejar undefined
+        ultima_sincronizacion: typeof cuenta.ultima_sincronizacion === 'undefined' ? null : cuenta.ultima_sincronizacion
+      })),
+      sesiones_activas: perfilCompleto.sesiones_activas.map(sesion => ({
+        ...sesion,
+        id: sesion.id.toString(), // Asegurar que sea string
+        ip_origen: typeof sesion.ip_origen === 'undefined' ? null : sesion.ip_origen,
+        user_agent: typeof sesion.user_agent === 'undefined' ? null : sesion.user_agent
+      })),
+      estadisticas: perfilCompleto.estadisticas
+    };
 
     } catch (error) {
       console.log(error);
@@ -208,6 +228,9 @@ export class AuthService {
       // 3️⃣ Obtener estadísticas del usuario
       const estadisticas = await this.databaseService.obtenerEstadisticasUsuario(usuarioId);
 
+      // 🆕 4️⃣ Obtener estadísticas de eventos
+      const eventStats = await this.obtenerEstadisticasEventos(usuarioId);  
+
       // 4️⃣ Obtener sesiones activas (simplificado por ahora)
       const sesionesActivas = []; // Implementar obtener sesiones activas
 
@@ -230,6 +253,9 @@ export class AuthService {
         sesiones_activas: sesionesActivas,
         estadisticas: {
           ...estadisticas,
+          total_eventos_sincronizados: eventStats.total_eventos_sincronizados,
+          eventos_proximos: eventStats.eventos_proximos,
+          eventos_pasados: eventStats.eventos_pasados,
           ultima_sincronizacion: estadisticas.ultima_sincronizacion
         }
       };
@@ -410,7 +436,8 @@ try {
       
       // 🎯 MANEJAR ERROR ESPECÍFICO DE GMAIL YA CONECTADA
       if (error instanceof Error && error.message.includes('GMAIL_YA_CONECTADA')) {
-        const emailMatch = error.message.match(/La cuenta (.+) ya está conectada/);
+        const regex = /La cuenta (.+) ya está conectada/;
+        const emailMatch = regex.exec(error.message);
         const email = emailMatch ? emailMatch[1] : 'de Gmail';
         
         throw new UnauthorizedException({
@@ -605,5 +632,62 @@ try {
 
   // 🎯 SIEMPRE RETORNAR TODOS LOS SCOPES
   return allScopes;
+}
+
+/**
+ * 🆕 📅 OBTENER ESTADÍSTICAS DE EVENTOS PARA EL USUARIO
+ * Suma todos los eventos de todas las cuentas Gmail del usuario
+ */
+private async obtenerEstadisticasEventos(usuarioId: number): Promise<{
+  total_eventos_sincronizados: number;
+  eventos_proximos: number;
+  eventos_pasados: number;
+}> {
+  try {
+    this.logger.log(`📊 Obteniendo estadísticas de eventos para usuario ${usuarioId}`);
+
+    // 🎯 QUERY PARA SUMAR EVENTOS DE TODAS LAS CUENTAS DEL USUARIO
+    const query = `
+      SELECT 
+        COUNT(*) as total_eventos_sincronizados,
+        COUNT(CASE WHEN start_time >= NOW() THEN 1 END) as eventos_proximos,
+        COUNT(CASE WHEN start_time < NOW() THEN 1 END) as eventos_pasados
+      FROM events_sincronizados es
+      INNER JOIN cuentas_gmail_asociadas cga ON es.cuenta_gmail_id = cga.id
+      WHERE cga.usuario_principal_id = $1 
+      AND cga.esta_activa = TRUE
+    `;
+
+    const result = await this.databaseService.query(query, [usuarioId]);
+    
+    if (!result.rows.length) {
+      return {
+        total_eventos_sincronizados: 0,
+        eventos_proximos: 0,
+        eventos_pasados: 0
+      };
+    }
+
+    const stats = result.rows[0];
+    
+    const estadisticas = {
+      total_eventos_sincronizados: parseInt(stats.total_eventos_sincronizados || '0'),
+      eventos_proximos: parseInt(stats.eventos_proximos || '0'),
+      eventos_pasados: parseInt(stats.eventos_pasados || '0')
+    };
+
+    this.logger.log(`✅ Estadísticas eventos: ${estadisticas.total_eventos_sincronizados} total, ${estadisticas.eventos_proximos} próximos`);
+
+    return estadisticas;
+
+  } catch (error) {
+    this.logger.error(`❌ Error obteniendo estadísticas de eventos:`, error);
+    // Retornar valores por defecto en caso de error
+    return {
+      total_eventos_sincronizados: 0,
+      eventos_proximos: 0,
+      eventos_pasados: 0
+    };
+  }
 }
 }

@@ -971,52 +971,56 @@ export class EmailsService {
       // 3️⃣ ESPERAR TODOS LOS RESULTADOS EN PARALELO
       const resultadosPorCuenta = await Promise.all(searchPromises);
 
-      // 4️⃣ UNIFICAR Y COMBINAR TODOS LOS EMAILS
-      const todosLosEmails = resultadosPorCuenta
-        .filter((resultado) => resultado.emails.length > 0)
-        .flatMap((resultado) => resultado.emails);
+      
+// 4️⃣ UNIFICAR Y COMBINAR TODOS LOS EMAILS
+const todosLosEmails = resultadosPorCuenta
+  .filter((resultado) => resultado.emails.length > 0)
+  .flatMap((resultado) => resultado.emails);
 
-      // 5️⃣ ORDENAR GLOBALMENTE POR FECHA (MÁS RECIENTES PRIMERO)
-      todosLosEmails.sort((a, b) => {
-        const fechaA = new Date(a.receivedDate).getTime();
-        const fechaB = new Date(b.receivedDate).getTime();
-        return fechaB - fechaA; // Descendente (más recientes primero)
-      });
+// 5️⃣ FILTRAR EMAILS CON FECHAS FUTURAS Y ORDENAR GLOBALMENTE POR FECHA
+const ahora = new Date();
+const emailsFiltradosYOrdenados = todosLosEmails
+  .filter((email) => new Date(email.receivedDate) <= ahora)
+  .sort((a, b) => {
+    const fechaA = new Date(a.receivedDate).getTime();
+    const fechaB = new Date(b.receivedDate).getTime();
+    return fechaB - fechaA; // Descendente (más recientes primero)
+  });
 
-      // 6️⃣ APLICAR PAGINACIÓN GLOBAL
-      const totalEmails = todosLosEmails.length;
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + limit;
-      const emailsPaginados = todosLosEmails.slice(startIndex, endIndex);
+// 6️⃣ APLICAR PAGINACIÓN GLOBAL
+const totalEmails = emailsFiltradosYOrdenados.length;
+const startIndex = (page - 1) * limit;
+const endIndex = startIndex + limit;
+const emailsPaginados = emailsFiltradosYOrdenados.slice(startIndex, endIndex);
 
-      // 7️⃣ CALCULAR METADATOS DE PAGINACIÓN
-      const totalPages = Math.ceil(totalEmails / limit);
-      const hasNextPage = page < totalPages;
-      const hasPreviousPage = page > 1;
+// 7️⃣ CALCULAR METADATOS DE PAGINACIÓN
+const totalPages = Math.ceil(totalEmails / limit);
+const hasNextPage = page < totalPages;
+const hasPreviousPage = page > 1;
 
-      // 8️⃣ OBTENER LISTA DE CUENTAS BUSCADAS
-      const accountsSearched = resultadosPorCuenta.map(
-        (resultado) => resultado.cuenta,
-      );
+// 8️⃣ OBTENER LISTA DE CUENTAS BUSCADAS
+const accountsSearched = resultadosPorCuenta.map(
+  (resultado) => resultado.cuenta,
+);
 
-      this.logger.log(`✅ BÚSQUEDA GLOBAL COMPLETADA:`);
-      this.logger.log(`   📊 Total emails encontrados: ${totalEmails}`);
-      this.logger.log(`   📧 Cuentas buscadas: ${accountsSearched.join(', ')}`);
-      this.logger.log(
-        `   📄 Página ${page}/${totalPages} (${emailsPaginados.length} emails)`,
-      );
+this.logger.log(`✅ BÚSQUEDA GLOBAL COMPLETADA:`);
+this.logger.log(`   📊 Total emails encontrados: ${totalEmails}`);
+this.logger.log(`   📧 Cuentas buscadas: ${accountsSearched.join(', ')}`);
+this.logger.log(
+  `   📄 Página ${page}/${totalPages} (${emailsPaginados.length} emails)`,
+);
 
-      return {
-        emails: emailsPaginados,
-        total: totalEmails,
-        page,
-        limit,
-        totalPages,
-        hasNextPage,
-        hasPreviousPage,
-        searchTerm,
-        accountsSearched,
-      };
+return {
+  emails: emailsPaginados,
+  total: totalEmails,
+  page,
+  limit,
+  totalPages,
+  hasNextPage,
+  hasPreviousPage,
+  searchTerm,
+  accountsSearched,
+};
     } catch (error) {
       this.logger.error('❌ Error en búsqueda global:', error);
       const emailError = error as EmailServiceError;
@@ -1631,10 +1635,260 @@ export class EmailsService {
       throw error;
     }
   }
+  /**
+ * 💾 Guardar contenido completo de email con JWT
+ */
+async saveFullEmailContentWithJWT(
+  jwtToken: string, 
+  gmailMessageId: string
+): Promise<{
+  success: boolean;
+  message: string;
+  emailId: string;
+  savedAt: string;
+  contentSize: number;
+  attachmentsCount: number;
+  hasFullContent: boolean;
+  wasAlreadySaved: boolean;
+}> {
+  try {
+    // 1️⃣ EXTRAER USER ID DEL JWT
+    const userId = this.extractUserIdFromJWT(jwtToken);
+    if (!userId) {
+      throw new UnauthorizedException('Token JWT inválido');
+    }
+
+    // 2️⃣ BUSCAR EMAIL EN emails_sincronizados
+    const emailSincronizadoResult = await this.databaseService.query(
+      `SELECT es.*, cga.access_token, cga.refresh_token 
+       FROM emails_sincronizados es
+       JOIN cuentas_gmail_asociadas cga ON es.cuenta_gmail_id = cga.id
+       WHERE es.gmail_message_id = $1 AND cga.usuario_principal_id = $2`,
+      [gmailMessageId, userId]
+    );
+
+    if (emailSincronizadoResult.rows.length === 0) {
+      throw new NotFoundException('Email no encontrado o no pertenece al usuario');
+    }
+
+    const email = emailSincronizadoResult.rows[0];
+
+
+// 3️⃣ VERIFICAR SI YA ESTÁ GUARDADO
+const existeCompleto = await this.databaseService.query(
+  `SELECT 
+     id, 
+     LENGTH(cuerpo_texto) + LENGTH(cuerpo_html) as content_size,
+     jsonb_array_length(adjuntos) as attachments_count,
+     fecha_guardado
+   FROM emails_completos 
+   WHERE gmail_message_id = $1`,
+  [gmailMessageId]
+);
+
+if (existeCompleto.rows.length > 0) {
+  const existing = existeCompleto.rows[0];
+  
+  this.logger.log(`💾 Email ${gmailMessageId} ya tiene contenido completo - SALTANDO procesamiento`);
+  
+  return {
+    success: true,
+    message: 'Contenido completo ya existe',
+    emailId: gmailMessageId,
+    savedAt: existing.fecha_guardado.toISOString(),
+    contentSize: parseInt(existing.content_size) || 0,
+    attachmentsCount: parseInt(existing.attachments_count) || 0,
+    hasFullContent: true,
+    wasAlreadySaved: true
+  };
+  // NO CONTINÚA - sale aquí
+}
+
+// Solo llega aquí si NO existe
+this.logger.log(`💾 Email ${gmailMessageId} NO existe - procediendo a guardar`);
+
+    // 4️⃣ OBTENER TOKEN VÁLIDO Y CONFIGURAR GMAIL API
+    const accessToken = await this.getValidTokenForAccount(email.cuenta_gmail_id);
+    const auth = new google.auth.OAuth2();
+    auth.setCredentials({ access_token: accessToken });
+    const gmail = google.gmail({ version: 'v1', auth });
+
+    // 5️⃣ OBTENER CONTENIDO COMPLETO DE GMAIL API
+    const fullMessage = await gmail.users.messages.get({
+      userId: 'me',
+      id: gmailMessageId,
+      format: 'full'
+    });
+
+    const message = fullMessage.data;
+    
+    // 6️⃣ EXTRAER CUERPOS DE TEXTO Y HTML
+    const { bodyText, bodyHtml } = this.extractEmailBodies(message.payload);
+    
+    // 7️⃣ EXTRAER HEADERS COMPLETOS
+    const headersCompletos: Record<string, string> = {};
+    message.payload?.headers?.forEach(header => {
+      if (header.name && header.value) {
+        headersCompletos[header.name] = header.value;
+      }
+    });
+
+    // 8️⃣ PROCESAR ADJUNTOS
+    const adjuntos = await this.processEmailAttachments(gmail, message.payload, gmailMessageId);
+
+    // 9️⃣ PROCESAR LABELS
+    const labelsCompletos = {
+      systemLabels: message.labelIds?.filter(label => label.startsWith('CATEGORY_') || ['INBOX', 'SENT', 'DRAFT'].includes(label)) || [],
+      userLabels: message.labelIds?.filter(label => !label.startsWith('CATEGORY_') && !['INBOX', 'SENT', 'DRAFT'].includes(label)) || [],
+      gmailCategories: message.labelIds?.filter(label => label.startsWith('CATEGORY_')) || [],
+      labelDetails: []
+    };
+
+    // 🔟 GUARDAR EN BASE DE DATOS
+    const insertResult = await this.databaseService.query(
+      `INSERT INTO emails_completos (
+        email_sincronizado_id, cuerpo_texto, cuerpo_html, 
+        headers_completos, adjuntos, labels_completos,
+        cuenta_gmail_id, usuario_principal_id, gmail_message_id, thread_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+      [
+        email.id,
+        bodyText,
+        bodyHtml,
+        JSON.stringify(headersCompletos),
+        JSON.stringify(adjuntos),
+        JSON.stringify(labelsCompletos),
+        email.cuenta_gmail_id,
+        userId,
+        gmailMessageId,
+        message.threadId
+      ]
+    );
+
+    // 📊 CALCULAR ESTADÍSTICAS
+    const contentSize = (bodyText?.length || 0) + (bodyHtml?.length || 0) + 
+                       adjuntos.reduce((sum, att) => sum + (att.size || 0), 0);
+
+    return {
+      success: true,
+      message: 'Contenido completo guardado exitosamente',
+      emailId: gmailMessageId,
+      savedAt: new Date().toISOString(),
+      contentSize,
+      attachmentsCount: adjuntos.length,
+      hasFullContent: true,
+      wasAlreadySaved: false
+    };
+
+  } catch (error) {
+    this.logger.error('Error guardando contenido completo:', error);
+    throw error;
+  }
+}
 
   // ================================
   // 🔧 MÉTODOS PRIVADOS - CONVERSIÓN Y FALLBACKS
   // ================================
+
+/**
+ * 📝 Extraer cuerpos de texto y HTML del payload de Gmail
+ */
+private extractEmailBodies(payload: gmail_v1.Schema$MessagePart | null | undefined): {
+  bodyText: string | null;
+  bodyHtml: string | null;
+} {
+  if (!payload) {
+    return { bodyText: null, bodyHtml: null };
+  }
+
+  let bodyText: string | null = null;
+  let bodyHtml: string | null = null;
+
+  // Función recursiva para recorrer partes del email
+  const extractFromParts = (part: gmail_v1.Schema$MessagePart): void => {
+    if (part.mimeType === 'text/plain' && part.body?.data) {
+      bodyText = Buffer.from(part.body.data, 'base64').toString('utf-8');
+    } else if (part.mimeType === 'text/html' && part.body?.data) {
+      bodyHtml = Buffer.from(part.body.data, 'base64').toString('utf-8');
+    } else if (part.parts && part.parts.length > 0) {
+      // Recorrer sub-partes recursivamente
+      part.parts.forEach(subPart => {
+        if (subPart) extractFromParts(subPart);
+      });
+    }
+  };
+
+  extractFromParts(payload);
+  return { bodyText, bodyHtml };
+}
+
+/**
+ * 📎 Procesar y descargar adjuntos completos
+ */
+private async processEmailAttachments(
+  gmail: gmail_v1.Gmail,
+  payload: gmail_v1.Schema$MessagePart | null | undefined,
+  messageId: string
+): Promise<Array<{
+  filename: string;
+  mimeType: string;
+  size: number;
+  attachmentId: string;
+  content: string;
+  disposition?: 'attachment' | 'inline';
+  contentId?: string;
+}>> {
+  if (!payload) return [];
+
+  const attachments: Array<{
+    filename: string;
+    mimeType: string;
+    size: number;
+    attachmentId: string;
+    content: string;
+    disposition?: 'attachment' | 'inline';
+    contentId?: string;
+  }> = [];
+
+  const findAttachments = (part: gmail_v1.Schema$MessagePart): void => {
+    if (part.body?.attachmentId && part.filename) {
+      // Es un adjunto
+      attachments.push({
+        filename: part.filename,
+        mimeType: part.mimeType || 'application/octet-stream',
+        size: part.body.size || 0,
+        attachmentId: part.body.attachmentId,
+        content: '', // Se llenará después
+        disposition: part.filename ? 'attachment' : 'inline'
+      });
+    } else if (part.parts && part.parts.length > 0) {
+      // Recorrer sub-partes
+      part.parts.forEach(subPart => {
+        if (subPart) findAttachments(subPart);
+      });
+    }
+  };
+
+  findAttachments(payload);
+
+  // Descargar contenido de cada adjunto
+  for (const attachment of attachments) {
+    try {
+      const attachmentData = await gmail.users.messages.attachments.get({
+        userId: 'me',
+        messageId: messageId,
+        id: attachment.attachmentId
+      });
+
+      attachment.content = attachmentData.data.data || '';
+    } catch (error) {
+      this.logger.error(`Error descargando adjunto ${attachment.filename}:`, error);
+      attachment.content = ''; // Fallback
+    }
+  }
+
+  return attachments;
+}
 
   /**
    * 🔄 Convertir EmailMetadataDB → EmailMetadata (para compatibilidad API)

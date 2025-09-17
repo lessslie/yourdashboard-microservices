@@ -45,6 +45,7 @@ import {
 } from './interfaces/traffic-light.interfaces';
 import { SendEmailResponse } from './interfaces/email.interfaces-send';
 import { SendEmailDto } from './dto/send-email.dto';
+import { SaveFullContentResponse } from './interfaces/save-full-content.interfaces';
 
 
 @ApiTags('Emails')
@@ -1176,6 +1177,48 @@ private parseErrorMessage(errorMessage: string): object {
     error: 'SEND_FAILED',
     message: 'Error interno enviando email. Inténtalo nuevamente.'
   };
+}
+/**
+ * 💾 POST /emails/:id/save-full-content
+ */
+@Post(':id/save-full-content')
+@ApiOperation({ 
+  summary: 'Guardar contenido completo de email offline',
+  description: 'Descarga y guarda el contenido completo de un email para acceso offline rápido.'
+})
+@ApiParam({ 
+  name: 'id', 
+  description: 'gmail_message_id del email', 
+  example: '1847a8e123456789' 
+})
+@ApiOkResponse({ 
+  description: 'Contenido guardado exitosamente',
+  schema: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      message: { type: 'string', example: 'Contenido guardado exitosamente' },
+      gmailMessageId: { type: 'string', example: '1847a8e123456789' }
+    }
+  }
+})
+async saveFullEmailContent(
+  @Headers() headers: Record<string, string | undefined>,
+  @Param('id') gmailMessageId: string
+): Promise<SaveFullContentResponse> {
+  
+  const authHeader = headers?.authorization;
+  if (!authHeader) {
+    throw new UnauthorizedException('Token JWT requerido en Authorization header');
+  }
+
+  if (!gmailMessageId?.trim()) {
+    throw new BadRequestException('gmail_message_id es requerido');
+  }
+
+  this.logger.log(`💾 Guardando contenido completo del email: ${gmailMessageId}`);
+  
+  return this.emailsService.saveFullEmailContentWithJWT(authHeader, gmailMessageId);
 }
   //************************************************ */
 
