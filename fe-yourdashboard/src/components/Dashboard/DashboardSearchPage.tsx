@@ -2,31 +2,21 @@
 
 import React, { useState } from "react";
 import { Layout } from "antd";
-import SearchInterface from "./SearchInterface";
 import SidebarMenu from "./SidebarMenu";
+import SearchInterface from "./SearchInterface";
+import DashboardInterface from "./DashboardInterface";
+
 const { Sider, Content } = Layout;
 
 const DashboardSearchPage = () => {
-  const [activeMenuItem, setActiveMenuItem] = useState("buscador");
+  const [activeMenuItem, setActiveMenuItem] = useState("dashboard");
 
   const renderContent = () => {
     switch (activeMenuItem) {
       case "buscador":
         return <SearchInterface />;
       case "dashboard":
-        return (
-          <div
-            style={{
-              padding: "40px",
-              fontFamily: "Montserrat, sans-serif",
-              textAlign: "center",
-              color: "#666666",
-            }}
-          >
-            <h2>Dashboard</h2>
-            <p>Esta sección estará disponible próximamente</p>
-          </div>
-        );
+        return <DashboardInterface />;
       default:
         return (
           <div
