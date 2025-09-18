@@ -6,7 +6,7 @@ export class UserDto {
     description: 'ID único del usuario',
     example: 1
   })
-  id: number;
+  id: string;
 
   @ApiProperty({
     description: 'Email del usuario',
@@ -45,7 +45,7 @@ export class UsuarioPrincipalResponseDto {
     description: 'ID único del usuario principal',
     example: 1
   })
-  id: number;
+  id: string;
 
   @ApiProperty({
     description: 'Email del usuario principal',

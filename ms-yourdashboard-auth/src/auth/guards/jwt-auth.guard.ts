@@ -56,7 +56,8 @@ export class JwtAuthGuard implements CanActivate {
         
         // Ahora verifyResult es automáticamente JsonWebTokenPayload
         // Validar que tenga las propiedades requeridas de nuestro custom payload
-        if (!verifyResult.sub || typeof verifyResult.sub !== 'number') {
+        // CAMBIO: sub ahora es string (UUID) en lugar de number
+        if (!verifyResult.sub || typeof verifyResult.sub !== 'string') {
           this.logger.warn('🚫 JWT missing valid sub property');
           throw new UnauthorizedException('Token JWT inválido - sub requerido');
         }
@@ -69,10 +70,12 @@ export class JwtAuthGuard implements CanActivate {
         }
         
         // Construir nuestro JwtPayload tipado
+        // CAMBIO: sub ahora es string (UUID)
         decoded = {
-          sub: verifyResult.sub as number,
+          sub: verifyResult.sub,
           email: customData.email as string,
           nombre: customData.nombre as string,
+          sesionId: customData.sesionId as string | undefined,
           iat: verifyResult.iat,
           exp: verifyResult.exp
         };
@@ -89,6 +92,7 @@ export class JwtAuthGuard implements CanActivate {
       }
 
       // 4️⃣ VERIFICAR QUE EL USUARIO PRINCIPAL EXISTA Y ESTÉ ACTIVO
+      // CAMBIO: decoded.sub ahora es string (UUID)
       const usuario = await this.databaseService.buscarUsuarioPorId(decoded.sub);
       if (!usuario) {
         this.logger.warn(`🚫 User not found: ${decoded.sub}`);
@@ -105,10 +109,10 @@ export class JwtAuthGuard implements CanActivate {
 
       // 6️⃣ POBLAR req.user PARA USE EN ENDPOINTS
       const usuarioAutenticado: UsuarioAutenticado = {
-        id: usuario.id,
+        id: usuario.id, // Ahora es string (UUID)
         email: usuario.email,
         nombre: usuario.nombre,
-        sesion_id: sesion.id
+        sesion_id: sesion.id // Ahora es string (UUID)
       };
 
       request.user = usuarioAutenticado;
@@ -128,3 +132,6 @@ export class JwtAuthGuard implements CanActivate {
     }
   }
 }
+
+
+

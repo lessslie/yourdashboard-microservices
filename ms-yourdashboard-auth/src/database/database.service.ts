@@ -1,10 +1,8 @@
-//
 import { Injectable, OnModuleDestroy, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { 
   UsuarioPrincipal,
-
   CuentaGmailAsociada,
   EmailSincronizado,
   SesionJwt,
@@ -15,7 +13,6 @@ import {
   EstadisticasUsuario,
   CuentaGmailResponse,
   // UserTokens,
-
 } from '../auth/interfaces/auth.interfaces';
 
 @Injectable()
@@ -32,7 +29,7 @@ export class DatabaseService implements OnModuleDestroy {
       password: this.configService.get<string>('DB_PASSWORD'),
     });
 
-    this.logger.log('🔌 DatabaseService inicializado con nueva arquitectura');
+    this.logger.log('🔌 DatabaseService inicializado con nueva arquitectura UUID');
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -97,13 +94,15 @@ export class DatabaseService implements OnModuleDestroy {
     return result.rows[0] || null;
   }
 
-  async buscarUsuarioPorId(id: number): Promise<UsuarioPrincipal | null> {
+  // 🔄 CAMBIO: Acepta string (UUID) en lugar de number
+  async buscarUsuarioPorId(id: string): Promise<UsuarioPrincipal | null> {
     const query = `SELECT * FROM usuarios_principales WHERE id = $1 AND estado = 'activo'`;
     const result = await this.query<UsuarioPrincipal>(query, [id]);
     return result.rows[0] || null;
   }
 
-  async actualizarUltimaActividad(userId: number): Promise<void> {
+  // 🔄 CAMBIO: Acepta string (UUID) en lugar de number
+  async actualizarUltimaActividad(userId: string): Promise<void> {
     const query = `
       UPDATE usuarios_principales 
       SET ultima_actualizacion = NOW() 
@@ -128,7 +127,7 @@ export class DatabaseService implements OnModuleDestroy {
     `;
     
     const result = await this.query<SesionJwt>(query, [
-      sessionData.usuario_principal_id,
+      sessionData.usuario_principal_id, // Ahora es string (UUID)
       sessionData.jwt_token,
       sessionData.ip_origen || null,
       sessionData.user_agent || null
@@ -173,7 +172,8 @@ export class DatabaseService implements OnModuleDestroy {
   // 📧 CUENTAS GMAIL ASOCIADAS
   // ================================
 
- async conectarCuentaGmail(oauthData: GoogleOAuthData & { usuario_principal_id: number, alias_personalizado?: string }): Promise<CuentaGmailAsociada> {
+  // 🔄 CAMBIO: usuario_principal_id ahora es string (UUID)
+ async conectarCuentaGmail(oauthData: GoogleOAuthData & { usuario_principal_id: string, alias_personalizado?: string }): Promise<CuentaGmailAsociada> {
     try {
       // 🎯 PRIMERO: Verificar si esta cuenta Gmail ya está conectada a OTRO usuario
       const checkQuery = `
@@ -182,7 +182,7 @@ export class DatabaseService implements OnModuleDestroy {
         WHERE google_id = $1 AND usuario_principal_id != $2 AND esta_activa = TRUE
       `;
       
-      const existingAccount = await this.query<{ usuario_principal_id: number; email_gmail: string }>(
+      const existingAccount = await this.query<{ usuario_principal_id: string; email_gmail: string }>(
         checkQuery, 
         [oauthData.google_id, oauthData.usuario_principal_id]
       );
@@ -215,7 +215,7 @@ export class DatabaseService implements OnModuleDestroy {
       `;
 
       const result = await this.query<CuentaGmailAsociada>(query, [
-        oauthData.usuario_principal_id,
+        oauthData.usuario_principal_id, // Ahora es string (UUID)
         oauthData.email,
         oauthData.nombre,
         oauthData.google_id,
@@ -249,11 +249,8 @@ export class DatabaseService implements OnModuleDestroy {
     }
   }
 
-
-// ms-yourdashboard-auth/src/database/database.service.ts
-// ✅ MÉTODO CORREGIDO - obtenerCuentasGmailUsuario()
-
-async obtenerCuentasGmailUsuario(usuarioId: number): Promise<CuentaGmailResponse[]> {
+// 🔄 CAMBIO: usuarioId ahora es string (UUID)
+async obtenerCuentasGmailUsuario(usuarioId: string): Promise<CuentaGmailResponse[]> {
   const query = `
     SELECT 
       cga.id,
@@ -282,7 +279,7 @@ async obtenerCuentasGmailUsuario(usuarioId: number): Promise<CuentaGmailResponse
   `;
 
   const result = await this.query<{
-    id: number;
+    id: string; // Ahora es string (UUID)
     email_gmail: string;
     nombre_cuenta: string;
     alias_personalizado?: string;
@@ -302,7 +299,9 @@ async obtenerCuentasGmailUsuario(usuarioId: number): Promise<CuentaGmailResponse
 
   return cuentas;
 }
-  async obtenerCuentaGmailPorId(cuentaId: number, usuarioId: number): Promise<CuentaGmailAsociada | null> {
+
+  // 🔄 CAMBIO: Ambos parámetros ahora son string (UUID)
+  async obtenerCuentaGmailPorId(cuentaId: string, usuarioId: string): Promise<CuentaGmailAsociada | null> {
     const query = `
       SELECT * FROM cuentas_gmail_asociadas 
       WHERE id = $1 AND usuario_principal_id = $2 AND esta_activa = TRUE
@@ -311,7 +310,8 @@ async obtenerCuentasGmailUsuario(usuarioId: number): Promise<CuentaGmailResponse
     return result.rows[0] || null;
   }
 
-  async actualizarTokensGmail(cuentaId: number, accessToken: string, refreshToken?: string, expiresAt?: Date): Promise<void> {
+  // 🔄 CAMBIO: cuentaId ahora es string (UUID)
+  async actualizarTokensGmail(cuentaId: string, accessToken: string, refreshToken?: string, expiresAt?: Date): Promise<void> {
     const query = `
       UPDATE cuentas_gmail_asociadas 
       SET access_token = $2, refresh_token = $3, token_expira_en = $4, ultima_sincronizacion = NOW()
@@ -320,35 +320,24 @@ async obtenerCuentasGmailUsuario(usuarioId: number): Promise<CuentaGmailResponse
     await this.query(query, [cuentaId, accessToken, refreshToken || null, expiresAt || null]);
     this.logger.log(`🔄 Tokens actualizados para cuenta Gmail ID: ${cuentaId}`);
   }
-//*************
-// este desconectarCuentaGmail solo la update activa=false
-// ********************** */
-  // async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void> {
-  //   const query = `
-  //     UPDATE cuentas_gmail_asociadas 
-  //     SET esta_activa = FALSE 
-  //     WHERE id = $1 AND usuario_principal_id = $2
-  //   `;
-  //   await this.query(query, [cuentaId, usuarioId]);
-  //   this.logger.log(`📧 Cuenta Gmail desconectada: ID ${cuentaId}`);
-  // }
+
+  // 🔄 CAMBIO: Ambos parámetros ahora son string (UUID)
+  async desconectarCuentaGmail(cuentaId: string, usuarioId: string): Promise<void> {
+    const query = `
+      DELETE FROM cuentas_gmail_asociadas 
+      WHERE id = $1 AND usuario_principal_id = $2
+    `;
+    
+    const result = await this.query(query, [cuentaId, usuarioId]);
+    
+    this.logger.log(`🗑️ Cuenta Gmail ELIMINADA: ID ${cuentaId} (${result.rowCount} filas afectadas)`);
+    
+    // El CASCADE automáticamente borrará todos los emails_sincronizados
+  }
 
   // ================================
   // 📨 EMAILS SINCRONIZADOS
   // ================================
-
-async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void> {
-  const query = `
-    DELETE FROM cuentas_gmail_asociadas 
-    WHERE id = $1 AND usuario_principal_id = $2
-  `;
-  
-  const result = await this.query(query, [cuentaId, usuarioId]);
-  
-  this.logger.log(`🗑️ Cuenta Gmail ELIMINADA: ID ${cuentaId} (${result.rowCount} filas afectadas)`);
-  
-  // El CASCADE automáticamente borrará todos los emails_sincronizados
-}
 
   async sincronizarEmails(emails: Omit<EmailSincronizado, 'id' | 'fecha_sincronizado'>[]): Promise<number> {
     if (emails.length === 0) return 0;
@@ -379,7 +368,7 @@ async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void>
         `;
 
         await client.query(query, [
-          email.cuenta_gmail_id,
+          email.cuenta_gmail_id, // Ahora es string (UUID)
           email.gmail_message_id,
           email.asunto || null,
           email.remitente_email || null,
@@ -406,8 +395,9 @@ async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void>
     }
   }
 
+  // 🔄 CAMBIO: cuentaGmailId ahora es string (UUID)
   async obtenerEmailsPaginados(
-    cuentaGmailId: number, 
+    cuentaGmailId: string, 
     page: number = 1, 
     limit: number = 10,
     soloNoLeidos: boolean = false
@@ -438,7 +428,8 @@ async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void>
     };
   }
 
-  async buscarEmails(cuentaGmailId: number, termino: string, page: number = 1, limit: number = 10): Promise<{ emails: EmailSincronizado[]; total: number }> {
+  // 🔄 CAMBIO: cuentaGmailId ahora es string (UUID)
+  async buscarEmails(cuentaGmailId: string, termino: string, page: number = 1, limit: number = 10): Promise<{ emails: EmailSincronizado[]; total: number }> {
     const offset = (page - 1) * limit;
     const terminoBusqueda = `%${termino.toLowerCase()}%`;
 
@@ -476,38 +467,11 @@ async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void>
   }
 
   // ================================
-  // 🔑 TOKENS DE USUARIO
- // TokensService(CODIGO MUERTOO?????)
-// async saveUserTokens(userId: number, tokens: UserTokens ): Promise<void> {
-//   const query = `
-//     INSERT INTO user_tokens (user_id, access_token, refresh_token, expires_at, created_at)
-//     VALUES ($1, $2, $3, $4, NOW())
-//     ON CONFLICT (user_id) 
-//     DO UPDATE SET 
-//       access_token = $2,
-//       refresh_token = $3,
-//       expires_at = $4,
-//       updated_at = NOW()
-//   `;
-
-//   const expiresAt = (typeof tokens.expiry_date === 'string' || typeof tokens.expiry_date === 'number' || tokens.expiry_date instanceof Date)
-//     ? new Date(tokens.expiry_date)
-//     : new Date(Date.now() + 86400000); // 24 horas por defecto
-
-//   await this.query(query, [
-//     userId,
-//     tokens.access_token,
-//     tokens.refresh_token || null,
-//     expiresAt
-//   ]);
-// }
-
-
-  // ================================
   // 📊 ESTADÍSTICAS
   // ================================
 
-  async obtenerEstadisticasUsuario(usuarioId: number): Promise<EstadisticasUsuario> {
+  // 🔄 CAMBIO: usuarioId ahora es string (UUID)
+  async obtenerEstadisticasUsuario(usuarioId: string): Promise<EstadisticasUsuario> {
     const query = `
       SELECT 
         COUNT(DISTINCT cga.id) as total_cuentas_gmail,

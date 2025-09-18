@@ -1,6 +1,6 @@
 // Crear archivo: ms-yourdashboard-auth/src/auth/dto/actualizar-emails-count.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsNotEmpty, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsString, IsUUID, Min } from 'class-validator';
 
 export class ActualizarEmailsCountDto {
   @ApiProperty({
@@ -8,8 +8,9 @@ export class ActualizarEmailsCountDto {
     example: 4
   })
   @IsNotEmpty()
-  @IsInt()
-  cuenta_gmail_id: number;
+  @IsString()
+  @IsUUID('4', { message: 'Debe ser un UUID válido' })
+  cuenta_gmail_id: string;
 
   @ApiProperty({
     description: 'Count real de emails desde Gmail API',

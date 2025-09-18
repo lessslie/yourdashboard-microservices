@@ -6,7 +6,7 @@ export class CuentaGmailResponseDto {
     description: 'ID único de la cuenta Gmail',
     example: 1
   })
-  id: number;
+  id: string;
 
   @ApiProperty({
     description: 'Email de la cuenta Gmail conectada',
@@ -64,7 +64,7 @@ export class SesionResponseDto {
     description: 'ID único de la sesión',
     example: 1
   })
-  id: number;
+  id: string;
 
   @ApiProperty({
     description: 'Fecha de creación de la sesión',

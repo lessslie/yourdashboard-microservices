@@ -7,6 +7,7 @@ import {
   BadRequestException,
   Logger
 } from '@nestjs/common';
+import { validate as uuidValidate } from 'uuid';
 import { UsuarioAutenticado } from '../interfaces/auth.interfaces';
 
 @Injectable()
@@ -46,17 +47,20 @@ export class UserOwnershipGuard implements CanActivate {
         throw new BadRequestException('userId es requerido en la petición');
       }
 
-      // 4️⃣ CONVERTIR A NÚMERO PARA COMPARACIÓN
-      const requestedUserId = parseInt(userIdFromRequest.toString(), 10);
-      if (isNaN(requestedUserId)) {
-        this.logger.warn(`🚫 Invalid userId format: ${userIdFromRequest}`);
-        throw new BadRequestException('userId debe ser un número válido');
+      // 4️⃣ VALIDAR FORMATO UUID Y CONVERTIR A STRING
+      const requestedUserIdString = userIdFromRequest.toString();
+      
+      // CAMBIO CRÍTICO: Validar que sea un UUID válido en lugar de número
+      if (!uuidValidate(requestedUserIdString)) {
+        this.logger.warn(`🚫 Invalid userId UUID format: ${userIdFromRequest}`);
+        throw new BadRequestException('userId debe ser un UUID válido');
       }
 
       // 5️⃣ VERIFICAR QUE EL userId DEL REQUEST COINCIDA CON EL USUARIO AUTENTICADO
-      if (requestedUserId !== user.id) {
+      // CAMBIO: Comparación de strings en lugar de números
+      if (requestedUserIdString !== user.id) {
         this.logger.warn(
-          `🚫 User ownership violation - Authenticated user: ${user.id}, Requested user: ${requestedUserId}`
+          `🚫 User ownership violation - Authenticated user: ${user.id}, Requested user: ${requestedUserIdString}`
         );
         throw new ForbiddenException('No tienes permisos para acceder a esta información');
       }
@@ -77,3 +81,6 @@ export class UserOwnershipGuard implements CanActivate {
     }
   }
 }
+
+
+

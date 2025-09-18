@@ -457,7 +457,7 @@ async login(@Body() loginData: LoginDto): Promise<any> {
         throw new UnauthorizedException('Token JWT inválido');
       }
 
-      if (!verifyResult.sub || typeof verifyResult.sub !== 'number') {
+      if (!verifyResult.sub || typeof verifyResult.sub !== 'string') {
         throw new UnauthorizedException('Token JWT inválido - sub requerido');
       }
 
@@ -469,7 +469,7 @@ async login(@Body() loginData: LoginDto): Promise<any> {
       }
 
       return {
-        sub: verifyResult.sub as number,
+        sub: verifyResult.sub, //  Cambio: number → string
         email: customData.email as string,
         nombre: customData.nombre as string,
         iat: verifyResult.iat,
@@ -484,7 +484,7 @@ async login(@Body() loginData: LoginDto): Promise<any> {
 /**
  * 🔧 Redirigir a Google OAuth CON SERVICE
  */
-private redirectToGoogleOAuth(res: Response, userId: number, service: 'gmail' | 'calendar'): void {
+private redirectToGoogleOAuth(res: Response, userId: string, service: 'gmail' | 'calendar'): void {
   const authUrl = this.authService.generarUrlOAuth(userId, service);
   
   console.log(`🔗 Redirigiendo a: ${authUrl}`);
@@ -618,7 +618,7 @@ private redirectToGoogleOAuth(res: Response, userId: number, service: 'gmail' | 
     try {
       const cuenta = await this.authService.obtenerCuentaGmailPorId(
         request.user.id,
-        parseInt(cuentaId),
+        cuentaId, // ✅ Cambio: ya no parsear con parseInt
       );
 
       return {
@@ -662,7 +662,7 @@ private redirectToGoogleOAuth(res: Response, userId: number, service: 'gmail' | 
     try {
       const resultado = await this.authService.desconectarCuentaGmail(
         request.user.id,
-        parseInt(cuentaId),
+        cuentaId, // ✅ Cambio: ya no parsear con parseInt
       );
 
       return {
@@ -729,7 +729,7 @@ private redirectToGoogleOAuth(res: Response, userId: number, service: 'gmail' | 
         success: true,
         message: 'Alias actualizado exitosamente',
         cuenta_actualizada: {
-          id: parseInt(cuentaId),
+          id: cuentaId, // ✅ Cambio: ya no parsear con parseInt
           email_gmail: 'cuenta' + cuentaId + '@gmail.com',
           alias_personalizado: body.alias_personalizado.trim(),
         },
@@ -847,7 +847,7 @@ private redirectToGoogleOAuth(res: Response, userId: number, service: 'gmail' | 
   /**
    * 🔧 Parsear state (userId:service)
    */
-  private parseState(state?: string): { userId: number; service: 'gmail' | 'calendar' } {
+  private parseState(state?: string): { userId: string; service: 'gmail' | 'calendar' } {
     if (!state) {
       throw new Error('Estado inválido - Usuario y servicio no identificados');
     }
@@ -856,20 +856,14 @@ private redirectToGoogleOAuth(res: Response, userId: number, service: 'gmail' | 
     
     if (parts.length !== 2) {
       // Retrocompatibilidad: si no hay ":", asumir que es solo userId + gmail
-      const userId = parseInt(state, 10);
-      if (isNaN(userId)) {
-        throw new Error('Estado inválido - formato incorrecto');
-      }
+      // ✅ NO parseamos con parseInt - mantenemos como string
+      const userId = state;
       console.log(`🔄 Retrocompatibilidad: userId ${userId}, asumiendo gmail`);
       return { userId, service: 'gmail' };
     }
 
-    const [userIdStr, service] = parts;
-    const userId = parseInt(userIdStr, 10);
-
-    if (isNaN(userId)) {
-      throw new Error('Estado inválido - userId debe ser numérico');
-    }
+    const [userId, service] = parts;
+    // ✅ NO validamos que sea numérico - UUID string es válido
 
     if (!['gmail', 'calendar'].includes(service)) {
       throw new Error(`Estado inválido - servicio "${service}" no soportado`);
@@ -879,7 +873,7 @@ private redirectToGoogleOAuth(res: Response, userId: number, service: 'gmail' | 
   }
 private async handleGmailCallback(
   googleUser: GoogleOAuthUser,
-  userId: number,
+  userId: string, // ✅ Cambio: number → string
   res: Response
 ): Promise<void> {
   console.log(`📧 Procesando conexión Gmail para usuario ${userId}`);
@@ -903,7 +897,7 @@ private async handleGmailCallback(
 }
 
 // ✨ NUEVO MÉTODO
-private async invalidateOrchestratorCache(userId: number): Promise<void> {
+private async invalidateOrchestratorCache(userId: string): Promise<void> { // ✅ Cambio: number → string
   try {
     // Invalidar cache de perfil en el Orchestrator
     await axios.post(`${this.orchestratorUrl}/cache/invalidate`, {
@@ -923,7 +917,7 @@ private async invalidateOrchestratorCache(userId: number): Promise<void> {
    */
 private async handleCalendarCallback(
   googleUser: GoogleOAuthUser,
-  userId: number,
+  userId: string, // ✅ Cambio: number → string
   res: Response
 ): Promise<void> {
   console.log(`📅 Procesando conexión Calendar para usuario ${userId}`);

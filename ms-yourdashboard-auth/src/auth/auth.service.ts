@@ -209,7 +209,7 @@ export class AuthService {
   // 👤 OBTENER PERFIL COMPLETO
   // ================================
 
-  async obtenerPerfil(usuarioId: number): Promise<RespuestaPerfil> {
+  async obtenerPerfil(usuarioId: string): Promise<RespuestaPerfil> {
     try {
       this.logger.log(`🔵 Obteniendo perfil para usuario ${usuarioId}`);
 
@@ -278,7 +278,7 @@ export class AuthService {
   /**
  * 📧 Obtener cuenta Gmail específica por ID
  */
-async obtenerCuentaGmailPorId(usuarioId: number, cuentaId: number) {
+async obtenerCuentaGmailPorId(usuarioId: string, cuentaId: string) {
   const cuenta = await this.databaseService.obtenerCuentaGmailPorId(cuentaId, usuarioId);
   
   if (!cuenta) {
@@ -305,7 +305,7 @@ async obtenerCuentaGmailPorId(usuarioId: number, cuentaId: number) {
 /**
    * 🔧 GENERAR URL OAUTH CON STATE CODIFICADO (userId:service)
    */
-  generarUrlOAuth(userId: number, service: 'gmail' | 'calendar' = 'gmail'): string {
+  generarUrlOAuth(userId: string, service: 'gmail' | 'calendar' = 'gmail'): string {
     try {
       console.log(`🔵 Generando URL OAuth para usuario ${userId}, servicio: ${service}`);
       
@@ -342,7 +342,7 @@ async obtenerCuentaGmailPorId(usuarioId: number, cuentaId: number) {
   // 🔐 MANEJAR CALLBACK DE GOOGLE OAUTH
   // ================================
 
- async manejarCallbackGoogle(googleUser: GoogleOAuthUser, usuarioActualId: number): Promise<RespuestaConexionGmail> {
+ async manejarCallbackGoogle(googleUser: GoogleOAuthUser, usuarioActualId: string): Promise<RespuestaConexionGmail> {
     try {
       this.logger.log(`🔵 Procesando callback Google para: ${googleUser.email}`);
       this.logger.log(`🎯 Usuario principal ID: ${usuarioActualId}`);
@@ -474,7 +474,7 @@ try {
   // 📧 DESCONECTAR CUENTA GMAIL
   // ================================
 
-  async desconectarCuentaGmail(usuarioId: number, cuentaId: number) {
+  async desconectarCuentaGmail(usuarioId: string, cuentaId: string) {
     // PRIMERO obtener datos de la cuenta
     const cuenta = await this.databaseService.obtenerCuentaGmailPorId(cuentaId, usuarioId);
 
@@ -503,8 +503,8 @@ try {
   // 📧 LISTAR CUENTAS GMAIL DE USUARIO 
   // ================================
 
-  async listarCuentasGmailUsuario(usuarioId: number): Promise<Array<{
-    id: number;
+  async listarCuentasGmailUsuario(usuarioId: string): Promise<Array<{
+    id: string;
     email_gmail: string;
     nombre_cuenta: string;
     alias_personalizado?: string;
@@ -588,7 +588,7 @@ try {
   /**
    * 🔍 BUSCAR USUARIO POR ID
    */
-  async buscarUsuarioPorId(usuarioId: number): Promise<UsuarioPrincipal | null> {
+  async buscarUsuarioPorId(usuarioId: string): Promise<UsuarioPrincipal | null> {
     try {
       this.logger.log(`🔍 Buscando usuario por ID: ${usuarioId}`);
 
@@ -638,7 +638,7 @@ try {
  * 🆕 📅 OBTENER ESTADÍSTICAS DE EVENTOS PARA EL USUARIO
  * Suma todos los eventos de todas las cuentas Gmail del usuario
  */
-private async obtenerEstadisticasEventos(usuarioId: number): Promise<{
+private async obtenerEstadisticasEventos(usuarioId: string): Promise<{
   total_eventos_sincronizados: number;
   eventos_proximos: number;
   eventos_pasados: number;
@@ -671,9 +671,9 @@ private async obtenerEstadisticasEventos(usuarioId: number): Promise<{
     const stats = result.rows[0];
     
     const estadisticas = {
-      total_eventos_sincronizados: parseInt(stats.total_eventos_sincronizados || '0'),
-      eventos_proximos: parseInt(stats.eventos_proximos || '0'),
-      eventos_pasados: parseInt(stats.eventos_pasados || '0')
+      total_eventos_sincronizados: parseInt(String(stats.total_eventos_sincronizados) || '0'),
+      eventos_proximos: parseInt(String(stats.eventos_proximos) || '0'),
+      eventos_pasados: parseInt(String(stats.eventos_pasados) || '0')
     };
 
     this.logger.log(`✅ Estadísticas eventos: ${estadisticas.total_eventos_sincronizados} total, ${estadisticas.eventos_proximos} próximos`);

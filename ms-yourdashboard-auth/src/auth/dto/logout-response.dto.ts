@@ -18,5 +18,5 @@ export class LogoutResponseDto {
     description: 'ID de la sesión cerrada',
     example: 1
   })
-  sesion_cerrada_id: number;
+  sesion_cerrada_id: string;
 }
