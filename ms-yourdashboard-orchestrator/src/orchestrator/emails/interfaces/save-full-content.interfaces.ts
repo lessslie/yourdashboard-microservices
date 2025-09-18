@@ -1,4 +1,4 @@
-// En src/orchestrator/interfaces/save-full-content.interfaces.ts
+// src/orchestrator/interfaces/save-full-content.interfaces.ts
 
 export interface SaveFullContentResponse {
   success: boolean;

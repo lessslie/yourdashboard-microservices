@@ -1,4 +1,6 @@
-// src/orchestrator/auth/dto/auth-response.dto.ts
+// ms-yourdashboard-orchestrator/src/orchestrator/auth/dto/auth-response.dto.ts
+//SERIAL → UUID (number → string)
+
 import { ApiProperty } from '@nestjs/swagger';
 
 export class AuthStartResponseDto {
@@ -60,8 +62,11 @@ export class AuthErrorResponseDto {
 }
 
 export class UserDto {
-  @ApiProperty({ example: 1 })
-  id: number;
+  @ApiProperty({ 
+    example: '550e8400-e29b-41d4-a716-446655440000',
+    description: 'UUID del usuario'
+  })
+  id: string; // ✅ MIGRADO: number → string (UUID)
 
   @ApiProperty({ example: 'usuario@example.com' })
   email: string;
@@ -81,8 +86,11 @@ export class UserDto {
 
 // 🆕 NUEVOS DTOs PARA EL PERFIL COMPLETO
 export class UsuarioDto {
-  @ApiProperty({ example: 1 })
-  id: number;
+  @ApiProperty({ 
+    example: '550e8400-e29b-41d4-a716-446655440000',
+    description: 'UUID del usuario'
+  })
+  id: string; // ✅ MIGRADO: number → string (UUID)
 
   @ApiProperty({ example: 'usuario@example.com' })
   email: string;
@@ -101,8 +109,11 @@ export class UsuarioDto {
 }
 
 export class CuentaGmailCompleteDto {
-  @ApiProperty({ example: 4 })
-  id: number;
+  @ApiProperty({ 
+    example: '650e8400-e29b-41d4-a716-446655440001',
+    description: 'UUID de la cuenta Gmail'
+  })
+  id: string; // ✅ MIGRADO: number → string (UUID)
 
   @ApiProperty({ example: 'usuario@gmail.com' })
   email_gmail: string;
@@ -130,8 +141,11 @@ export class CuentaGmailCompleteDto {
 }
 
 export class SesionActivaDto {
-  @ApiProperty({ example: '1' })
-  id: string;
+  @ApiProperty({ 
+    example: '750e8400-e29b-41d4-a716-446655440002',
+    description: 'UUID de la sesión'
+  })
+  id: string; // ✅ MIGRADO: number → string (UUID)
 
   @ApiProperty({ example: '2024-01-15T10:30:00Z' })
   fecha_creacion: string;
@@ -230,10 +244,13 @@ export class AuthResponseDto {
   estadisticas: EstadisticasDto;
 }
 
-// ✅ CLASES PARA ENDPOINTS DE CUENTAS GMAIL (las que faltaban)
+// ✅ CLASES PARA ENDPOINTS DE CUENTAS GMAIL CORREGIDAS
 export class CuentaGmailDto {
-  @ApiProperty({ example: 4 })
-  id: number;
+  @ApiProperty({ 
+    example: '650e8400-e29b-41d4-a716-446655440001',
+    description: 'UUID de la cuenta Gmail'
+  })
+  id: string; // ✅ MIGRADO: number → string (UUID)
 
   @ApiProperty({ example: 'usuario@gmail.com' })
   email_gmail: string;
@@ -242,7 +259,7 @@ export class CuentaGmailDto {
   nombre_cuenta: string;
 
   @ApiProperty({ example: 'Gmail Personal', required: false })
-  alias_personalizado?: string;
+  alias_personalizado?: string | null;
 
   @ApiProperty({ example: '2024-01-15T10:30:00Z' })
   fecha_conexion: string;
@@ -279,7 +296,7 @@ export class ProfileResponseDto {
 
   @ApiProperty()
   usuario: {
-    id: number;
+    id: string; // ✅ MIGRADO: number → string (UUID)
     email: string;
     nombre: string;
     fecha_registro: string;

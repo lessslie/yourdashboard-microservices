@@ -1,4 +1,4 @@
-// src/orchestrator/interfaces/orchestrator.interfaces.ts
+// src/orchestrator/interfaces/emails.interfaces.ts
 
 // Interfaces específicas para evitar `any` en responder emails
 export interface ReplyEmailRequest {
@@ -17,7 +17,7 @@ export interface TokenResponse {
   success: boolean;
   accessToken: string;
   user: {
-    id: string;
+    id: string;  // UUID
     email: string;
     name: string;
   };
@@ -52,7 +52,7 @@ export interface EmailDetail extends Email {
   bodyText?: string;
   bodyHtml?: string;
   sourceAccount?: string;  // Cuenta Gmail de origen
-  sourceAccountId?: number;  // ID de la cuenta Gmail de origen
+  sourceAccountId?: string;  // UUID de la cuenta Gmail
 }
 
 export interface EmailStats {
@@ -132,3 +132,21 @@ export interface ApiError {
   };
   message: string;
 }
+// ESTAS SON LAS INTERFACES QUE FALTAN Y CAUSAN LOS ERRORES:
+export interface OrchestratorEmailList extends OrchestratorResponse<EmailListResponse> {
+  emails?: Email[];  // Para acceso directo
+}
+
+// Cambiar interfaces vacías -> type aliases (evita @typescript-eslint/no-empty-object-type)
+export type OrchestratorStatsResponse = OrchestratorResponse<EmailStats>;
+
+export type OrchestratorSendEmailResponse =
+  OrchestratorResponse<{ messageId: string }>;
+
+export interface SearchEmailsRequest {
+  searchTerm: string;
+  page?: number;
+  limit?: number;
+}
+
+export type SearchEmailsResponse = EmailListResponse;

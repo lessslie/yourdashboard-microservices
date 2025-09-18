@@ -1,5 +1,3 @@
-// ms-yourdashboard-orchestrator/src/orchestrator/search/interfaces/search.interfaces.ts
-
 export interface EmailSearchResponse {
   success?: boolean;
   source?: string;
@@ -24,7 +22,7 @@ export interface EmailResult {
   isRead: boolean;
   hasAttachments: boolean;
   sourceAccount: string;
-  sourceAccountId: number;
+  sourceAccountId: string; // ✅ MIGRADO: number → string (UUID)
 }
 
 // 📅 NUEVAS INTERFACES PARA CALENDAR
@@ -53,7 +51,7 @@ export interface CalendarResult {
   isAllDay: boolean;
   status: string;
   sourceAccount: string;
-  sourceAccountId: number;
+  sourceAccountId: string; // ✅ MIGRADO: number → string (UUID)
 }
 
 //*******************************************
@@ -121,7 +119,7 @@ export interface GlobalSearchResponse {
 export interface AuthProfileResponse {
   success: boolean;
   usuario: {
-    id: number;
+    id: string; // ✅ MIGRADO: number → string (UUID)
     email: string;
     nombre: string;
     fecha_registro: string;
@@ -129,7 +127,7 @@ export interface AuthProfileResponse {
     email_verificado: boolean;
   };
   cuentas_gmail: Array<{
-    id: number;
+    id: string; // ✅ MIGRADO: number → string (UUID)
     email_gmail: string;
     alias: string | null;
     fecha_conectado: string;
@@ -145,3 +143,22 @@ export interface AuthProfileResponse {
     cuenta_mas_activa: any;
   };
 }
+
+// ✅ NUEVAS INTERFACES PARA JWT (UUID)
+export interface JWTPayload {
+  sub: string; // ✅ MIGRADO: number → string (UUID) - userId
+  sesionId: string; // ✅ MIGRADO: number → string (UUID)
+  email: string;
+  iat: number;
+  exp: number;
+}
+
+// ✅ INTERFACE PARA MÉTODOS AUXILIARES
+export interface UserExtractionResult {
+  userId: string; // ✅ MIGRADO: number → string (UUID)
+  isValid: boolean;
+  error?: string;
+}
+
+
+

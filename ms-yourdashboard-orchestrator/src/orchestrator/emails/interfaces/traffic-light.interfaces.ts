@@ -1,18 +1,18 @@
 // src/orchestrator/interfaces/traffic-light.interfaces.ts
 
-// Enum para colores del semaforo
+// Enum para colores del semáforo
 export enum TrafficLightStatus {
   GREEN = 'green',
-  YELLOW = 'yellow',
-  ORANGE = 'orange',
+  YELLOW = 'yellow', 
   RED = 'red',
-  DELETED = 'deleted',
+  ARCHIVED = 'archived',
+  DELETED = 'deleted'
 }
 
-// Email extendido con campos del semaforo
+// Email extendido con campos del semáforo
 export interface EmailWithTrafficLight {
   id?: number;
-  cuenta_gmail_id: number;
+  cuenta_gmail_id: string;  // UUID
   gmail_message_id: string;
   asunto?: string;
   remitente_email?: string;
@@ -30,7 +30,7 @@ export interface EmailWithTrafficLight {
   traffic_light_status: TrafficLightStatus;
 }
 
-// Estadísticas por estado del semaforo
+// Estadísticas por estado del semáforo
 export interface TrafficLightStatusCount {
   traffic_light_status: TrafficLightStatus;
   count: string; // PostgreSQL COUNT devuelve string
@@ -39,14 +39,14 @@ export interface TrafficLightStatusCount {
 
 // Estadísticas por cuenta Gmail
 export interface TrafficLightAccountStats {
-  cuenta_id: number;
+  cuenta_id: string;  // UUID
   email_gmail: string;
   nombre_cuenta: string;
   estadisticas: TrafficLightStatusCount[];
   total_sin_responder: number;
 }
 
-// Response del dashboard del semaforo
+// Response del dashboard del semáforo
 export interface TrafficLightDashboardResponse {
   success: boolean;
   dashboard: TrafficLightAccountStats[];
@@ -63,7 +63,7 @@ export interface EmailsByTrafficLightResponse {
   error?: string;
 }
 
-// Resultado de actualización masiva de semaforos
+// Resultado de actualización masiva de semáforos
 export interface UpdateTrafficLightsResult {
   actualizados: number;
   por_estado: TrafficLightStatusCounts;
@@ -85,7 +85,7 @@ export interface UpdateTrafficLightsResponse {
   error?: string;
 }
 
-// Respuestas del orchestrator para semaforos
+// Respuestas del orchestrator para semáforos
 export interface OrchestratorTrafficLightDashboard {
   success: boolean;
   source: string;
@@ -99,17 +99,15 @@ export interface OrchestratorEmailsByTrafficLight {
   success: boolean;
   source: string;
   status: TrafficLightStatus;
+  emails: EmailWithTrafficLight[];  // Movido aquí para acceso directo
   data: {
     count: number;
-    emails: EmailWithTrafficLight[];
   };
 }
 
+// ESTA ES LA INTERFACE QUE CAUSA ERROR - CORREGIDA:
 export interface OrchestratorUpdateTrafficLights {
-  success: boolean;
-  source: string;
-  data: {
-    message: string;
-    estadisticas: UpdateTrafficLightsResult;
-  };
+  emailIds: string[];
+  newStatus: TrafficLightStatus;
+  reason?: string;
 }
