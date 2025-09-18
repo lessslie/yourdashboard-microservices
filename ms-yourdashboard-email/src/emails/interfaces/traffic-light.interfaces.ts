@@ -1,4 +1,5 @@
-// src/emails/interfaces/traffic-light.interfaces.ts
+// ms-yourdashboard-email/src/emails/interfaces/traffic-light.interfaces.ts
+// ✅ MIGRADO A UUID - cuenta_gmail_id y userId cambiados a string
 
 // Enum para colores del semaforo
 export enum TrafficLightStatus {
@@ -12,7 +13,7 @@ export enum TrafficLightStatus {
 // Extender EmailMetadataDB con campos del semaforo
 export interface EmailMetadataDBWithTrafficLight {
   id?: number;
-  cuenta_gmail_id: number;
+  cuenta_gmail_id: string; // ✅ CAMBIADO: number → string (UUID)
   gmail_message_id: string;
   asunto?: string;
   remitente_email?: string;
@@ -70,7 +71,7 @@ export interface TrafficLightDashboardResponse {
 }
 
 export interface TrafficLightAccountStats {
-  cuenta_id: number;
+  cuenta_id: string; // ✅ CAMBIADO: number → string (UUID)
   email_gmail: string;
   nombre_cuenta: string;
   estadisticas: TrafficLightStatusCount[];
@@ -94,7 +95,7 @@ export interface EmailsByTrafficLightResponse {
 
 // Request para actualizar semaforos
 export interface UpdateTrafficLightsRequest {
-  userId?: number; // Opcional, para actualizar solo del usuario
+  userId?: string; // ✅ CAMBIADO: number → string (UUID) - Opcional, para actualizar solo del usuario
 }
 
 // Response de actualización manual
@@ -113,7 +114,7 @@ export interface EmailSearchResultWithTrafficLight {
 
 // Filtros de búsqueda extendidos con semaforo
 export interface EmailSearchFiltersWithTrafficLight {
-  cuenta_gmail_id?: number;
+  cuenta_gmail_id?: string; // ✅ CAMBIADO: number → string (UUID)
   esta_leido?: boolean;
   tiene_adjuntos?: boolean;
   remitente_email?: string;

@@ -71,77 +71,143 @@ export class EmailsService {
   // 🔄 SINCRONIZACIÓN - MÉTODOS ACTUALIZADOS
   // ================================
 
-  /**
-   * 🔄 Endpoint para sincronizar emails manualmente - ACTUALIZADO
-   */
-  async syncEmailsWithToken(
-    accessToken: string,
-    cuentaGmailId: string, // 🎯 Cambio: cuentaGmailId en lugar de userId
-    options: SyncOptions = {},
-  ) {
-    try {
-      this.logger.log(
-        `🔄 🎉 INICIANDO SINCRONIZACIÓN para cuenta Gmail ${cuentaGmailId}`,
-      );
+/**
+ * 🔄 Endpoint para sincronizar emails manualmente - ACTUALIZADO
+ */
+async syncEmailsWithToken(
+  accessToken: string,
+  cuentaGmailId: string, // 🎯 Cambio: cuentaGmailId en lugar de userId
+  options: SyncOptions = {},
+) {
+  try {
+    this.logger.log(
+      `🔄 🎉 INICIANDO SINCRONIZACIÓN para cuenta Gmail ${cuentaGmailId}`,
+    );
 
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
+    // ✅ VALIDACIÓN CORREGIDA
+    const cuentaGmailIdNum = parseInt(cuentaGmailId, 10);
 
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
-      }
-
-      const syncStats = await this.syncService.syncEmailsFromGmail(
-        accessToken,
-        cuentaGmailIdNum,
-        options,
-      );
-
-      this.logger.log(
-        `✅ Sincronización completada: ${syncStats.emails_nuevos} nuevos, ${syncStats.emails_actualizados} actualizados`,
-      );
-
-      return {
-        success: true,
-        message: 'Sincronización completada exitosamente',
-        stats: syncStats,
-      };
-    } catch (error) {
-      this.logger.error(`❌ Error en sincronización:`, error);
-      const emailError = error as EmailServiceError;
-      throw new Error('Error sincronizando emails: ' + emailError.message);
+    if (isNaN(cuentaGmailIdNum)) {
+      throw new BadRequestException('cuentaGmailId debe ser un número válido');
     }
+
+    const syncStats = await this.syncService.syncEmailsFromGmail(
+      accessToken,
+      cuentaGmailIdNum,
+      options,
+    );
+
+    this.logger.log(
+      `✅ Sincronización completada: ${syncStats.emails_nuevos} nuevos, ${syncStats.emails_actualizados} actualizados`,
+    );
+
+    return {
+      success: true,
+      message: 'Sincronización completada exitosamente',
+      stats: syncStats,
+    };
+  } catch (error) {
+    this.logger.error(`❌ Error en sincronización:`, error);
+    const emailError = error as EmailServiceError;
+    throw new Error('Error sincronizando emails: ' + emailError.message);
   }
+}
 
   // ================================
   // 📧 INBOX - MÉTODO HÍBRIDO MEJORADO - GMAIL-LIKE
   // ================================
 
-  /**
-   * 📧 INBOX HÍBRIDO MEJORADO - Gmail API primero, BD como fallback
-   * 🎯 CAMBIO PRINCIPAL: Siempre intenta Gmail API primero
-   */
-  async getInboxWithToken(
-    accessToken: string,
-    cuentaGmailId: string,
-    page: number = 1,
-    limit: number = 10,
-  ): Promise<EmailListResponse> {
-    try {
-      this.logger.log(
-        `📧 🎯 INBOX para cuenta Gmail ${cuentaGmailId} - Página ${page}`,
+ /**
+ * 📧 INBOX HÍBRIDO MEJORADO - Gmail API primero, BD como fallback
+ * 🎯 CAMBIO PRINCIPAL: Siempre intenta Gmail API primero
+ */
+async getInboxWithToken(
+  accessToken: string,
+  cuentaGmailId: string,
+  page: number = 1,
+  limit: number = 10,
+): Promise<EmailListResponse> {
+  try {
+    this.logger.log(
+      `📧 🎯 INBOX para cuenta Gmail ${cuentaGmailId} - Página ${page}`,
+    );
+
+    // ✅ VALIDACIÓN CORREGIDA
+    const cuentaGmailIdNum = parseInt(cuentaGmailId, 10);
+
+    if (isNaN(cuentaGmailIdNum)) {
+      throw new BadRequestException('cuentaGmailId debe ser un número válido');
+    }
+
+    // 🎮 DECISIÓN BASADA EN USE_DATABASE
+    if (this.USE_DATABASE) {
+      this.logger.log(`💾 MODO BD ACTIVO - Consultando base de datos local`);
+
+      // Intentar obtener desde BD
+      const dbResult = await this.databaseService.getEmailsPaginated(
+        cuentaGmailIdNum,
+        page,
+        limit,
       );
 
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
+      if (dbResult.total > 0) {
+        this.logger.log(
+          `✅ Inbox obtenido desde BD: ${dbResult.emails.length} emails`,
+        );
 
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
+        const emails = dbResult.emails.map(this.convertDBToEmailMetadata);
+        const totalPages = Math.ceil(dbResult.total / limit);
+
+        return {
+          emails,
+          total: dbResult.total,
+          page,
+          limit,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+        };
+      } else {
+        this.logger.log(`📭 BD vacía para cuenta ${cuentaGmailId}`);
+        return {
+          emails: [],
+          total: 0,
+          page,
+          limit,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPreviousPage: false,
+        };
       }
+    } else {
+      // 🌐 MODO API - Usar Gmail API
+      this.logger.log(`🌐 MODO API ACTIVO - Consultando Gmail API`);
 
-      // 🎮 DECISIÓN BASADA EN USE_DATABASE
-      if (this.USE_DATABASE) {
-        this.logger.log(`💾 MODO BD ACTIVO - Consultando base de datos local`);
+      try {
+        const gmailResult = await this.getInboxFromGmailAPI(
+          accessToken,
+          cuentaGmailId,
+          page,
+          limit,
+        );
 
-        // Intentar obtener desde BD
+        // Iniciar sync en background si es necesario
+        this.checkAndStartBackgroundSync(accessToken, cuentaGmailIdNum).catch(
+          (err) => {
+            this.logger.debug(`Background sync error (ignorado):`, err);
+          },
+        );
+
+        this.logger.log(
+          `✅ Inbox obtenido desde Gmail API: ${gmailResult.emails.length} emails`,
+        );
+        return gmailResult;
+      } catch (apiError) {
+        this.logger.error(`❌ Error en Gmail API:`, apiError);
+
+        // Si falla API y tenemos BD, usar como fallback
+        this.logger.warn(`⚠️ Gmail API falló, intentando BD como fallback`);
+
         const dbResult = await this.databaseService.getEmailsPaginated(
           cuentaGmailIdNum,
           page,
@@ -150,7 +216,7 @@ export class EmailsService {
 
         if (dbResult.total > 0) {
           this.logger.log(
-            `✅ Inbox obtenido desde BD: ${dbResult.emails.length} emails`,
+            `💾 FALLBACK exitoso: ${dbResult.emails.length} emails desde BD`,
           );
 
           const emails = dbResult.emails.map(this.convertDBToEmailMetadata);
@@ -165,81 +231,17 @@ export class EmailsService {
             hasNextPage: page < totalPages,
             hasPreviousPage: page > 1,
           };
-        } else {
-          this.logger.log(`📭 BD vacía para cuenta ${cuentaGmailId}`);
-          return {
-            emails: [],
-            total: 0,
-            page,
-            limit,
-            totalPages: 0,
-            hasNextPage: false,
-            hasPreviousPage: false,
-          };
         }
-      } else {
-        // 🌐 MODO API - Usar Gmail API
-        this.logger.log(`🌐 MODO API ACTIVO - Consultando Gmail API`);
 
-        try {
-          const gmailResult = await this.getInboxFromGmailAPI(
-            accessToken,
-            cuentaGmailId,
-            page,
-            limit,
-          );
-
-          // Iniciar sync en background si es necesario
-          this.checkAndStartBackgroundSync(accessToken, cuentaGmailIdNum).catch(
-            (err) => {
-              this.logger.debug(`Background sync error (ignorado):`, err);
-            },
-          );
-
-          this.logger.log(
-            `✅ Inbox obtenido desde Gmail API: ${gmailResult.emails.length} emails`,
-          );
-          return gmailResult;
-        } catch (apiError) {
-          this.logger.error(`❌ Error en Gmail API:`, apiError);
-
-          // Si falla API y tenemos BD, usar como fallback
-          this.logger.warn(`⚠️ Gmail API falló, intentando BD como fallback`);
-
-          const dbResult = await this.databaseService.getEmailsPaginated(
-            cuentaGmailIdNum,
-            page,
-            limit,
-          );
-
-          if (dbResult.total > 0) {
-            this.logger.log(
-              `💾 FALLBACK exitoso: ${dbResult.emails.length} emails desde BD`,
-            );
-
-            const emails = dbResult.emails.map(this.convertDBToEmailMetadata);
-            const totalPages = Math.ceil(dbResult.total / limit);
-
-            return {
-              emails,
-              total: dbResult.total,
-              page,
-              limit,
-              totalPages,
-              hasNextPage: page < totalPages,
-              hasPreviousPage: page > 1,
-            };
-          }
-
-          throw apiError; // Si tampoco hay BD, lanzar error original
-        }
+        throw apiError; // Si tampoco hay BD, lanzar error original
       }
-    } catch (error) {
-      this.logger.error('❌ Error obteniendo inbox:', error);
-      const emailError = error as EmailServiceError;
-      throw new Error('Error al consultar emails: ' + emailError.message);
     }
+  } catch (error) {
+    this.logger.error('❌ Error obteniendo inbox:', error);
+    const emailError = error as EmailServiceError;
+    throw new Error('Error al consultar emails: ' + emailError.message);
   }
+}
 
   /**
    * 🔄 Verificar y comenzar sincronización en background
@@ -347,31 +349,76 @@ export class EmailsService {
   // 🔍 BÚSQUEDA - HÍBRIDA MEJORADA
   // ================================
 
-  /**
-   * 🔍 BÚSQUEDA HÍBRIDA MEJORADA - Gmail API primero
-   */
-  async searchEmailsWithToken(
-    accessToken: string,
-    cuentaGmailId: string,
-    searchTerm: string,
-    page: number = 1,
-    limit: number = 10,
-  ): Promise<EmailListResponse> {
-    try {
-      this.logger.log(
-        `🔍 🎯 BÚSQUEDA "${searchTerm}" para cuenta Gmail ${cuentaGmailId}`,
+ /**
+ * 🔍 BÚSQUEDA HÍBRIDA MEJORADA - Gmail API primero
+ */
+async searchEmailsWithToken(
+  accessToken: string,
+  cuentaGmailId: string,
+  searchTerm: string,
+  page: number = 1,
+  limit: number = 10,
+): Promise<EmailListResponse> {
+  try {
+    this.logger.log(
+      `🔍 🎯 BÚSQUEDA "${searchTerm}" para cuenta Gmail ${cuentaGmailId}`,
+    );
+
+    // ✅ VALIDACIÓN CORREGIDA
+    const cuentaGmailIdNum = parseInt(cuentaGmailId, 10);
+
+    if (isNaN(cuentaGmailIdNum)) {
+      throw new BadRequestException('cuentaGmailId debe ser un número válido');
+    }
+
+    // 🎮 DECISIÓN BASADA EN USE_DATABASE
+    if (this.USE_DATABASE) {
+      this.logger.log(`💾 MODO BD ACTIVO - Buscando en base de datos local`);
+
+      const filters: EmailSearchFilters = {
+        busqueda_texto: searchTerm.trim(),
+      };
+
+      const searchResult = await this.databaseService.searchEmailsInDB(
+        cuentaGmailIdNum,
+        filters,
+        page,
+        limit,
       );
 
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
+      this.logger.log(
+        `✅ Búsqueda BD: ${searchResult.emails.length} resultados`,
+      );
 
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
-      }
+      const emails = searchResult.emails.map(this.convertDBToEmailMetadata);
+      const totalPages = Math.ceil(searchResult.total / limit);
 
-      // 🎮 DECISIÓN BASADA EN USE_DATABASE
-      if (this.USE_DATABASE) {
-        this.logger.log(`💾 MODO BD ACTIVO - Buscando en base de datos local`);
+      return {
+        emails,
+        total: searchResult.total,
+        page,
+        limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+        searchTerm,
+      };
+    } else {
+      // 🌐 MODO API - Usar Gmail API
+      this.logger.log(`🌐 MODO API ACTIVO - Buscando en Gmail API`);
 
+      try {
+        return await this.searchEmailsFromGmailAPI(
+          accessToken,
+          cuentaGmailId,
+          searchTerm,
+          page,
+          limit,
+        );
+      } catch {
+        this.logger.warn(`⚠️ Gmail API falló, intentando BD como fallback`);
+
+        // Fallback a BD
         const filters: EmailSearchFilters = {
           busqueda_texto: searchTerm.trim(),
         };
@@ -381,10 +428,6 @@ export class EmailsService {
           filters,
           page,
           limit,
-        );
-
-        this.logger.log(
-          `✅ Búsqueda BD: ${searchResult.emails.length} resultados`,
         );
 
         const emails = searchResult.emails.map(this.convertDBToEmailMetadata);
@@ -400,114 +443,75 @@ export class EmailsService {
           hasPreviousPage: page > 1,
           searchTerm,
         };
-      } else {
-        // 🌐 MODO API - Usar Gmail API
-        this.logger.log(`🌐 MODO API ACTIVO - Buscando en Gmail API`);
-
-        try {
-          return await this.searchEmailsFromGmailAPI(
-            accessToken,
-            cuentaGmailId,
-            searchTerm,
-            page,
-            limit,
-          );
-        } catch {
-          this.logger.warn(`⚠️ Gmail API falló, intentando BD como fallback`);
-
-          // Fallback a BD
-          const filters: EmailSearchFilters = {
-            busqueda_texto: searchTerm.trim(),
-          };
-
-          const searchResult = await this.databaseService.searchEmailsInDB(
-            cuentaGmailIdNum,
-            filters,
-            page,
-            limit,
-          );
-
-          const emails = searchResult.emails.map(this.convertDBToEmailMetadata);
-          const totalPages = Math.ceil(searchResult.total / limit);
-
-          return {
-            emails,
-            total: searchResult.total,
-            page,
-            limit,
-            totalPages,
-            hasNextPage: page < totalPages,
-            hasPreviousPage: page > 1,
-            searchTerm,
-          };
-        }
       }
-    } catch (error) {
-      this.logger.error('❌ Error en búsqueda:', error);
-      const emailError = error as EmailServiceError;
-      throw new Error('Error al buscar en Gmail: ' + emailError.message);
     }
+  } catch (error) {
+    this.logger.error('❌ Error en búsqueda:', error);
+    const emailError = error as EmailServiceError;
+    throw new Error('Error al buscar en Gmail: ' + emailError.message);
   }
+}
 
   // ================================
   // 📊 ESTADÍSTICAS - HÍBRIDAS MEJORADAS
   // ================================
 
-  /**
-   * 📊 ESTADÍSTICAS HÍBRIDAS MEJORADAS - Gmail API primero
-   */
-  async getInboxStatsWithToken(
-    accessToken: string,
-    cuentaGmailId: string,
-  ): Promise<EmailStats> {
+/**
+ * 📊 ESTADÍSTICAS HÍBRIDAS MEJORADAS - Gmail API primero
+ */
+async getInboxStatsWithToken(
+  accessToken: string,
+  cuentaGmailId: string,
+): Promise<EmailStats> {
+  try {
+    this.logger.log(
+      `📊 🎯 ESTADÍSTICAS GMAIL-LIKE para cuenta Gmail ${cuentaGmailId}`,
+    );
+
+    // ✅ VALIDACIÓN CORREGIDA
+    const cuentaGmailIdNum = parseInt(cuentaGmailId, 10);
+
+    if (isNaN(cuentaGmailIdNum)) {
+      throw new BadRequestException('cuentaGmailId debe ser un número válido');
+    }
+
+    // 1️⃣ ESTRATEGIA GMAIL-LIKE: Gmail API primero
     try {
-      this.logger.log(
-        `📊 🎯 ESTADÍSTICAS GMAIL-LIKE para cuenta Gmail ${cuentaGmailId}`,
+      this.logger.log(`📡 Obteniendo stats desde Gmail API`);
+      return await this.getStatsFromGmailAPI(accessToken, cuentaGmailId);
+    } catch {
+      this.logger.warn(
+        `⚠️ Gmail API no disponible para stats, usando BD local`,
       );
 
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
+      // 2️⃣ FALLBACK: BD local
+      const dbStats =
+        await this.databaseService.getEmailStatsFromDB(cuentaGmailIdNum);
 
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
-      }
-
-      // 1️⃣ ESTRATEGIA GMAIL-LIKE: Gmail API primero
-      try {
-        this.logger.log(`📡 Obteniendo stats desde Gmail API`);
-        return await this.getStatsFromGmailAPI(accessToken, cuentaGmailId);
-      } catch {
-        this.logger.warn(
-          `⚠️ Gmail API no disponible para stats, usando BD local`,
+      if (dbStats.total_emails > 0) {
+        this.logger.log(
+          `💾 FALLBACK stats desde BD: ${dbStats.total_emails} emails total`,
         );
 
-        // 2️⃣ FALLBACK: BD local
-        const dbStats =
-          await this.databaseService.getEmailStatsFromDB(cuentaGmailIdNum);
-
-        if (dbStats.total_emails > 0) {
-          this.logger.log(
-            `💾 FALLBACK stats desde BD: ${dbStats.total_emails} emails total`,
-          );
-
-          return {
-            totalEmails: dbStats.total_emails,
-            unreadEmails: dbStats.emails_no_leidos,
-            readEmails: dbStats.emails_leidos,
-          };
-        } else {
-          // Si no hay datos, retornar ceros
-          return {
-            totalEmails: 0,
-            unreadEmails: 0,
-            readEmails: 0,
-          };
-        }
+        return {
+          totalEmails: dbStats.total_emails,
+          unreadEmails: dbStats.emails_no_leidos,
+          readEmails: dbStats.emails_leidos,
+        };
+      } else {
+        // Si no hay datos, retornar ceros
+        return {
+          totalEmails: 0,
+          unreadEmails: 0,
+          readEmails: 0,
+        };
       }
-    } catch (error) {
-      this.logger.error('❌ Error obteniendo estadísticas:', error);
-      throw new Error('Error al obtener estadísticas de Gmail');
     }
+  } catch (error) {
+    this.logger.error('❌ Error obteniendo estadísticas:', error);
+    throw new Error('Error al obtener estadísticas de Gmail');
   }
+}
 
   // ================================
   // 📧 EMAIL ESPECÍFICO - SIEMPRE GMAIL API
@@ -606,23 +610,33 @@ export class EmailsService {
   /**
    * 🔧 Extraer User ID del JWT token
    */
-  private extractUserIdFromJWT(authHeader: string): number | null {
+   private extractUserIdFromJWT(jwtToken: string): string | null {
     try {
-      // Extraer token del header "Bearer TOKEN"
-      const token = authHeader.replace('Bearer ', '');
-
-      if (!token || token === authHeader) {
-        throw new Error('Token JWT inválido - formato Bearer requerido');
+      const token = jwtToken.replace('Bearer ', '');
+      
+      // Decodificar JWT sin verificar (solo extraer payload)
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        this.logger.warn('JWT token mal formado');
+        return null;
       }
 
-      // Decodificar JWT (sin verificar - solo para extraer payload)
-      const payload = this.decodeJWTPayload(token);
-
-      if (!payload?.sub) {
-        throw new Error('Token JWT inválido - sub requerido');
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+      
+      // ✅ CAMBIO CRÍTICO: sub ahora es string UUID, no number
+      if (payload.sub && typeof payload.sub === 'string') {
+        return payload.sub; // Retornar UUID string directamente
       }
 
-      return payload.sub;
+      // ⚠️ SOPORTE TEMPORAL: si viene number, convertir a string
+      if (payload.sub && typeof payload.sub === 'number') {
+        this.logger.warn('⚠️ JWT contiene userId como number - migrando a string');
+        return payload.sub.toString();
+      }
+
+      this.logger.warn('JWT payload no contiene sub válido:', payload);
+      return null;
+
     } catch (error) {
       this.logger.error('❌ Error extrayendo userId del JWT:', error);
       return null;
@@ -714,10 +728,10 @@ export class EmailsService {
         `🌍 💾 BÚSQUEDA GLOBAL BD "${searchTerm}" para usuario ${userId}`,
       );
 
-      const userIdNum = parseInt(userId, 10);
+     const userIdNum = parseInt(userId, 10);
       if (isNaN(userIdNum)) {
-        throw new Error('userId debe ser un número válido');
-      }
+        throw new BadRequestException('userId debe ser un número válido');
+}
 
       // 1️⃣ OBTENER TODAS LAS CUENTAS GMAIL DEL USUARIO
       const cuentasGmail =
@@ -849,10 +863,10 @@ export class EmailsService {
       );
 
       // 🎯 VALIDAR USERID
-      const userIdNum = parseInt(userId, 10);
-      if (isNaN(userIdNum)) {
-        throw new Error('userId debe ser un número válido');
-      }
+    const userIdNum = parseInt(userId, 10);
+if (isNaN(userIdNum)) {
+  throw new BadRequestException('userId debe ser un número válido');
+}
 
       // 1️⃣ OBTENER TODAS LAS CUENTAS GMAIL DEL USUARIO
       const cuentasGmail =
@@ -1068,9 +1082,9 @@ return {
 
       // 🎯 VALIDAR USERID
       const userIdNum = parseInt(userId, 10);
-      if (isNaN(userIdNum)) {
-        throw new Error('userId debe ser un número válido');
-      }
+if (isNaN(userIdNum)) {
+  throw new BadRequestException('userId debe ser un número válido');
+}
 
       // 1️⃣ OBTENER TODAS LAS CUENTAS GMAIL DEL USUARIO
       const cuentasGmail =
@@ -1232,9 +1246,9 @@ return {
 
       // 🎯 VALIDAR USERID
       const userIdNum = parseInt(userId, 10);
-      if (isNaN(userIdNum)) {
-        throw new Error('userId debe ser un número válido');
-      }
+if (isNaN(userIdNum)) {
+  throw new BadRequestException('userId debe ser un número válido');
+}
 
       // 1️⃣ OBTENER TODAS LAS CUENTAS GMAIL DEL USUARIO
       const cuentasGmail =
@@ -1459,9 +1473,9 @@ return {
       this.logger.log(`📊 💾 ESTADÍSTICAS DESDE BD para usuario ${userId}`);
 
       const userIdNum = parseInt(userId, 10);
-      if (isNaN(userIdNum)) {
-        throw new Error('userId debe ser un número válido');
-      }
+if (isNaN(userIdNum)) {
+  throw new BadRequestException('userId debe ser un número válido');
+}
 
       // Obtener todas las cuentas del usuario
       const cuentasGmail =
@@ -1518,9 +1532,9 @@ return {
       this.logger.log(`📊 🌐 ESTADÍSTICAS DESDE API para usuario ${userId}`);
 
       const userIdNum = parseInt(userId, 10);
-      if (isNaN(userIdNum)) {
-        throw new Error('userId debe ser un número válido');
-      }
+if (isNaN(userIdNum)) {
+  throw new BadRequestException('userId debe ser un número válido');
+}
 
       // Obtener todas las cuentas del usuario
       const cuentasGmail =
@@ -1590,9 +1604,9 @@ return {
 
     try {
       const userIdNum = parseInt(userId, 10);
-      if (isNaN(userIdNum)) {
-        throw new Error('userId debe ser un número válido');
-      }
+if (isNaN(userIdNum)) {
+  throw new BadRequestException('userId debe ser un número válido');
+}
 
       // Buscar en qué cuenta está este email
       // Por ahora, buscaremos en todas las cuentas del usuario

@@ -1,4 +1,5 @@
-// src/emails/interfaces/save-full-content.interfaces.ts
+// ms-yourdashboard-email/src/emails/interfaces/save-full-content.interfaces.ts
+// ✅ MIGRADO A UUID - emailSincronizadoId y otros IDs cambiados según corresponda
 
 export interface SaveFullContentResponse {
   success: boolean;
@@ -19,7 +20,7 @@ export interface SaveFullContentError {
 }
 
 export interface EmailCompleteContent {
-  emailSincronizadoId: number;
+  emailSincronizadoId: number; // Mantiene number ya que es un ID interno de secuencia, no user/cuenta
   cuerpoTexto: string | null;
   cuerpoHtml: string | null;
   headersCompletos: Record<string, string>;

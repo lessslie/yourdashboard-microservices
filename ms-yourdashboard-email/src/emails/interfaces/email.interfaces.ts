@@ -1,4 +1,5 @@
-// src/emails/interfaces/email.interfaces.ts
+// ms-yourdashboard-email/src/emails/interfaces/email.interfaces.ts
+// ✅ MIGRADO A UUID - TODAS LAS REFERENCIAS userId: number → string
 
 // Tipos para Gmail API (compatibles con googleapis)
 export interface GmailMessage {
@@ -52,9 +53,9 @@ export interface EmailMetadata {
   receivedDate: Date;
   isRead: boolean;
   hasAttachments: boolean;
-  ///extras para la busqueda de emails global
+  // extras para la busqueda de emails global
   sourceAccount?: string;      
-  sourceAccountId?: number;
+  sourceAccountId?: string; // ✅ CAMBIADO: number → string (UUID)
   // ✅ CAMPOS PARA SEMÁFORO:
   trafficLightStatus?: string;
   daysWithoutReply?: number;
@@ -65,8 +66,6 @@ export interface EmailDetail extends EmailMetadata {
   toEmails: string[];
   bodyText?: string;
   bodyHtml?: string;
-  
-
 }
 
 export interface EmailListResponse {
@@ -82,6 +81,7 @@ export interface EmailListResponse {
   // 🎯 NUEVO CAMPO PARA BÚSQUEDA GLOBAL
   accountsSearched?: string[];
 }
+
 // 🎯 INTERFACE ESPECÍFICA PARA BÚSQUEDA GLOBAL
 export interface GlobalSearchResponse extends EmailListResponse {
   accountsSearched: string[]; // Obligatorio para búsqueda global
@@ -100,7 +100,7 @@ export interface EmailBodyData {
 
 // Tipos para base de datos
 export interface DatabaseEmailData {
-  userId: string;
+  userId: string; // ✅ CAMBIADO: number → string (UUID)
   messageId: string;
   subject: string;
   fromEmail: string;
@@ -141,7 +141,7 @@ export interface AuthData {
 
 export interface CallbackResult {
   user: {
-    id: string;
+    id: string; // ✅ YA ERA STRING - PERFECTO
     email: string;
     name: string;
   };

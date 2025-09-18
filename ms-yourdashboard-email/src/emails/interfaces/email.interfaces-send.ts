@@ -1,77 +1,95 @@
-// src/emails/interfaces/email.interfaces-send.ts
+// ms-yourdashboard-email/src/emails/interfaces/email.interfaces-send.ts
+// ✅ MIGRADO A UUID - userId y cuentaGmailId cambiados a string
 
-import { EmailPriority } from '../dto/send-email.dto';
+// ================================
+// 🎯 ATTACHMENT INTERFACES
+// ================================
+
+export interface EmailAttachment {
+  filename: string; // Nombre del archivo
+  content: string; // Contenido en Base64
+  contentType?: string; // MIME type (opcional, se detecta automáticamente)
+  size?: number; // Tamaño en bytes (opcional)
+  encoding?: 'base64' | 'binary'; // Por defecto base64
+  contentDisposition?: 'attachment' | 'inline'; // Por defecto attachment
+  contentId?: string; // Para attachments inline (CID)
+}
+
+// ================================
+// 🎯 EMAIL COMPOSITION TYPES
+// ================================
+
+export type EmailPriority = 'high' | 'normal' | 'low';
+
+export interface EmailMessage {
+  to: string[]; // Destinatarios principales
+  cc?: string[]; // Copia
+  bcc?: string[]; // Copia oculta
+  subject: string; // Asunto
+  body: string; // Cuerpo en texto plano
+  bodyHtml?: string; // Cuerpo en HTML (opcional)
+  attachments?: EmailAttachment[]; // Archivos adjuntos
+  priority?: EmailPriority; // Prioridad del email
+  replyTo?: string; // Email de respuesta alternativo
+  inReplyTo?: string; // ID del mensaje al que responde (para hilos)
+  references?: string[]; // IDs de mensajes en el hilo
+  requestReadReceipt?: boolean; // Solicitar confirmación de lectura
+}
 
 // ================================
 // 🎯 GMAIL API TYPES
 // ================================
 
 export interface GmailSendRequest {
-  userId: string; // Siempre 'me' para Gmail API
-  requestBody: {
-    raw: string; // Email completo codificado en base64url
-    threadId?: string; // Para mantener hilo de conversación
-  };
+  raw: string; // Email codificado en Base64url
 }
 
 export interface GmailSendResponse {
   id: string; // ID del mensaje enviado
-  threadId: string; // ID del hilo de conversación
-  labelIds?: string[]; // Labels aplicadas (ej: SENT, INBOX)
-  snippet?: string; // Fragmento del contenido
-  payload?: {
-    mimeType: string;
-    headers: GmailHeader[];
-  };
-  sizeEstimate?: number; // Tamaño aproximado en bytes
-  historyId?: string; // Para sincronización incremental
-  internalDate?: string; // Timestamp interno de Gmail
-}
-
-export interface GmailHeader {
-  name: string; // Nombre del header (ej: 'To', 'Subject')
-  value: string; // Valor del header
+  threadId: string; // ID del hilo
 }
 
 export interface GmailApiError {
-  code?: number;
-  message?: string;
-  status?: string;
-  details?: any[];
+  error: {
+    code: number; // Código HTTP
+    message: string; // Mensaje de error
+    status: string; // Estado del error
+    details?: any; // Detalles adicionales
+  };
 }
 
 // ================================
-// 🎯 INTERNAL EMAIL MESSAGE CONSTRUCTION
+// 🎯 QUOTA & RATE LIMITING
 // ================================
 
-export interface EmailMessage {
-  headers: EmailHeaders | Record<string, string>; // Todos los headers del email
-  body: string; // Cuerpo del mensaje (puede ser multipart)
-  attachments?: EmailAttachment[];
-  boundary?: string; // Para emails multipart
-  messageId: string; // Generado internamente
+export interface SendEmailQuotaCheck {
+  canSend: boolean; // Si puede enviar el email
+  quotaRemaining: number; // Cuota restante
+  resetTime?: Date; // Cuándo se resetea la cuota
+  reason?: string; // Razón por la que no puede enviar
 }
 
-export interface EmailAttachment {
-  filename: string;
-  content: string; // Base64
-  mimeType: string;
-  contentId?: string; // Para attachments inline como <img>
-  size?: number; // Tamaño en bytes
-  disposition?: 'attachment' | 'inline'; // Cómo mostrar el attachment
+export interface GmailQuotaInfo {
+  messagesPerDay: number; // Límite diario
+  messagesSentToday: number; // Enviados hoy
+  attachmentSizeLimit: number; // Límite de archivos adjuntos
+  rateLimitPerSecond: number; // Límite por segundo
 }
+
+// ================================
+// 🎯 EMAIL HEADERS
+// ================================
 
 export interface EmailHeaders {
-  To: string; // Destinatarios principales
-  Cc?: string; // Copia
-  Bcc?: string; // Copia oculta  
-  Subject: string; // Asunto
-  From: string; // Remitente
-  'Message-ID': string; // ID único del mensaje
-  Date: string; // Fecha de creación
-  'Content-Type': string; // Tipo de contenido
-  'MIME-Version': string; // Versión MIME (siempre 1.0)
+  // Headers básicos
+  'From'?: string;
+  'To'?: string;
+  'Cc'?: string;
+  'Bcc'?: string;
+  'Subject'?: string;
+  'Date'?: string;
   // Headers de prioridad
+  'Priority'?: string; // 1=High, 3=Normal, 5=Low
   'X-Priority'?: string; // 1=High, 3=Normal, 5=Low
   'X-MSMail-Priority'?: string; // High, Normal, Low  
   'Importance'?: string; // high, normal, low
@@ -117,9 +135,9 @@ export interface SendEmailRequest {
   inReplyTo?: string;
   references?: string[];
   // Datos adicionales del contexto
-  userId: number;
+  userId: string; // ✅ CAMBIADO: number → string (UUID)
   accessToken: string;
-  cuentaGmailId: number;
+  cuentaGmailId: string; // ✅ CAMBIADO: number → string (UUID)
 }
 
 // ================================
@@ -147,7 +165,7 @@ export interface SendEmailValidationError {
 
 export interface SendEmailLog {
   requestId: string; // ID único para tracking
-  userId: number;
+  userId: string; // ✅ CAMBIADO: number → string (UUID)
   fromEmail: string;
   toCount: number;
   ccCount?: number;
@@ -164,21 +182,20 @@ export interface SendEmailLog {
 }
 
 // ================================
-// 🎯 QUOTA & LIMITS
+// 🎯 METRICS & ANALYTICS
 // ================================
 
-export interface GmailQuotaInfo {
-  dailyQuotaLimit: number; // Límite diario de envíos
-  dailyQuotaUsed: number; // Envíos usados hoy
-  rateLimitPerMinute: number; // Límite por minuto
-  rateLimitUsed: number; // Usado en el último minuto
-  canSendEmail: boolean; // Si puede enviar ahora
-  nextAvailableSlot?: Date; // Cuándo puede enviar de nuevo
-}
-
-export interface SendEmailQuotaCheck {
-  canSend: boolean;
-  reason?: string; // Por qué no puede enviar
-  retryAfter?: number; // Segundos hasta poder enviar
-  quotaInfo: GmailQuotaInfo;
+export interface SendEmailMetrics {
+  userId: string; // ✅ CAMBIADO: number → string (UUID)
+  date: Date;
+  emailsSent: number;
+  emailsFailed: number;
+  totalRecipients: number;
+  averageSize: number;
+  attachmentCount: number;
+  priorityBreakdown: {
+    high: number;
+    normal: number;
+    low: number;
+  };
 }
