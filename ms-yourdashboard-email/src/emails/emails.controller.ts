@@ -783,10 +783,10 @@ async getEmailsByTrafficLight(
   }
 
   const trafficStatus = status as TrafficLightStatus;
-  const cuentaIdNum = cuentaId ? parseInt(cuentaId, 10) : undefined;
+  const cuentaIdNum = cuentaId ? cuentaId : undefined;
   const limitNum = limit ? parseInt(limit, 10) : 10;
 
-  if (cuentaId && isNaN(cuentaIdNum!)) {
+  if (cuentaId && cuentaIdNum!) {
     throw new BadRequestException('cuentaId debe ser un número válido');
   }
 

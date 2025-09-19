@@ -54,7 +54,7 @@ export interface EmailMetadata {
   hasAttachments: boolean;
   ///extras para la busqueda de emails global
   sourceAccount?: string;      
-  sourceAccountId?: number;
+  sourceAccountId?: string;
   // ✅ CAMPOS PARA SEMÁFORO:
   trafficLightStatus?: string;
   daysWithoutReply?: number;
