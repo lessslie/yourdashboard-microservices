@@ -661,7 +661,7 @@ async getCronStatus() {
         items: {
           type: 'object',
           properties: {
-            cuenta_id: { type: 'number', example: 1 },
+            cuenta_id: { type: 'string', example: 1 },
             email_gmail: { type: 'string', example: 'usuario@gmail.com' },
             nombre_cuenta: { type: 'string', example: 'Juan Pérez' },
             total_sin_responder: { type: 'number', example: 25 },
@@ -747,7 +747,7 @@ async getTrafficLightDashboard(
         items: {
           type: 'object',
           properties: {
-            id: { type: 'number', example: 12345 },
+            id: { type: 'string', example: 12345 },
             gmail_message_id: { type: 'string', example: '1847a8e123456789' },
             asunto: { type: 'string', example: 'Proyecto urgente' },
             remitente_email: { type: 'string', example: 'cliente@empresa.com' },

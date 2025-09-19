@@ -456,11 +456,9 @@ export class EmailsService {
       this.logger.log(
         `📊 🎯 ESTADÍSTICAS GMAIL-LIKE para cuenta Gmail ${cuentaGmailId}`,
       );
-
-
-      if (cuentaGmailId) {
-        throw new Error('cuentaGmailId debe ser un número válido');
-      }
+      if (!cuentaGmailId || cuentaGmailId.trim() === '') {
+        throw new Error('cuentaGmailId debe ser un valor válido');
+}
 
       // 1️⃣ ESTRATEGIA GMAIL-LIKE: Gmail API primero
       try {
