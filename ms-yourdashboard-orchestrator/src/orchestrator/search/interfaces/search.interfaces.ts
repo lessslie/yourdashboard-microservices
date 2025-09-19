@@ -24,7 +24,7 @@ export interface EmailResult {
   isRead: boolean;
   hasAttachments: boolean;
   sourceAccount: string;
-  sourceAccountId: number;
+  sourceAccountId: string;
 }
 
 // 📅 NUEVAS INTERFACES PARA CALENDAR
@@ -53,7 +53,7 @@ export interface CalendarResult {
   isAllDay: boolean;
   status: string;
   sourceAccount: string;
-  sourceAccountId: number;
+  sourceAccountId: string;
 }
 
 //*******************************************
