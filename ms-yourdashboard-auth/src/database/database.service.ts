@@ -97,13 +97,13 @@ export class DatabaseService implements OnModuleDestroy {
     return result.rows[0] || null;
   }
 
-  async buscarUsuarioPorId(id: number): Promise<UsuarioPrincipal | null> {
+  async buscarUsuarioPorId(id: string): Promise<UsuarioPrincipal | null> {
     const query = `SELECT * FROM usuarios_principales WHERE id = $1 AND estado = 'activo'`;
     const result = await this.query<UsuarioPrincipal>(query, [id]);
     return result.rows[0] || null;
   }
 
-  async actualizarUltimaActividad(userId: number): Promise<void> {
+  async actualizarUltimaActividad(userId: string): Promise<void> {
     const query = `
       UPDATE usuarios_principales 
       SET ultima_actualizacion = NOW() 
@@ -173,7 +173,7 @@ export class DatabaseService implements OnModuleDestroy {
   // 📧 CUENTAS GMAIL ASOCIADAS
   // ================================
 
- async conectarCuentaGmail(oauthData: GoogleOAuthData & { usuario_principal_id: number, alias_personalizado?: string }): Promise<CuentaGmailAsociada> {
+ async conectarCuentaGmail(oauthData: GoogleOAuthData & { usuario_principal_id: string, alias_personalizado?: string }): Promise<CuentaGmailAsociada> {
     try {
       // 🎯 PRIMERO: Verificar si esta cuenta Gmail ya está conectada a OTRO usuario
       const checkQuery = `
@@ -182,7 +182,7 @@ export class DatabaseService implements OnModuleDestroy {
         WHERE google_id = $1 AND usuario_principal_id != $2 AND esta_activa = TRUE
       `;
       
-      const existingAccount = await this.query<{ usuario_principal_id: number; email_gmail: string }>(
+      const existingAccount = await this.query<{ usuario_principal_id: string; email_gmail: string }>(
         checkQuery, 
         [oauthData.google_id, oauthData.usuario_principal_id]
       );
@@ -253,7 +253,7 @@ export class DatabaseService implements OnModuleDestroy {
 // ms-yourdashboard-auth/src/database/database.service.ts
 // ✅ MÉTODO CORREGIDO - obtenerCuentasGmailUsuario()
 
-async obtenerCuentasGmailUsuario(usuarioId: number): Promise<CuentaGmailResponse[]> {
+async obtenerCuentasGmailUsuario(usuarioId: string): Promise<CuentaGmailResponse[]> {
   const query = `
     SELECT 
       cga.id,
@@ -282,7 +282,7 @@ async obtenerCuentasGmailUsuario(usuarioId: number): Promise<CuentaGmailResponse
   `;
 
   const result = await this.query<{
-    id: number;
+    id: string; // ✅ number → string
     email_gmail: string;
     nombre_cuenta: string;
     alias_personalizado?: string;
@@ -302,7 +302,7 @@ async obtenerCuentasGmailUsuario(usuarioId: number): Promise<CuentaGmailResponse
 
   return cuentas;
 }
-  async obtenerCuentaGmailPorId(cuentaId: number, usuarioId: number): Promise<CuentaGmailAsociada | null> {
+  async obtenerCuentaGmailPorId(cuentaId: string, usuarioId: string): Promise<CuentaGmailAsociada | null> {
     const query = `
       SELECT * FROM cuentas_gmail_asociadas 
       WHERE id = $1 AND usuario_principal_id = $2 AND esta_activa = TRUE
@@ -311,7 +311,7 @@ async obtenerCuentasGmailUsuario(usuarioId: number): Promise<CuentaGmailResponse
     return result.rows[0] || null;
   }
 
-  async actualizarTokensGmail(cuentaId: number, accessToken: string, refreshToken?: string, expiresAt?: Date): Promise<void> {
+  async actualizarTokensGmail(cuentaId: string, accessToken: string, refreshToken?: string, expiresAt?: Date): Promise<void> {
     const query = `
       UPDATE cuentas_gmail_asociadas 
       SET access_token = $2, refresh_token = $3, token_expira_en = $4, ultima_sincronizacion = NOW()
@@ -337,7 +337,7 @@ async obtenerCuentasGmailUsuario(usuarioId: number): Promise<CuentaGmailResponse
   // 📨 EMAILS SINCRONIZADOS
   // ================================
 
-async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void> {
+async desconectarCuentaGmail(cuentaId: string, usuarioId: string): Promise<void> {
   const query = `
     DELETE FROM cuentas_gmail_asociadas 
     WHERE id = $1 AND usuario_principal_id = $2
@@ -407,7 +407,7 @@ async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void>
   }
 
   async obtenerEmailsPaginados(
-    cuentaGmailId: number, 
+    cuentaGmailId: string, 
     page: number = 1, 
     limit: number = 10,
     soloNoLeidos: boolean = false
@@ -438,7 +438,7 @@ async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void>
     };
   }
 
-  async buscarEmails(cuentaGmailId: number, termino: string, page: number = 1, limit: number = 10): Promise<{ emails: EmailSincronizado[]; total: number }> {
+  async buscarEmails(cuentaGmailId: string, termino: string, page: number = 1, limit: number = 10): Promise<{ emails: EmailSincronizado[]; total: number }> {
     const offset = (page - 1) * limit;
     const terminoBusqueda = `%${termino.toLowerCase()}%`;
 
@@ -475,39 +475,13 @@ async desconectarCuentaGmail(cuentaId: number, usuarioId: number): Promise<void>
     };
   }
 
-  // ================================
-  // 🔑 TOKENS DE USUARIO
- // TokensService(CODIGO MUERTOO?????)
-// async saveUserTokens(userId: number, tokens: UserTokens ): Promise<void> {
-//   const query = `
-//     INSERT INTO user_tokens (user_id, access_token, refresh_token, expires_at, created_at)
-//     VALUES ($1, $2, $3, $4, NOW())
-//     ON CONFLICT (user_id) 
-//     DO UPDATE SET 
-//       access_token = $2,
-//       refresh_token = $3,
-//       expires_at = $4,
-//       updated_at = NOW()
-//   `;
-
-//   const expiresAt = (typeof tokens.expiry_date === 'string' || typeof tokens.expiry_date === 'number' || tokens.expiry_date instanceof Date)
-//     ? new Date(tokens.expiry_date)
-//     : new Date(Date.now() + 86400000); // 24 horas por defecto
-
-//   await this.query(query, [
-//     userId,
-//     tokens.access_token,
-//     tokens.refresh_token || null,
-//     expiresAt
-//   ]);
-// }
 
 
   // ================================
   // 📊 ESTADÍSTICAS
   // ================================
 
-  async obtenerEstadisticasUsuario(usuarioId: number): Promise<EstadisticasUsuario> {
+  async obtenerEstadisticasUsuario(usuarioId: string): Promise<EstadisticasUsuario> {
     const query = `
       SELECT 
         COUNT(DISTINCT cga.id) as total_cuentas_gmail,

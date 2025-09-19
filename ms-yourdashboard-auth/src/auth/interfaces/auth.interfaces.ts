@@ -1,4 +1,3 @@
-
 // ================================
 // 📋 USUARIOS PRINCIPALES
 // ================================
@@ -6,7 +5,7 @@
 import { Profile } from "passport";
 
 export interface UsuarioPrincipal {
-  id: number;
+  id: string; // ✅ number → string
   email: string;
   password_hash?: string; // Opcional al retornar al frontend
   nombre: string;
@@ -28,7 +27,7 @@ export interface LoginUsuarioDto {
 }
 
 export interface UsuarioPrincipalResponse {
-  id: number;
+  id: string; // ✅ number → string
   email: string;
   nombre: string;
   fecha_registro: Date;
@@ -42,8 +41,8 @@ export interface UsuarioPrincipalResponse {
 // ================================
 
 export interface CuentaGmailAsociada {
-  id: number;
-  usuario_principal_id: number;
+  id: string; // ✅ number → string
+  usuario_principal_id: string; // ✅ number → string
   email_gmail: string;
   nombre_cuenta: string;
   google_id: string;
@@ -57,7 +56,7 @@ export interface CuentaGmailAsociada {
 }
 
 export interface CuentaGmailResponse {
-  id: number;
+  id: string; // ✅ number → string
   email_gmail: string;
   nombre_cuenta: string;
   alias_personalizado?: string;
@@ -69,7 +68,7 @@ export interface CuentaGmailResponse {
 }
 
 export interface ConectarGmailDto {
-  usuario_principal_id: number;
+  usuario_principal_id: string; // ✅ number → string
   google_auth_code: string; // Code del OAuth callback
   alias_personalizado?: string;
 }
@@ -79,8 +78,8 @@ export interface ConectarGmailDto {
 // ================================
 
 export interface EmailSincronizado {
-  id: number;
-  cuenta_gmail_id: number;
+  id: string; // ✅ number → string
+  cuenta_gmail_id: string; // ✅ number → string
   gmail_message_id: string;
   asunto?: string;
   remitente_email?: string;
@@ -93,7 +92,7 @@ export interface EmailSincronizado {
 }
 
 export interface EmailSincronizadoResponse {
-  id: number;
+  id: string; // ✅ number → string
   gmail_message_id: string;
   asunto: string;
   remitente_email: string;
@@ -105,7 +104,7 @@ export interface EmailSincronizadoResponse {
 }
 
 export interface SincronizarEmailsDto {
-  cuenta_gmail_id: number;
+  cuenta_gmail_id: string; // ✅ number → string
   limite_emails?: number; // Default: 50
   solo_nuevos?: boolean; // Default: true
 }
@@ -115,8 +114,8 @@ export interface SincronizarEmailsDto {
 // ================================
 
 export interface SesionJwt {
-  id: number;
-  usuario_principal_id: number;
+  id: string; // ✅ number → string
+  usuario_principal_id: string; // ✅ number → string
   jwt_token: string;
   expira_en: Date;
   fecha_creacion: Date;
@@ -126,14 +125,14 @@ export interface SesionJwt {
 }
 
 export interface CrearSesionDto {
-  usuario_principal_id: number;
+  usuario_principal_id: string; // ✅ number → string
   ip_origen?: string;
   user_agent?: string;
   duracion_horas?: number; // Default: 24
 }
 
 export interface SesionResponse {
-  id: number;
+  id: string; // ✅ number → string
   fecha_creacion: Date;
   expira_en: Date;
   ip_origen?: string;
@@ -146,10 +145,10 @@ export interface SesionResponse {
 // ================================
 
 export interface CustomJwtPayload {
-  sub: number; // usuario_principal_id (estándar JWT)
+  sub: string; // ✅ number → string - usuario_principal_id (estándar JWT)
   email: string;
   nombre: string;
-  sesionId?: number; // ID de la sesión específica
+  sesionId?: string; // ✅ number → string - ID de la sesión específica
   iat?: number; // Issued at (automático por jsonwebtoken)
   exp?: number; // Expires (automático por jsonwebtoken)
 }
@@ -157,10 +156,10 @@ export interface CustomJwtPayload {
 // Alias para mayor claridad - ESTA es la que usas en el código
 export type JwtPayload = CustomJwtPayload;
 export interface UsuarioAutenticado {
-  id: number;
+  id: string; // ✅ number → string
   email: string;
   nombre: string;
-  sesion_id: number; // Para invalidar sesión específica
+  sesion_id: string; // ✅ number → string - Para invalidar sesión específica
 }
 
 // ================================
@@ -171,7 +170,7 @@ export interface RespuestaLogin {
   success: boolean;
   message: string;
   usuario: {
-    id: number;
+    id: string; // ✅ number → string
     email: string;
     nombre: string;
     fecha_registro: Date;
@@ -183,7 +182,7 @@ export interface RespuestaLogin {
   
   // 🆕 CAMPOS ADICIONALES DEL PERFIL (opcionales para mantener compatibilidad)
   cuentas_gmail?: Array<{
-    id: number;
+    id: string; // ✅ number → string
     email_gmail: string;
     nombre_cuenta: string;
     alias_personalizado: string | null;
@@ -195,7 +194,7 @@ export interface RespuestaLogin {
   }>;
   
   sesiones_activas?: Array<{
-    id: string | number;
+    id: string; // ✅ ya era string | number, ahora solo string
     fecha_creacion: Date;
     expira_en: Date;
     ip_origen: string | null;
@@ -224,7 +223,7 @@ export interface RespuestaRegistro {
   message: string;
   usuario: UsuarioPrincipalResponse;
   token: string;
-  sesion_id: number;
+  sesion_id: string; // ✅ number → string
 }
 
 export interface RespuestaPerfil {
@@ -239,7 +238,7 @@ export interface RespuestaConexionGmail {
   success: true;
   message: string;
   cuenta_gmail: {
-    id: number;
+    id: string; // ✅ number → string
     email_gmail: string;
     nombre_cuenta: string;
     alias_personalizado?: string;
@@ -256,7 +255,7 @@ export interface RespuestaConexionGmail {
 
 export interface ReqUsuarioAutenticado extends Request {
   user: {
-    id: number;
+    id: string; // ✅ number → string
     email: string;
     nombre: string;
   };
@@ -302,7 +301,7 @@ export interface RespuestaPaginada<T> {
 }
 
 export interface ListarEmailsDto extends OpcionesPaginacion {
-  cuenta_gmail_id: number;
+  cuenta_gmail_id: string; // ✅ number → string
   solo_no_leidos?: boolean;
   busqueda?: string; // Buscar en asunto o remitente
   fecha_desde?: Date;
@@ -314,7 +313,7 @@ export interface ListarEmailsDto extends OpcionesPaginacion {
 // ================================
 
 export interface FiltrosEmails {
-  cuenta_gmail_id?: number;
+  cuenta_gmail_id?: string; // ✅ number → string
   esta_leido?: boolean;
   tiene_adjuntos?: boolean;
   remitente_email?: string;
@@ -352,7 +351,7 @@ export interface EstadisticasUsuario {
 
 
 export interface EstadisticasCuentaGmail {
-  cuenta_gmail_id: number;
+  cuenta_gmail_id: string; // ✅ number → string
   email_gmail: string;
   total_emails: number;
   emails_no_leidos: number;
@@ -486,14 +485,14 @@ export interface DashboardData {
 
 export interface SelectorCuentasGmail {
   cuentas: Array<{
-    id: number;
+    id: string; // ✅ number → string
     email_gmail: string;
     alias_personalizado?: string;
     emails_no_leidos: number;
     ultima_sincronizacion?: Date;
     esta_activa: boolean;
   }>;
-  cuenta_seleccionada_id?: number;
+  cuenta_seleccionada_id?: string; // ✅ number → string
 }
 
 // ================================
@@ -516,7 +515,7 @@ export interface ValidTokenResponse {
   success: boolean;
   accessToken: string;
   user: {
-    id: string;
+    id: string; // ✅ Ya estaba bien
     email: string;
     name: string;
     cuentaGmailId: string;
@@ -531,7 +530,7 @@ export interface TokenStats {
 }
 
 export interface UserWithToken {
-  id: number;
+  id: string; // ✅ number → string
   name: string;
   email: string;
   created_at: Date;

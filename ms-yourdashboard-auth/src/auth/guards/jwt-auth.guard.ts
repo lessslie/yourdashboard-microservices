@@ -70,7 +70,7 @@ export class JwtAuthGuard implements CanActivate {
         
         // Construir nuestro JwtPayload tipado
         decoded = {
-          sub: verifyResult.sub as number,
+          sub: verifyResult.sub as string, // ✅ number → string
           email: customData.email as string,
           nombre: customData.nombre as string,
           iat: verifyResult.iat,
