@@ -26,7 +26,7 @@ export class AuthService {
   ) {}
 
   // ================================
-  // 📝 REGISTRO DE USUARIO PRINCIPAL
+  // 🔐 REGISTRO DE USUARIO PRINCIPAL
   // ================================
 
   async registrarUsuario(email: string, password: string, nombre: string): Promise<RespuestaRegistro>  {
@@ -174,21 +174,21 @@ export class AuthService {
           email_verificado: usuario.email_verificado
         },
         token,
-        sesion_id: sesion.id,// ✅ Ya es string
-// 🆕 DATOS COMPLETOS DEL PERFIL (igual que /auth/me)
-      cuentas_gmail: perfilCompleto.cuentas_gmail.map(cuenta => ({
-        ...cuenta,
-        alias_personalizado: cuenta.alias_personalizado || null, // Manejar undefined
-        ultima_sincronizacion: typeof cuenta.ultima_sincronizacion === 'undefined' ? null : cuenta.ultima_sincronizacion
-      })),
-      sesiones_activas: perfilCompleto.sesiones_activas.map(sesion => ({
-        ...sesion,
-        id: sesion.id, // ✅ Ya es string
-        ip_origen: typeof sesion.ip_origen === 'undefined' ? null : sesion.ip_origen,
-        user_agent: typeof sesion.user_agent === 'undefined' ? null : sesion.user_agent
-      })),
-      estadisticas: perfilCompleto.estadisticas
-    };
+        sesion_id: sesion.id,
+        // 🆕 DATOS COMPLETOS DEL PERFIL (igual que /auth/me)
+        cuentas_gmail: perfilCompleto.cuentas_gmail.map(cuenta => ({
+          ...cuenta,
+          alias_personalizado: cuenta.alias_personalizado || null, // Manejar undefined
+          ultima_sincronizacion: typeof cuenta.ultima_sincronizacion === 'undefined' ? null : cuenta.ultima_sincronizacion
+        })),
+        sesiones_activas: perfilCompleto.sesiones_activas.map(sesion => ({
+          ...sesion,
+          id: sesion.id,
+          ip_origen: typeof sesion.ip_origen === 'undefined' ? null : sesion.ip_origen,
+          user_agent: typeof sesion.user_agent === 'undefined' ? null : sesion.user_agent
+        })),
+        estadisticas: perfilCompleto.estadisticas
+      };
 
     } catch (error) {
       console.log(error);
@@ -276,33 +276,33 @@ export class AuthService {
   }
 
   /**
- * 📧 Obtener cuenta Gmail específica por ID
- */
-async obtenerCuentaGmailPorId(usuarioId: string, cuentaId: string) { // ✅ ambos number → string
-  const cuenta = await this.databaseService.obtenerCuentaGmailPorId(cuentaId, usuarioId);
-  
-  if (!cuenta) {
-    throw new NotFoundException({
-      codigo: CodigosErrorAuth.CUENTA_GMAIL_NO_ENCONTRADA,
-      mensaje: 'Cuenta Gmail no encontrada'
-    });
+   * 🔧 Obtener cuenta Gmail específica por ID
+   */
+  async obtenerCuentaGmailPorId(usuarioId: string, cuentaId: string) { // ✅ ambos number → string
+    const cuenta = await this.databaseService.obtenerCuentaGmailPorId(cuentaId, usuarioId);
+    
+    if (!cuenta) {
+      throw new NotFoundException({
+        codigo: CodigosErrorAuth.CUENTA_GMAIL_NO_ENCONTRADA,
+        mensaje: 'Cuenta Gmail no encontrada'
+      });
+    }
+    
+    // Convertir Date → string para el DTO
+    return {
+      id: cuenta.id,
+      email_gmail: cuenta.email_gmail,
+      nombre_cuenta: cuenta.nombre_cuenta,
+      alias_personalizado: cuenta.alias_personalizado,
+      fecha_conexion: cuenta.fecha_conexion.toISOString(),
+      ultima_sincronizacion: cuenta.ultima_sincronizacion?.toISOString(),
+      esta_activa: cuenta.esta_activa,
+      emails_count: 0 // El orchestrator lo llenará con el count real
+    };
   }
-  
-  // Convertir Date → string para el DTO
-  return {
-    id: cuenta.id,
-    email_gmail: cuenta.email_gmail,
-    nombre_cuenta: cuenta.nombre_cuenta,
-    alias_personalizado: cuenta.alias_personalizado,
-    fecha_conexion: cuenta.fecha_conexion.toISOString(),
-    ultima_sincronizacion: cuenta.ultima_sincronizacion?.toISOString(),
-    esta_activa: cuenta.esta_activa,
-    emails_count: 0 // El orchestrator lo llenará con el count real
-  };
-}
 
 
-/**
+  /**
    * 🔧 GENERAR URL OAUTH CON STATE CODIFICADO (userId:service)
    */
   generarUrlOAuth(userId: string, service: 'gmail' | 'calendar' = 'gmail'): string { // ✅ number → string
@@ -342,7 +342,7 @@ async obtenerCuentaGmailPorId(usuarioId: string, cuentaId: string) { // ✅ ambo
   // 🔐 MANEJAR CALLBACK DE GOOGLE OAUTH
   // ================================
 
- async manejarCallbackGoogle(googleUser: GoogleOAuthUser, usuarioActualId: string): Promise<RespuestaConexionGmail> { // ✅ number → string
+  async manejarCallbackGoogle(googleUser: GoogleOAuthUser, usuarioActualId: string): Promise<RespuestaConexionGmail> { // ✅ number → string
     try {
       this.logger.log(`🔵 Procesando callback Google para: ${googleUser.email}`);
       this.logger.log(`🎯 Usuario principal ID: ${usuarioActualId}`);
@@ -375,42 +375,42 @@ async obtenerCuentaGmailPorId(usuarioId: string, cuentaId: string) { // ✅ ambo
       });
 
       // 🎯 AQUÍ SE PODRÍA TRIGGEAR SINCRONIZACIÓN INICIAL DE EMAILS
-      // 🔄 SINCRONIZACIÓN INICIAL DE EMAILS
-let emailsSincronizados = 0;
-try {
-  this.logger.log(`🔄 Iniciando sincronización automática para cuenta ${cuentaGmail.id}`);
-  
-  // Llamamos directamente al MS-Email porque ya tenemos el token
-  const syncResponse = await axios.post(
-    'http://localhost:3002/emails/sync',
-    null, // No body needed
-    {
-      params: {
-        cuentaGmailId: cuentaGmail.id, // ✅ Ya es string
-        maxEmails: 100 // Solo 100 para que sea rápido
-      },
-      headers: {
-        'Authorization': `Bearer ${googleUser.accessToken}`
-      },
-      timeout: 30000 // 30 segundos máximo
-    }
-  );
+      // 📄 SINCRONIZACIÓN INICIAL DE EMAILS
+      let emailsSincronizados = 0;
+      try {
+        this.logger.log(`📄 Iniciando sincronización automática para cuenta ${cuentaGmail.id}`);
+        
+        // Llamamos directamente al MS-Email porque ya tenemos el token
+        const syncResponse = await axios.post(
+          'http://localhost:3002/emails/sync',
+          null, // No body needed
+          {
+            params: {
+              cuentaGmailId: cuentaGmail.id, // ✅ Ya es string
+              maxEmails: 100 // Solo 100 para que sea rápido
+            },
+            headers: {
+              'Authorization': `Bearer ${googleUser.accessToken}`
+            },
+            timeout: 30000 // 30 segundos máximo
+          }
+        );
 
-  // Extraer cuántos emails se sincronizaron
-  emailsSincronizados = syncResponse.data?.stats?.emails_nuevos || 0;
-  
-  this.logger.log(`✅ Sincronización inicial completada: ${emailsSincronizados} emails`);
-  
-} catch (syncError: any) {
-  // NO lanzamos error - la sincronización es "nice to have"
-  this.logger.warn(`⚠️ Sync inicial falló (continuando sin sync): ${syncError.message}`);
-  
-  // Si es error de timeout, loguear específicamente
-  if (syncError.code === 'ECONNABORTED') {
-    this.logger.warn('⏱️ Timeout en sincronización inicial - el usuario puede sincronizar manualmente');
-  }
-}
-      
+        // Extraer cuántos emails se sincronizaron
+        emailsSincronizados = syncResponse.data?.stats?.emails_nuevos || 0;
+        
+        this.logger.log(`✅ Sincronización inicial completada: ${emailsSincronizados} emails`);
+        
+      } catch (syncError: any) {
+        // NO lanzamos error - la sincronización es "nice to have"
+        this.logger.warn(`⚠️ Sync inicial falló (continuando sin sync): ${syncError.message}`);
+        
+        // Si es error de timeout, loguear específicamente
+        if (syncError.code === 'ECONNABORTED') {
+          this.logger.warn('⏱️ Timeout en sincronización inicial - el usuario puede sincronizar manualmente');
+        }
+      }
+            
 
       this.logger.log(`✅ Cuenta Gmail conectada: ${googleUser.email} para usuario ${usuarioActualId}`);
 
@@ -471,7 +471,7 @@ try {
   }
 
   // ================================
-  // 📧 DESCONECTAR CUENTA GMAIL
+  // 🔧 DESCONECTAR CUENTA GMAIL
   // ================================
 
   async desconectarCuentaGmail(usuarioId: string, cuentaId: string) { // ✅ ambos number → string
@@ -498,7 +498,7 @@ try {
   }
 
   // ================================
-  // 📧 LISTAR CUENTAS GMAIL DE USUARIO 
+  // 🔧 LISTAR CUENTAS GMAIL DE USUARIO 
   // ================================
 
   async listarCuentasGmailUsuario(usuarioId: string): Promise<Array<{ // ✅ number → string
@@ -613,79 +613,79 @@ try {
   // ================================
 
   private getScopesForService(service: 'gmail' | 'calendar'): string[] {
-  // ✅ TODOS LOS SERVICIOS = TODOS LOS SCOPES
-  console.log(`🔍 Obteniendo scopes para servicio: ${service}`);
-  const allScopes = [
-    'email',
-    'profile',
-    'https://www.googleapis.com/auth/gmail.readonly',
-    'https://www.googleapis.com/auth/gmail.modify',
-    'https://www.googleapis.com/auth/gmail.send',
-    'https://mail.google.com/',
-    'https://www.googleapis.com/auth/calendar',
-    'https://www.googleapis.com/auth/calendar.events',
-    'https://www.googleapis.com/auth/calendar.events.readonly',
-    'https://www.googleapis.com/auth/calendar.acls'
-  ];
+    // ✅ TODOS LOS SERVICIOS = TODOS LOS SCOPES
+    console.log(`🔍 Obteniendo scopes para servicio: ${service}`);
+    const allScopes = [
+      'email',
+      'profile',
+      'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/gmail.modify',
+      'https://www.googleapis.com/auth/gmail.send',
+      'https://mail.google.com/',
+      'https://www.googleapis.com/auth/calendar',
+      'https://www.googleapis.com/auth/calendar.events',
+      'https://www.googleapis.com/auth/calendar.events.readonly',
+      'https://www.googleapis.com/auth/calendar.acls'
+    ];
 
-  // 🎯 SIEMPRE RETORNAR TODOS LOS SCOPES
-  return allScopes;
-}
+    // 🎯 SIEMPRE RETORNAR TODOS LOS SCOPES
+    return allScopes;
+  }
 
-/**
- * 🆕 📅 OBTENER ESTADÍSTICAS DE EVENTOS PARA EL USUARIO
- * Suma todos los eventos de todas las cuentas Gmail del usuario
- */
-private async obtenerEstadisticasEventos(usuarioId: string): Promise<{ // ✅ number → string
-  total_eventos_sincronizados: number;
-  eventos_proximos: number;
-  eventos_pasados: number;
-}> {
-  try {
-    this.logger.log(`📊 Obteniendo estadísticas de eventos para usuario ${usuarioId}`);
+  /**
+   * 🆕 📅 OBTENER ESTADÍSTICAS DE EVENTOS PARA EL USUARIO
+   * Suma todos los eventos de todas las cuentas Gmail del usuario
+   */
+  private async obtenerEstadisticasEventos(usuarioId: string): Promise<{ // ✅ number → string
+    total_eventos_sincronizados: number;
+    eventos_proximos: number;
+    eventos_pasados: number;
+  }> {
+    try {
+      this.logger.log(`📊 Obteniendo estadísticas de eventos para usuario ${usuarioId}`);
 
-    // 🎯 QUERY PARA SUMAR EVENTOS DE TODAS LAS CUENTAS DEL USUARIO
-    const query = `
-      SELECT 
-        COUNT(*) as total_eventos_sincronizados,
-        COUNT(CASE WHEN start_time >= NOW() THEN 1 END) as eventos_proximos,
-        COUNT(CASE WHEN start_time < NOW() THEN 1 END) as eventos_pasados
-      FROM events_sincronizados es
-      INNER JOIN cuentas_gmail_asociadas cga ON es.cuenta_gmail_id = cga.id
-      WHERE cga.usuario_principal_id = $1 
-      AND cga.esta_activa = TRUE
-    `;
+      // 🎯 QUERY PARA SUMAR EVENTOS DE TODAS LAS CUENTAS DEL USUARIO
+      const query = `
+        SELECT 
+          COUNT(*) as total_eventos_sincronizados,
+          COUNT(CASE WHEN start_time >= NOW() THEN 1 END) as eventos_proximos,
+          COUNT(CASE WHEN start_time < NOW() THEN 1 END) as eventos_pasados
+        FROM events_sincronizados es
+        INNER JOIN cuentas_gmail_asociadas cga ON es.cuenta_gmail_id = cga.id
+        WHERE cga.usuario_principal_id = $1 
+        AND cga.esta_activa = TRUE
+      `;
 
-    const result = await this.databaseService.query(query, [usuarioId]);
-    
-    if (!result.rows.length) {
+      const result = await this.databaseService.query(query, [usuarioId]);
+      
+      if (!result.rows.length) {
+        return {
+          total_eventos_sincronizados: 0,
+          eventos_proximos: 0,
+          eventos_pasados: 0
+        };
+      }
+
+      const stats = result.rows[0];
+      
+      const estadisticas = {
+        total_eventos_sincronizados: parseInt(String(stats.total_eventos_sincronizados) || '0'),
+        eventos_proximos: parseInt(String(stats.eventos_proximos) || '0'),
+        eventos_pasados: parseInt(String(stats.eventos_pasados) || '0')
+      };
+
+      this.logger.log(`✅ Estadísticas eventos: ${estadisticas.total_eventos_sincronizados} total, ${estadisticas.eventos_proximos} próximos`);
+
+      return estadisticas;
+
+    } catch (error) {
+      this.logger.error(`❌ Error obteniendo estadísticas de eventos:`, error);
+      // Retornar valores por defecto en caso de error
       return {
         total_eventos_sincronizados: 0,
         eventos_proximos: 0,
         eventos_pasados: 0
       };
     }
-
-    const stats = result.rows[0];
-    
-    const estadisticas = {
-      total_eventos_sincronizados: parseInt(stats.total_eventos_sincronizados || '0'),
-      eventos_proximos: parseInt(stats.eventos_proximos || '0'),
-      eventos_pasados: parseInt(stats.eventos_pasados || '0')
-    };
-
-    this.logger.log(`✅ Estadísticas eventos: ${estadisticas.total_eventos_sincronizados} total, ${estadisticas.eventos_proximos} próximos`);
-
-    return estadisticas;
-
-  } catch (error) {
-    this.logger.error(`❌ Error obteniendo estadísticas de eventos:`, error);
-    // Retornar valores por defecto en caso de error
-    return {
-      total_eventos_sincronizados: 0,
-      eventos_proximos: 0,
-      eventos_pasados: 0
-    };
   }
-}
 }

@@ -1,4 +1,4 @@
-//
+// ms-yourdashboard-auth/src/database/database.service.ts
 import { Injectable, OnModuleDestroy, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
@@ -282,7 +282,7 @@ async obtenerCuentasGmailUsuario(usuarioId: string): Promise<CuentaGmailResponse
   `;
 
   const result = await this.query<{
-    id: string; // ✅ number → string
+    id: string; 
     email_gmail: string;
     nombre_cuenta: string;
     alias_personalizado?: string;

@@ -176,7 +176,7 @@ async login(@Body() loginData: LoginDto): Promise<any> {
       events_count: cuenta.events_count,
     })) || [],
     sesiones_activas: result.sesiones_activas?.map((sesion) => ({
-      id: sesion.id.toString(),
+      id: sesion.id, // ✅ CORREGIDO: Ya es string, no convertir
       fecha_creacion: sesion.fecha_creacion.toISOString(),
       expira_en: sesion.expira_en.toISOString(),
       ip_origen: sesion.ip_origen,
@@ -457,7 +457,7 @@ async login(@Body() loginData: LoginDto): Promise<any> {
         throw new UnauthorizedException('Token JWT inválido');
       }
 
-      if (!verifyResult.sub || typeof verifyResult.sub !== 'number') {
+      if (!verifyResult.sub || typeof verifyResult.sub !== 'string') { // ✅ CORREGIDO: number → string
         throw new UnauthorizedException('Token JWT inválido - sub requerido');
       }
 
@@ -469,7 +469,7 @@ async login(@Body() loginData: LoginDto): Promise<any> {
       }
 
       return {
-        sub: verifyResult.sub as string, // ✅ number → string
+        sub: verifyResult.sub, // ✅ CORREGIDO: Sin cast innecesario
         email: customData.email as string,
         nombre: customData.nombre as string,
         iat: verifyResult.iat,
@@ -729,7 +729,7 @@ private redirectToGoogleOAuth(res: Response, userId: string, service: 'gmail' | 
         success: true,
         message: 'Alias actualizado exitosamente',
         cuenta_actualizada: {
-          id: parseInt(cuentaId),
+          id: cuentaId, // ✅ CORREGIDO: Ya es string UUID, no convertir
           email_gmail: 'cuenta' + cuentaId + '@gmail.com',
           alias_personalizado: body.alias_personalizado.trim(),
         },
@@ -860,23 +860,23 @@ private redirectToGoogleOAuth(res: Response, userId: string, service: 'gmail' | 
       if (!userId || userId.trim() === '') {
         throw new Error('Estado inválido - formato incorrecto');
       }
-      console.log(`🔄 Retrocompatibilidad: userId ${userId}, asumiendo gmail`);
+      console.log(`📄 Retrocompatibilidad: userId ${userId}, asumiendo gmail`);
       return { userId, service: 'gmail' };
     }
 
     const [userIdStr, service] = parts;
-    const userId = userIdStr; // ← Ya no parseamos
-if (!userId || userId.trim() === '') {
-  throw new Error('Estado inválido - userId vacío');
-}
-return { userId, service: service as 'gmail' | 'calendar' };
+    const userId = userIdStr; // ✅ CORREGIDO: Ya es string UUID
+    if (!userId || userId.trim() === '') {
+      throw new Error('Estado inválido - userId vacío');
+    }
+    return { userId, service: service as 'gmail' | 'calendar' };
   }
 private async handleGmailCallback(
   googleUser: GoogleOAuthUser,
   userId: string,
   res: Response
 ): Promise<void> {
-  console.log(`📧 Procesando conexión Gmail para usuario ${userId}`);
+  console.log(`🔧 Procesando conexión Gmail para usuario ${userId}`);
   
   // Usar el método existente
   await this.authService.manejarCallbackGoogle(googleUser, userId);
