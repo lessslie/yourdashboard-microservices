@@ -121,7 +121,7 @@ export interface GlobalSearchResponse {
 export interface AuthProfileResponse {
   success: boolean;
   usuario: {
-    id: number;
+    id: string;
     email: string;
     nombre: string;
     fecha_registro: string;
@@ -129,7 +129,7 @@ export interface AuthProfileResponse {
     email_verificado: boolean;
   };
   cuentas_gmail: Array<{
-    id: number;
+    id: string;
     email_gmail: string;
     alias: string | null;
     fecha_conectado: string;
