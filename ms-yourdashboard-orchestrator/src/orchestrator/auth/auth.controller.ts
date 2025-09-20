@@ -303,7 +303,7 @@ export class AuthOrchestratorController {
   @ApiParam({
     name: 'id',
     description: 'ID de la cuenta Gmail',
-    example: '4'
+    example: 'e5a3d40e-3700-4f7a-b962-e789ed794ce0'
   })
   @ApiOkResponse({
     description: 'Cuenta Gmail obtenida exitosamente',
@@ -337,9 +337,9 @@ export class AuthOrchestratorController {
     description: 'Desconecta y elimina una cuenta Gmail específica del usuario. Coordina con MS-Auth.'
   })
   @ApiParam({
-    name: 'id',
+    name: 'string',
     description: 'ID de la cuenta Gmail a desconectar',
-    example: '4'
+    example: 'e5a3d40e-3700-4f7a-b962-e789ed794ce0'
   })
   @ApiOkResponse({
     description: 'Cuenta Gmail desconectada exitosamente',
@@ -351,7 +351,7 @@ export class AuthOrchestratorController {
         cuenta_eliminada: {
           type: 'object',
           properties: {
-            id: { type: 'number', example: 4 },
+            id: { type: 'string', example: 'e5a3d40e-3700-4f7a-b962-e789ed794ce0' },
             email_gmail: { type: 'string', example: 'usuario@gmail.com' }
           }
         }
@@ -386,9 +386,9 @@ export class AuthOrchestratorController {
     description: 'Actualiza el alias personalizado de una cuenta Gmail. Coordina con MS-Auth.'
   })
   @ApiParam({
-    name: 'id',
+      name: 'id',
     description: 'ID de la cuenta Gmail',
-    example: '4'
+    example: 'e5a3d40e-3700-4f7a-b962-e789ed794ce0'
   })
   @ApiBody({
     schema: {
@@ -413,7 +413,7 @@ export class AuthOrchestratorController {
         cuenta_actualizada: {
           type: 'object',
           properties: {
-            id: { type: 'number', example: 4 },
+            id: { type: 'string', example: 'e5a3d40e-3700-4f7a-b962-e789ed794ce0' },
             email_gmail: { type: 'string', example: 'usuario@gmail.com' },
             alias_personalizado: { type: 'string', example: 'Gmail Trabajo' }
           }
