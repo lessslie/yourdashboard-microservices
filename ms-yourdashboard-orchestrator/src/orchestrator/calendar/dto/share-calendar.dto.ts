@@ -6,7 +6,7 @@ import { IsString, IsEmail, IsIn, IsNotEmpty } from 'class-validator';
 export class ShareCalendarDto {
   @ApiProperty({
     description: 'ID de la cuenta Gmail que quiere compartir su calendar',
-    example: '78',
+    example: 'abc123def456ghi789',
     required: true
   })
   @IsString()

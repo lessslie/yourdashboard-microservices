@@ -6,7 +6,7 @@ import { Type } from 'class-transformer';
 export class CalendarQueryDto {
   @ApiProperty({
     description: 'ID de la cuenta Gmail específica',
-    example: '4',
+    example: 'abc123def456ghi789',
     required: true
   })
   @IsString()
@@ -71,7 +71,7 @@ export class CalendarSearchQueryDto extends CalendarQueryDto {
 export class CalendarStatsQueryDto {
   @ApiProperty({
     description: 'ID de la cuenta Gmail específica',
-    example: '4',
+    example: 'abc123def456ghi789',
     required: true
   })
   @IsString()
@@ -107,7 +107,7 @@ export class CalendarSyncQueryDto {
 export class CalendarJWTQueryDto {
   @ApiProperty({
     description: 'ID del usuario principal (extraído del JWT)',
-    example: '3',
+    example: 'abc123def456ghi789',
     required: true
   })
   @IsString()
