@@ -346,6 +346,7 @@ export interface EstadisticasUsuario {
   cuenta_mas_activa: {
     email_gmail: string;
     emails_count: number;
+    
   };
 }
 

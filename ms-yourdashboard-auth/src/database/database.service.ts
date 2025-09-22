@@ -349,6 +349,52 @@ async desconectarCuentaGmail(cuentaId: string, usuarioId: string): Promise<void>
   
   // El CASCADE automáticamente borrará todos los emails_sincronizados
 }
+/**
+   * 🔍 Obtener usuario por ID
+   */
+  async obtenerUsuarioPorId(userId: string): Promise<UsuarioPrincipal | null> {
+    const query = `
+      SELECT id, email, nombre, fecha_registro, ultima_actualizacion, estado, email_verificado
+      FROM usuarios_principales 
+      WHERE id = $1
+    `;
+    const result = await this.query<UsuarioPrincipal>(query, [userId]);
+    return result.rows[0] || null;
+  }
+
+ 
+
+  /**
+   * 🗑️ ELIMINAR USUARIO PRINCIPAL (con transacción)
+   * Las FK con ON DELETE CASCADE eliminan automáticamente toda la data relacionada
+   */
+  async eliminarUsuarioPrincipal(userId: string): Promise<void> {
+    const client = await this.pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      // Eliminar usuario principal (cascadea automáticamente a todas las tablas relacionadas)
+      const deleteResult = await client.query(
+        'DELETE FROM usuarios_principales WHERE id = $1 RETURNING email',
+        [userId]
+      );
+
+      if (deleteResult.rows.length === 0) {
+        throw new Error('Usuario no encontrado para eliminar');
+      }
+
+      await client.query('COMMIT');
+      this.logger.log(`✅ Usuario ${deleteResult.rows[0].email} eliminado con éxito`);
+      
+    } catch (error) {
+      await client.query('ROLLBACK');
+      this.logger.error('❌ Error en transacción de eliminación:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 
   async sincronizarEmails(emails: Omit<EmailSincronizado, 'id' | 'fecha_sincronizado'>[]): Promise<number> {
     if (emails.length === 0) return 0;
@@ -567,4 +613,51 @@ async desconectarCuentaGmail(cuentaId: string, usuarioId: string): Promise<void>
       sesiones_activas: parseInt(stats.sesiones_activas)
     };
   }
+
+  
+/**
+ * 🔄 Actualizar alias personalizado de cuenta Gmail
+ */
+async actualizarAliasCuentaGmail(
+  cuentaId: string,
+  usuarioId: string,
+  nuevoAlias: string
+): Promise<CuentaGmailAsociada | null> {
+  try {
+    this.logger.debug(`🔄 Actualizando alias cuenta ${cuentaId} para usuario ${usuarioId} -> "${nuevoAlias}"`);
+
+    // ✅ QUERY SIMPLIFICADO - sin ultima_actualizacion
+    const query = `
+      UPDATE cuentas_gmail_asociadas 
+      SET alias_personalizado = $1
+      WHERE id = $2 AND usuario_principal_id = $3
+      RETURNING *
+    `;
+
+    const result = await this.query(query, [nuevoAlias, cuentaId, usuarioId]);
+
+    if (result.rows.length === 0) {
+      this.logger.warn(`⚠️ Cuenta Gmail ${cuentaId} no encontrada para usuario ${usuarioId}`);
+      return null;
+    }
+
+    const cuenta = result.rows[0];
+    this.logger.debug(`✅ Alias actualizado: ${cuentaId} -> "${nuevoAlias}"`);
+
+    return {
+      id: cuenta.id,
+      email_gmail: cuenta.email_gmail,
+      nombre_cuenta: cuenta.nombre_cuenta,
+      alias_personalizado: cuenta.alias_personalizado,
+      fecha_conexion: cuenta.fecha_conexion,
+      ultima_sincronizacion: cuenta.ultima_sincronizacion,
+      esta_activa: cuenta.esta_activa,
+      usuario_principal_id: cuenta.usuario_principal_id
+    } as CuentaGmailAsociada;
+
+  } catch (error) {
+    this.logger.error(`❌ Error actualizando alias cuenta Gmail:`, error);
+    throw error;
+  }
+}
 }

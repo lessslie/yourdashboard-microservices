@@ -301,6 +301,77 @@ export class AuthService {
     };
   }
 
+/**
+ * 🔧 ACTUALIZAR ALIAS DE CUENTA GMAIL
+ */
+async actualizarAliasCuentaGmail(
+  usuarioId: string, 
+  cuentaId: string, 
+  nuevoAlias: string
+): Promise<{
+  success: boolean;
+  message: string;
+  cuenta_actualizada: {
+    id: string;
+    email_gmail: string;
+    nombre_cuenta: string;
+    alias_personalizado: string;
+  };
+}> {
+  try {
+    this.logger.log(`🔄 Actualizando alias cuenta ${cuentaId} para usuario ${usuarioId}`);
+
+    // 1️⃣ Verificar que la cuenta existe y pertenece al usuario
+    const cuentaExistente = await this.databaseService.obtenerCuentaGmailPorId(cuentaId, usuarioId);
+    if (!cuentaExistente) {
+      throw new NotFoundException({
+        codigo: CodigosErrorAuth.CUENTA_GMAIL_NO_ENCONTRADA,
+        mensaje: 'Cuenta Gmail no encontrada'
+      });
+    }
+
+    // 2️⃣ Actualizar el alias en la base de datos
+    const cuentaActualizada = await this.databaseService.actualizarAliasCuentaGmail(
+      cuentaId,
+      usuarioId,
+      nuevoAlias.trim()
+    );
+
+    if (!cuentaActualizada) {
+      throw new NotFoundException({
+        codigo: CodigosErrorAuth.CUENTA_GMAIL_NO_ENCONTRADA,
+        mensaje: 'Error actualizando cuenta Gmail'
+      });
+    }
+
+    this.logger.log(`✅ Alias actualizado exitosamente: ${cuentaId} -> "${nuevoAlias}"`);
+
+    return {
+      success: true,
+      message: 'Alias actualizado exitosamente',
+      cuenta_actualizada: {
+        id: cuentaActualizada.id,
+        email_gmail: cuentaActualizada.email_gmail,
+        nombre_cuenta: cuentaActualizada.nombre_cuenta,
+        alias_personalizado: cuentaActualizada.alias_personalizado || nuevoAlias
+      }
+    };
+
+  } catch (error) {
+    this.logger.error(`❌ Error actualizando alias cuenta Gmail:`, error);
+    
+    if (error instanceof NotFoundException) {
+      throw error;
+    }
+    
+    throw new NotFoundException({
+      codigo: CodigosErrorAuth.CUENTA_GMAIL_NO_ENCONTRADA,
+      mensaje: 'Error actualizando alias de cuenta Gmail'
+    });
+  }
+}
+
+
 
   /**
    * 🔧 GENERAR URL OAUTH CON STATE CODIFICADO (userId:service)
@@ -496,6 +567,72 @@ export class AuthService {
       }
     };
   }
+/**
+ * 🗑️ ELIMINAR USUARIO PRINCIPAL COMPLETAMENTE
+ */
+async deleteUser(userId: string) {
+  try {
+    this.logger.log(`🗑️ INICIANDO ELIMINACIÓN COMPLETA del usuario ${userId}`);
+    
+    // 1. Verificar que el usuario existe y obtener datos
+    const userData = await this.databaseService.obtenerUsuarioPorId(userId);
+    
+    if (!userData) {
+      throw new NotFoundException({
+        codigo: CodigosErrorAuth.USUARIO_NO_ENCONTRADO,
+        mensaje: 'Usuario no encontrado'
+      });
+    }
+
+    this.logger.log(`👤 Usuario encontrado: ${userData.email} (${userData.nombre})`);
+
+    // 2. Obtener las cuentas Gmail para logging y estadísticas
+    const cuentasGmail = await this.databaseService.obtenerCuentasGmailUsuario(userId);
+    this.logger.log(`📧 Cuentas Gmail a eliminar: ${cuentasGmail.map(c => c.email_gmail).join(', ')}`);
+
+    // 3. Estadísticas simplificadas para el response
+    const statsAntes = {
+      cuentas_gmail: cuentasGmail.length,
+      emails_sincronizados: cuentasGmail.reduce((total, cuenta) => total + cuenta.emails_count, 0),
+      eventos_sincronizados: cuentasGmail.reduce((total, cuenta) => total + cuenta.events_count, 0),
+      sesiones_activas: 0 // Simplificado por ahora
+    };
+
+    this.logger.log(`📊 Data a eliminar: ${statsAntes.cuentas_gmail} cuentas Gmail, ${statsAntes.emails_sincronizados} emails, ${statsAntes.eventos_sincronizados} eventos`);
+
+    // 4. ELIMINAR USUARIO PRINCIPAL (cascada automática)
+    await this.databaseService.eliminarUsuarioPrincipal(userId);
+    
+    this.logger.log(`✅ USUARIO ELIMINADO COMPLETAMENTE: ${userData.email}`);
+    this.logger.log(`🧹 Eliminación en cascada exitosa para todas las tablas relacionadas`);
+
+    return {
+      success: true,
+      message: 'Usuario principal eliminado completamente',
+      usuario_eliminado: {
+        id: userId,
+        email: userData.email,
+        nombre: userData.nombre,
+        fecha_registro: userData.fecha_registro,
+      },
+      data_eliminada: {
+        cuentas_gmail: statsAntes.cuentas_gmail,
+        emails_sincronizados: statsAntes.emails_sincronizados,
+        eventos_sincronizados: statsAntes.eventos_sincronizados,
+        sesiones_activas: statsAntes.sesiones_activas,
+        cuentas_gmail_eliminadas: cuentasGmail.map(c => ({
+          id: c.id,
+          email_gmail: c.email_gmail
+        }))
+      },
+      eliminado_en: new Date().toISOString()
+    };
+
+  } catch (error) {
+    this.logger.error('❌ Error eliminando usuario:', error);
+    throw error;
+  }
+}
 
   // ================================
   // 🔧 LISTAR CUENTAS GMAIL DE USUARIO 
