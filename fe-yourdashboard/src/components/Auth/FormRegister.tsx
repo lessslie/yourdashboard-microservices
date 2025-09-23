@@ -53,15 +53,6 @@ const FormRegister = ({ setChangeForm }: FormView) => {
         <Button block type="primary" htmlType="submit">
           Registrarse
         </Button>
-        <div style={{ marginTop: "12px", textAlign: "center" }}>
-          ¿Ya tienes una cuenta?{" "}
-          <span
-            style={{ cursor: "pointer", color: "blue" }}
-            onClick={() => setChangeForm(false)}
-          >
-            Inicia sesión aquí
-          </span>
-        </div>
       </Form.Item>
     </Form>
   );
