@@ -32,7 +32,7 @@ export class TokensController {
   @ApiParam({
     name: 'userId',
     description: 'ID del usuario principal',
-    example: '3'
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
   })
   @ApiOkResponse({
     description: 'Token obtenido exitosamente'
@@ -60,7 +60,7 @@ export class TokensController {
   @ApiParam({
     name: 'cuentaGmailId',
     description: 'ID de la cuenta Gmail específica',
-    example: '4'
+    example: 'b2c3d4e5-f6g7-8901-bcde-f23456789012'
   })
   @ApiOkResponse({
     description: 'Token de cuenta Gmail obtenido exitosamente',
@@ -72,10 +72,10 @@ export class TokensController {
         user: {
           type: 'object',
           properties: {
-            id: { type: 'string', example: '3', description: 'ID del usuario principal propietario' },
+            id: { type: 'string', example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', description: 'ID del usuario principal propietario' },
             email: { type: 'string', example: 'agata.morales92@gmail.com' },
             name: { type: 'string', example: 'Les Lie' },
-            cuentaGmailId: { type: 'string', example: '4', description: 'ID de la cuenta Gmail específica' }
+            cuentaGmailId: { type: 'string', example: 'b2c3d4e5-f6g7-8901-bcde-f23456789012', description: 'ID de la cuenta Gmail específica' }
           }
         },
         renewed: { type: 'boolean', example: false }

@@ -88,7 +88,7 @@ export interface CalendarEventMetadata {
   isAllDay: boolean;
   status: string;
   sourceAccount?: string;
-  sourceAccountId?: number;
+  sourceAccountId?: string;
 }
 
 export interface CalendarListResponse {
@@ -112,7 +112,7 @@ export interface CalendarSyncResponse {
   success: boolean;
   message: string;
   stats: {
-    cuenta_gmail_id: number;
+    cuenta_gmail_id: string;
     events_nuevos: number;
     events_actualizados: number;
     tiempo_ms: number;
@@ -154,7 +154,7 @@ export interface EventSearchFilters {
 }
 
 export interface EventMetadataDB {
-  cuenta_gmail_id: number;
+  cuenta_gmail_id: string;
   google_event_id: string;
   summary?: string;
   location?: string;

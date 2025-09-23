@@ -4,7 +4,7 @@ import { ApiProperty } from '@nestjs/swagger';
 export class CalendarEventDto {
   @ApiProperty({
     description: 'ID único del evento',
-    example: 'abc123def456'
+    example: 'abc123def456ghi789'
   })
   id: string;
 
@@ -68,10 +68,10 @@ export class CalendarEventDto {
 
   @ApiProperty({
     description: 'ID de la cuenta Gmail de origen',
-    example: 4,
+    example: 'abc123def456ghi789',
     required: false
   })
-  sourceAccountId?: number;
+  sourceAccountId?: string;
 }
 
 export class CalendarListDto {
@@ -180,7 +180,7 @@ export class CalendarSyncDto {
       stats: {
         type: 'object',
         properties: {
-          cuenta_gmail_id: { type: 'number', example: 4 },
+          cuenta_gmail_id: { type: 'string', example: 'abc123def456ghi789' },
           events_nuevos: { type: 'number', example: 8 },
           events_actualizados: { type: 'number', example: 3 },
           tiempo_total_ms: { type: 'number', example: 1500 }
@@ -192,7 +192,7 @@ export class CalendarSyncDto {
     success: boolean;
     message: string;
     stats: {
-      cuenta_gmail_id: number;
+      cuenta_gmail_id: string;
       events_nuevos: number;
       events_actualizados: number;
       tiempo_total_ms: number;

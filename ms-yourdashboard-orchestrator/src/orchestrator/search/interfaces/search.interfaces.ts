@@ -24,7 +24,7 @@ export interface EmailResult {
   isRead: boolean;
   hasAttachments: boolean;
   sourceAccount: string;
-  sourceAccountId: number;
+  sourceAccountId: string;
 }
 
 // 📅 NUEVAS INTERFACES PARA CALENDAR
@@ -53,7 +53,7 @@ export interface CalendarResult {
   isAllDay: boolean;
   status: string;
   sourceAccount: string;
-  sourceAccountId: number;
+  sourceAccountId: string;
 }
 
 //*******************************************
@@ -121,7 +121,7 @@ export interface GlobalSearchResponse {
 export interface AuthProfileResponse {
   success: boolean;
   usuario: {
-    id: number;
+    id: string;
     email: string;
     nombre: string;
     fecha_registro: string;
@@ -129,7 +129,7 @@ export interface AuthProfileResponse {
     email_verificado: boolean;
   };
   cuentas_gmail: Array<{
-    id: number;
+    id: string;
     email_gmail: string;
     alias: string | null;
     fecha_conectado: string;

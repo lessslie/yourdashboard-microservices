@@ -11,8 +11,8 @@ export enum TrafficLightStatus {
 
 // Extender EmailMetadataDB con campos del semaforo
 export interface EmailMetadataDBWithTrafficLight {
-  id?: number;
-  cuenta_gmail_id: number;
+  id?: string;
+  cuenta_gmail_id: string;
   gmail_message_id: string;
   asunto?: string;
   remitente_email?: string;
@@ -32,7 +32,7 @@ export interface EmailMetadataDBWithTrafficLight {
 
 // Resultado de marcar email como respondido
 export interface MarkEmailRepliedResult {
-  email_id: number;
+  email_id: string;
   old_status: TrafficLightStatus;
   new_status: TrafficLightStatus;
   days_saved: number;
@@ -70,7 +70,7 @@ export interface TrafficLightDashboardResponse {
 }
 
 export interface TrafficLightAccountStats {
-  cuenta_id: number;
+  cuenta_id: string;
   email_gmail: string;
   nombre_cuenta: string;
   estadisticas: TrafficLightStatusCount[];
@@ -94,7 +94,7 @@ export interface EmailsByTrafficLightResponse {
 
 // Request para actualizar semaforos
 export interface UpdateTrafficLightsRequest {
-  userId?: number; // Opcional, para actualizar solo del usuario
+  userId?: string; // Opcional, para actualizar solo del usuario
 }
 
 // Response de actualización manual
@@ -113,7 +113,7 @@ export interface EmailSearchResultWithTrafficLight {
 
 // Filtros de búsqueda extendidos con semaforo
 export interface EmailSearchFiltersWithTrafficLight {
-  cuenta_gmail_id?: number;
+  cuenta_gmail_id?: string;
   esta_leido?: boolean;
   tiene_adjuntos?: boolean;
   remitente_email?: string;

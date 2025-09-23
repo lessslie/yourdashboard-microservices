@@ -56,7 +56,7 @@ export class JwtAuthGuard implements CanActivate {
         
         // Ahora verifyResult es automáticamente JsonWebTokenPayload
         // Validar que tenga las propiedades requeridas de nuestro custom payload
-        if (!verifyResult.sub || typeof verifyResult.sub !== 'number') {
+        if (!verifyResult.sub || typeof verifyResult.sub !== 'string') { // ✅ number → string
           this.logger.warn('🚫 JWT missing valid sub property');
           throw new UnauthorizedException('Token JWT inválido - sub requerido');
         }
@@ -70,7 +70,7 @@ export class JwtAuthGuard implements CanActivate {
         
         // Construir nuestro JwtPayload tipado
         decoded = {
-          sub: verifyResult.sub as number,
+          sub: verifyResult.sub, // ✅ number → string
           email: customData.email as string,
           nombre: customData.nombre as string,
           iat: verifyResult.iat,

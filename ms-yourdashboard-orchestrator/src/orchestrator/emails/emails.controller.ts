@@ -111,7 +111,7 @@ async saveEmailContent(
     summary: 'Sincronizar emails manualmente',
     description: 'Coordina MS-Auth + MS-Email para ejecutar sincronización manual de emails.'
   })
-  @ApiQuery({ name: 'cuentaGmailId', description: 'ID de la cuenta Gmail específica', example: '4' })
+  @ApiQuery({ name: 'cuentaGmailId', description: 'ID de la cuenta Gmail específica', example: '1847a8e123456789' })
   @ApiQuery({ name: 'maxEmails', description: 'Máximo emails a sincronizar', example: 100, required: false })
   @ApiOkResponse({ 
     description: 'Sincronización completada exitosamente',
@@ -128,7 +128,7 @@ async saveEmailContent(
             stats: {
               type: 'object',
               properties: {
-                cuenta_gmail_id: { type: 'number', example: 4 },
+                cuenta_gmail_id: { type: 'string', example: '1847a8e123456789' },
                 emails_nuevos: { type: 'number', example: 15 },
                 emails_actualizados: { type: 'number', example: 5 },
                 tiempo_total_ms: { type: 'number', example: 2500 }
@@ -171,7 +171,7 @@ async saveEmailContent(
     summary: 'Sincronización incremental de emails',
     description: 'Coordina MS-Auth + MS-Email para sincronizar solo emails nuevos.'
   })
-  @ApiQuery({ name: 'cuentaGmailId', description: 'ID de la cuenta Gmail específica', example: '4' })
+  @ApiQuery({ name: 'cuentaGmailId', description: 'ID de la cuenta Gmail específica', example: '1847a8e123456789' })
   @ApiQuery({ name: 'maxEmails', description: 'Máximo emails nuevos', example: 30, required: false })
   @ApiOkResponse({ 
     description: 'Sincronización incremental completada',
@@ -188,7 +188,7 @@ async saveEmailContent(
             stats: {
               type: 'object',
               properties: {
-                cuenta_gmail_id: { type: 'number', example: 4 },
+                cuenta_gmail_id: { type: 'string', example: '1847a8e123456789' },
                 emails_nuevos: { type: 'number', example: 8 },
                 emails_actualizados: { type: 'number', example: 2 }
               }
@@ -227,7 +227,7 @@ async saveEmailContent(
     summary: 'Obtener inbox de emails',
     description: 'Coordina MS-Auth (tokens) + MS-Email (datos) para obtener la lista de emails del usuario.'
   })
-  @ApiQuery({ name: 'cuentaGmailId', description: 'ID de la cuenta Gmail específica', example: '4' })
+  @ApiQuery({ name: 'cuentaGmailId', description: 'ID de la cuenta Gmail específica', example: '1847a8e123456789' })
   @ApiQuery({ name: 'page', description: 'Número de página', example: 1, required: false })
   @ApiQuery({ name: 'limit', description: 'Emails por página (máx 50)', example: 10, required: false })
   @ApiOkResponse({ 
@@ -269,7 +269,7 @@ async getInbox(
     summary: 'Buscar emails',
     description: 'Coordina MS-Auth + MS-Email para buscar emails por término específico con paginación.'
   })
-  @ApiQuery({ name: 'cuentaGmailId', description: 'ID de la cuenta Gmail específica', example: '4' })
+  @ApiQuery({ name: 'cuentaGmailId', description: 'ID de la cuenta Gmail específica', example: '1847a8e123456789' })
   @ApiQuery({ name: 'q', description: 'Término de búsqueda', example: 'reunión proyecto' })
   @ApiQuery({ name: 'page', description: 'Número de página', example: 1, required: false })
   @ApiQuery({ name: 'limit', description: 'Emails por página (máx 50)', example: 10, required: false })
@@ -334,7 +334,7 @@ async getInbox(
   @ApiQuery({ 
     name: 'userId', 
     description: 'ID del usuario principal', 
-    example: '3' 
+    example: '1847a8e123456789' 
   })
   @ApiQuery({ 
     name: 'q', 
@@ -461,7 +461,7 @@ async getInbox(
   @ApiQuery({ 
     name: 'userId', 
     description: 'ID del usuario principal', 
-    example: '1' 
+    example:  '1847a8e123456789' 
   })
   @ApiQuery({ 
     name: 'page', 
@@ -486,7 +486,7 @@ async getInbox(
         accountsLoaded: { 
           type: 'array', 
           items: { type: 'string' },
-          example: ['agata.morales92@gmail.com', 'celestino.lely54@gmail.com']
+          example: ['agata.morals92@gmail.com', 'celestino54@gmail.com']
         },
         data: {
           type: 'object',
@@ -504,7 +504,7 @@ async getInbox(
                   isRead: { type: 'boolean', example: false },
                   hasAttachments: { type: 'boolean', example: true },
                   sourceAccount: { type: 'string', example: 'agata.morales92@gmail.com' },
-                  sourceAccountId: { type: 'number', example: 1 }
+                  sourceAccountId: { type: 'string', example: '1847a8e123456789' }
                 }
               }
             },
@@ -553,7 +553,7 @@ async getInboxAllAccounts(
     summary: 'Obtener estadísticas de emails',
     description: 'Coordina MS-Auth + MS-Email para obtener contadores de emails totales, leídos y no leídos.'
   })
-  @ApiQuery({ name: 'cuentaGmailId', description: 'ID de la cuenta Gmail específica', example: '4' })
+  @ApiQuery({ name: 'cuentaGmailId', description: 'ID de la cuenta Gmail específica', example: '1847a8e123456789' })
   @ApiOkResponse({ 
     description: 'Estadísticas obtenidas exitosamente',
     type: OrchestratorStatsDto
@@ -604,7 +604,7 @@ async getInboxAllAccounts(
               items: {
                 type: 'object',
                 properties: {
-                  cuentaId: { type: 'number', example: 1 },
+                  cuentaId: { type: 'string', example:  '1847a8e123456789' },
                   emailGmail: { type: 'string', example: 'usuario@gmail.com' },
                   nombreCuenta: { type: 'string', example: 'Juan Pérez' },
                   totalSinResponder: { type: 'number', example: 25 },
@@ -668,7 +668,7 @@ async getInboxAllAccounts(
     name: 'cuentaId', 
     required: false, 
     description: 'ID de cuenta Gmail específica (opcional)',
-    example: 1
+    example: '1847a8e123456789'
   })
   @ApiQuery({ 
     name: 'limit', 
@@ -697,7 +697,7 @@ async getInboxAllAccounts(
               items: {
                 type: 'object',
                 properties: {
-                  id: { type: 'number', example: 12345 },
+                  id: { type: 'string', example: '1847a8e123456789' },
                   messageId: { type: 'string', example: '1847a8e123456789' },
                   subject: { type: 'string', example: 'Proyecto urgente' },
                   fromEmail: { type: 'string', example: 'cliente@empresa.com' },
@@ -709,7 +709,7 @@ async getInboxAllAccounts(
                   trafficLightStatus: { type: 'string', example: 'red' },
                   repliedAt: { type: 'string', nullable: true, example: null },
                   sourceAccount: { type: 'string', example: 'usuario@gmail.com' },
-                  sourceAccountId: { type: 'number', example: 1 }
+                  sourceAccountId: { type: 'string', example: '1847a8e123456789' }
                 }
               }
             }
@@ -743,11 +743,10 @@ async getInboxAllAccounts(
     }
 
     const trafficStatus = status as TrafficLightStatus;
-    const cuentaIdNum = cuentaId ? parseInt(cuentaId, 10) : undefined;
     const limitNum = limit ? parseInt(limit, 10) : 10;
 
-    if (cuentaId && isNaN(cuentaIdNum!)) {
-      throw new BadRequestException('cuentaId debe ser un número válido');
+    if (cuentaId && (!cuentaId || cuentaId.trim() === '')) {
+      throw new BadRequestException('cuentaId debe ser un valor válido');
     }
 
     if (limit && (isNaN(limitNum) || limitNum < 1 || limitNum > 100)) {
@@ -759,7 +758,7 @@ async getInboxAllAccounts(
     return this.emailsService.getEmailsByTrafficLight(
       authHeader, 
       trafficStatus, 
-      cuentaIdNum, 
+      cuentaId, 
       limitNum
     );
   }
@@ -1205,7 +1204,7 @@ private isKnownHttpException(error: any): error is HttpException {
             bodyText: { type: 'string', example: 'Contenido del email...' },
             bodyHtml: { type: 'string', example: '<p>Contenido del email...</p>' },
             sourceAccount: { type: 'string', example: 'usuario@gmail.com' },
-            sourceAccountId: { type: 'number', example: 4 }
+            sourceAccountId: { type: 'string', example: '1847a8e123456789' }
           }
         }
       }

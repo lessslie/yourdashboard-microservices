@@ -286,6 +286,84 @@ async getProfile(authHeader: string): Promise<ProfileResponseDto> {
     }
   }
 
+  
+  /**
+   * 🗑️ ELIMINAR USUARIO PRINCIPAL COMPLETAMENTE
+   * Coordina con MS-Auth para eliminar usuario + toda su data
+   */
+  async deleteUser(authHeader: string, userId: string) {
+    try {
+      this.logger.log(`🗑️ ORCHESTRATOR - Iniciando eliminación de usuario ${userId}`);
+
+      const response = await axios.delete<{
+        success: boolean;
+        message: string;
+        usuario_eliminado: {
+          id: string;
+          email: string;
+          nombre: string;
+          fecha_registro: string;
+        };
+        data_eliminada: {
+          cuentas_gmail: number;
+          emails_sincronizados: number;
+          eventos_sincronizados: number;
+          sesiones_activas: number;
+          cuentas_gmail_eliminadas: Array<{
+            id: string;
+            email_gmail: string;
+          }>;
+        };
+        eliminado_en: string;
+      }>(`${this.msAuthUrl}/auth/users/${userId}`, {
+        headers: {
+          Authorization: authHeader,
+        },
+      });
+
+      this.logger.log(`✅ Usuario ${userId} eliminado exitosamente desde MS-Auth`);
+      
+      return {
+        success: true,
+        source: 'orchestrator',
+        message: response.data.message,
+        usuario_eliminado: response.data.usuario_eliminado,
+        data_eliminada: response.data.data_eliminada,
+        eliminado_en: response.data.eliminado_en
+      };
+      
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      this.logger.error(`❌ Error eliminando usuario:`, axiosError.message);
+
+      if (axiosError.response?.status === 401) {
+        throw new HttpException(
+          'Token faltante o inválido',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+      
+      if (axiosError.response?.status === 404) {
+        throw new HttpException(
+          'Usuario no encontrado',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      if (axiosError.response?.status === 403) {
+        throw new HttpException(
+          'Solo puedes eliminar tu propia cuenta',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
+      throw new HttpException(
+        'Error interno eliminando usuario',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   /**
    * 🔄 Iniciar proceso de autenticación
    */

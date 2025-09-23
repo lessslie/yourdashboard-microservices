@@ -12,8 +12,8 @@ import {
 
 // 📧 Interfaces para metadata de emails
 export interface EmailMetadataDB {
-  id?: number;
-  cuenta_gmail_id: number;
+  id?: string;
+  cuenta_gmail_id: string;
   gmail_message_id: string;
   asunto?: string;
   remitente_email?: string;
@@ -29,7 +29,7 @@ export interface EmailMetadataDB {
 }
 
 export interface EmailSearchFilters {
-  cuenta_gmail_id?: number;
+  cuenta_gmail_id?: string;
   esta_leido?: boolean;
   tiene_adjuntos?: boolean;
   remitente_email?: string;
@@ -78,10 +78,10 @@ async getActiveGmailAccounts(
   activeDays: number = 7, 
   limit: number = 100
 ): Promise<Array<{
-  id: number;
+  id: string;
   email_gmail: string;
   access_token: string;
-  usuario_principal_id: number;
+  usuario_principal_id: string;
 }>> {
   try {
     const query = `
@@ -234,7 +234,7 @@ async getActiveGmailAccounts(
  * 📖 Obtener emails con paginación desde BD local
  */
 async getEmailsPaginated(
-  cuentaGmailId: number, 
+  cuentaGmailId: string, 
   page: number = 1, 
   limit: number = 10,
   includeTrafficLight: boolean = true
@@ -287,7 +287,7 @@ async getEmailsPaginated(
  * 🔍 Búsqueda avanzada en BD local
  */
 async searchEmailsInDB(
-  cuentaGmailId: number,
+  cuentaGmailId: string,
   filters: EmailSearchFilters,
   page: number = 1,
   limit: number = 10
@@ -392,8 +392,8 @@ async searchEmailsInDB(
  * 📧 Obtener todas las cuentas Gmail de un usuario principal
  * 🎯 Para búsqueda global
  */
-async obtenerCuentasGmailUsuario(usuarioId: number): Promise<Array<{
-  id: number;
+async obtenerCuentasGmailUsuario(usuarioId: string): Promise<Array<{
+  id: string;
   email_gmail: string;
   nombre_cuenta: string;
   alias_personalizado?: string;
@@ -427,7 +427,7 @@ async obtenerCuentasGmailUsuario(usuarioId: number): Promise<Array<{
     `;
 
     const result = await this.query<{
-      id: number;
+      id: string;
       email_gmail: string;
       nombre_cuenta: string;
       alias_personalizado?: string;
@@ -458,7 +458,7 @@ async obtenerCuentasGmailUsuario(usuarioId: number): Promise<Array<{
   /**
    * 📈 Obtener estadísticas desde BD local
    */
-  async getEmailStatsFromDB(cuentaGmailId: number): Promise<{
+  async getEmailStatsFromDB(cuentaGmailId: string): Promise<{
     total_emails: number;
     emails_no_leidos: number;
     emails_leidos: number;
@@ -502,7 +502,7 @@ async obtenerCuentasGmailUsuario(usuarioId: number): Promise<Array<{
   /**
    * 🔍 Obtener último email sincronizado (para sync incremental)
    */
-  async getLastSyncedEmail(cuentaGmailId: number): Promise<EmailMetadataDB | null> {
+  async getLastSyncedEmail(cuentaGmailId: string): Promise<EmailMetadataDB | null> {
     const query = `
       SELECT * FROM emails_sincronizados 
       WHERE cuenta_gmail_id = $1 
@@ -517,7 +517,7 @@ async obtenerCuentasGmailUsuario(usuarioId: number): Promise<Array<{
   /**
    * 🗑️ Limpiar emails viejos (opcional - para mantenimiento)
    */
-  async cleanupOldEmails(cuentaGmailId: number, olderThanDays: number = 90): Promise<number> {
+  async cleanupOldEmails(cuentaGmailId: string, olderThanDays: number = 90): Promise<number> {
     const query = `
       DELETE FROM emails_sincronizados 
       WHERE cuenta_gmail_id = $1 
@@ -554,7 +554,7 @@ async obtenerCuentasGmailUsuario(usuarioId: number): Promise<Array<{
 // 🔄 REFRESH TOKEN DE GOOGLE
 // ================================
 
-async refreshGoogleToken(cuentaGmailId: number): Promise<string> {
+async refreshGoogleToken(cuentaGmailId: string): Promise<string> {
   try {
     // 1. Obtener el refresh token de la BD
     const query = `
@@ -624,7 +624,7 @@ async refreshGoogleToken(cuentaGmailId: number): Promise<string> {
 /**
  * 🕐 Actualizar timestamp de última sincronización después de sync exitoso
  */
-async updateLastSyncTime(cuentaGmailId: number): Promise<void> {
+async updateLastSyncTime(cuentaGmailId: string): Promise<void> {
   try {
     const query = `
       UPDATE cuentas_gmail_asociadas 
@@ -708,7 +708,7 @@ async updateAllTrafficLights(): Promise<UpdateTrafficLightsResult> {
  * Obtener emails por estado de semaforo
  */
 async getEmailsByTrafficLight(
-  cuentaGmailId: number,
+  cuentaGmailId: string,
   status: TrafficLightStatus,
   limit: number = 10
 ): Promise<EmailMetadataDBWithTrafficLight[]> {
@@ -745,7 +745,7 @@ async getEmailsByTrafficLight(
  * Obtener estadísticas de semaforo por cuenta
  */
 async getTrafficLightStatsByAccount(
-  cuentaGmailId: number
+  cuentaGmailId: string
 ): Promise<Array<{
   traffic_light_status: TrafficLightStatus;
   count: string;
@@ -895,7 +895,7 @@ private buildTrafficLightConditions(
 async markEmailAsDeleted(
   gmailMessageId: string
 ): Promise<{
-  email_id: number;
+  email_id: string;
   previousStatus: TrafficLightStatus;
   success: boolean;
 } | null> {
@@ -904,7 +904,7 @@ async markEmailAsDeleted(
     
     // 1️⃣ PRIMERO: Obtener el estado actual ANTES de modificar
     const currentState = await this.query<{
-      id: number;
+      id: string;
       traffic_light_status: TrafficLightStatus;
     }>(`
       SELECT id, traffic_light_status 
@@ -1052,11 +1052,11 @@ private buildTrafficLightSearchQueries(
  */
 async findEmailByIdForUser(
   emailId: string,
-  userId: number
+  userId: string
 ): Promise<{
   email: EmailMetadataDBWithTrafficLight;
   cuentaGmail: {
-    id: number;
+    id: string;
     email_gmail: string;
     nombre_cuenta: string;
   };
@@ -1079,7 +1079,7 @@ async findEmailByIdForUser(
     `;
 
     const result = await this.query<EmailMetadataDBWithTrafficLight & {
-      cuenta_id: number;
+      cuenta_id: string;
       email_gmail: string;
       nombre_cuenta: string;
     }>(query, [emailId, userId]);
