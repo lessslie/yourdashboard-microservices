@@ -18,10 +18,13 @@
     "@fullcalendar/react": "^6.1.19",
     "@fullcalendar/rrule": "^6.1.19",
     "@fullcalendar/timegrid": "^6.1.19",
+    "@tailwindcss/postcss": "^4.1.13",
     "axios": "^1.10.0",
     "next": "15.3.5",
+    "postcss": "^8.5.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "tailwindcss": "^4.1.13",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
