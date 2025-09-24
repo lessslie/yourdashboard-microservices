@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Layout } from "antd";
-// import Navbar from "./Navbar";
+import Navbar from "./Navbar";
 
 const { Content } = Layout;
 
@@ -25,7 +25,7 @@ const AuthenticatedLayout: React.FC<AuthenticatedLayoutProps> = ({
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
-      {/* <Navbar /> */}
+      <Navbar />
       <Content
         style={{
           marginTop: "86px",

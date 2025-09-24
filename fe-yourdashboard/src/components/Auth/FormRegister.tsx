@@ -22,7 +22,6 @@ const FormRegister = ({ setChangeForm }: FormView) => {
     <Form
       name="register"
       initialValues={{ remember: true }}
-      style={{ width: 500, margin: "50px" }}
       onFinish={onFinish}
     >
       <Form.Item

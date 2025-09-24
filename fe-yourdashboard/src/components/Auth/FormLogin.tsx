@@ -5,10 +5,10 @@ import { Button, Form, Input } from "antd";
 import { login } from "../../services/auth/auth";
 import { useAuth } from "./hooks/useAuth";
 import { useRouter } from "next/navigation";
-import { FormView, IFormLogin } from "@/interfaces/interfacesAuth";
+import { IFormLogin } from "@/interfaces/interfacesAuth";
 import { useAuthStore } from "@/store/authStore";
 
-const FormLogin = ({ setChangeForm }: FormView) => {
+const FormLogin = () => {
   const router = useRouter();
   const { saveToken } = useAuth();
   const { setUserProfile } = useAuthStore();
@@ -33,8 +33,8 @@ const FormLogin = ({ setChangeForm }: FormView) => {
     <Form
       name="login"
       initialValues={{ remember: true }}
-      style={{ width: 500, margin: "50px" }}
       onFinish={onFinish}
+      className="gap-8 flex flex-col"
     >
       <Form.Item
         name="email"
@@ -57,15 +57,6 @@ const FormLogin = ({ setChangeForm }: FormView) => {
         <Button block type="primary" htmlType="submit">
           Iniciar Sesión
         </Button>
-        <div style={{ marginTop: "12px", textAlign: "center" }}>
-          Si no tienes una cuenta,{" "}
-          <span
-            style={{ cursor: "pointer", color: "blue" }}
-            onClick={() => setChangeForm(true)}
-          >
-            registrate aquí
-          </span>
-        </div>
       </Form.Item>
     </Form>
   );
