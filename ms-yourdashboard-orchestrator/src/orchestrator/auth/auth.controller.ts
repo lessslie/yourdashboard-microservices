@@ -28,7 +28,8 @@ import {
   ApiParam,
   ApiQuery,
   ApiExcludeEndpoint,
-  ApiInternalServerErrorResponse
+  ApiInternalServerErrorResponse,
+  ApiForbiddenResponse
 } from '@nestjs/swagger';
 import { AuthOrchestratorService } from './auth.service';
 import { 
@@ -303,7 +304,7 @@ export class AuthOrchestratorController {
   @ApiParam({
     name: 'id',
     description: 'ID de la cuenta Gmail',
-    example: '4'
+    example: 'e5a3d40e-3700-4f7a-b962-e789ed794ce0'
   })
   @ApiOkResponse({
     description: 'Cuenta Gmail obtenida exitosamente',
@@ -327,8 +328,9 @@ export class AuthOrchestratorController {
     return this.authService.getCuentaGmail(authHeader, cuentaId);
   }
 
+
   /**
-   * 🗑️ DELETE /auth/cuentas-gmail/:id - Desconectar cuenta Gmail
+   * 🗑️ DELETE /auth/cuentas-gmail/{id} - Desconectar cuenta Gmail
    */
   @Delete('cuentas-gmail/:id')
   @ApiBearerAuth('JWT-auth')
@@ -339,7 +341,7 @@ export class AuthOrchestratorController {
   @ApiParam({
     name: 'id',
     description: 'ID de la cuenta Gmail a desconectar',
-    example: '4'
+    example: 'c7c1c4b7-04a1-4350-9c39-c1d165de88c8'
   })
   @ApiOkResponse({
     description: 'Cuenta Gmail desconectada exitosamente',
@@ -347,16 +349,13 @@ export class AuthOrchestratorController {
       type: 'object',
       properties: {
         success: { type: 'boolean', example: true },
-        message: { type: 'string', example: 'Cuenta Gmail desconectada exitosamente' },
-        cuenta_eliminada: {
-          type: 'object',
-          properties: {
-            id: { type: 'number', example: 4 },
-            email_gmail: { type: 'string', example: 'usuario@gmail.com' }
-          }
-        }
+        message: { type: 'string', example: 'Cuenta Gmail desconectada exitosamente' }
       }
     }
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Token faltante o inválido',
+    type: AuthErrorResponseDto
   })
   @ApiNotFoundResponse({
     description: 'Cuenta Gmail no encontrada',
@@ -372,10 +371,112 @@ export class AuthOrchestratorController {
       throw new UnauthorizedException('Token de autorización requerido');
     }
     
-    console.log(`🔵 ORCHESTRATOR-AUTH - Desconexión de cuenta Gmail ${cuentaId} solicitada`);
+    console.log(`🔵 ORCHESTRATOR-AUTH - Desconexión cuenta Gmail ${cuentaId} solicitada`);
     return this.authService.desconectarCuentaGmail(authHeader, cuentaId);
   }
 
+  /**
+   * 🗑️ DELETE /auth/users/{id} - Eliminar usuario principal completamente
+   */
+  @Delete('users/:id')
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Eliminar usuario principal completamente',
+    description: `
+      **⚠️ OPERACIÓN DESTRUCTIVA ⚠️**
+      
+      Elimina completamente al usuario principal y TODA su data asociada:
+      - ✅ Usuario principal
+      - ✅ Todas las cuentas Gmail asociadas  
+      - ✅ Todos los emails sincronizados
+      - ✅ Todos los eventos sincronizados
+      - ✅ Todas las sesiones JWT activas
+      
+      **Esta operación NO se puede deshacer.**
+      
+      **Seguridad:** Solo el propio usuario puede eliminar su cuenta.
+      
+      **Coordina con MS-Auth** para realizar la eliminación completa.
+    `
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'ID del usuario principal a eliminar',
+    example: 'e5a3d40e-3700-4f7a-b962-e789ed794ce0'
+  })
+  @ApiOkResponse({
+    description: 'Usuario eliminado completamente con estadísticas detalladas',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean', example: true },
+        source: { type: 'string', example: 'orchestrator' },
+        message: { type: 'string', example: 'Usuario principal eliminado completamente' },
+        usuario_eliminado: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: 'e5a3d40e-3700-4f7a-b962-e789ed794ce0' },
+            email: { type: 'string', example: 'usuario@email.com' },
+            nombre: { type: 'string', example: 'Usuario Ejemplo' },
+            fecha_registro: { type: 'string', example: '2025-01-15T10:30:00Z' }
+          }
+        },
+        data_eliminada: {
+          type: 'object',
+          properties: {
+            cuentas_gmail: { type: 'number', example: 2 },
+            emails_sincronizados: { type: 'number', example: 1547 },
+            eventos_sincronizados: { type: 'number', example: 89 },
+            sesiones_activas: { type: 'number', example: 3 },
+            cuentas_gmail_eliminadas: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  email_gmail: { type: 'string' }
+                }
+              },
+              example: [
+                { id: 'cuenta-uuid-1', email_gmail: 'personal@gmail.com' },
+                { id: 'cuenta-uuid-2', email_gmail: 'trabajo@gmail.com' }
+              ]
+            }
+          }
+        },
+        eliminado_en: { type: 'string', example: '2025-09-22T15:30:00Z' }
+      }
+    }
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Token faltante o inválido',
+    type: AuthErrorResponseDto
+  })
+  @ApiForbiddenResponse({
+    description: 'Solo puedes eliminar tu propia cuenta',
+    type: AuthErrorResponseDto
+  })
+  @ApiNotFoundResponse({
+    description: 'Usuario no encontrado',
+    type: AuthErrorResponseDto
+  })
+  @ApiInternalServerErrorResponse({
+    description: 'Error interno del servidor',
+    type: AuthErrorResponseDto
+  })
+  async deleteUser(
+    @Req() req: Request,
+    @Param('id') userId: string
+  ) {
+    const authHeader = req.headers?.authorization;
+    
+    if (!authHeader) {
+      throw new UnauthorizedException('Token de autorización requerido');
+    }
+    
+    console.log(`🔵 ORCHESTRATOR-AUTH - Eliminación de usuario ${userId} solicitada`);
+    return this.authService.deleteUser(authHeader, userId);
+  }
   /**
    * 🏷️ PUT /auth/cuentas-gmail/:id/alias - Actualizar alias
    */
@@ -386,9 +487,9 @@ export class AuthOrchestratorController {
     description: 'Actualiza el alias personalizado de una cuenta Gmail. Coordina con MS-Auth.'
   })
   @ApiParam({
-    name: 'id',
+      name: 'id',
     description: 'ID de la cuenta Gmail',
-    example: '4'
+    example: 'e5a3d40e-3700-4f7a-b962-e789ed794ce0'
   })
   @ApiBody({
     schema: {
@@ -413,7 +514,7 @@ export class AuthOrchestratorController {
         cuenta_actualizada: {
           type: 'object',
           properties: {
-            id: { type: 'number', example: 4 },
+            id: { type: 'string', example: 'e5a3d40e-3700-4f7a-b962-e789ed794ce0' },
             email_gmail: { type: 'string', example: 'usuario@gmail.com' },
             alias_personalizado: { type: 'string', example: 'Gmail Trabajo' }
           }

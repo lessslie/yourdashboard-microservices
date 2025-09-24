@@ -4,8 +4,8 @@ import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 
 // 📅 Interfaces para metadata de eventos de calendar
 export interface EventMetadataDB {
-  id?: number;
-  cuenta_gmail_id: number;
+  id?: string;
+  cuenta_gmail_id: string; // ✅ YA ERA STRING
   google_event_id: string;
   summary?: string;
   location?: string;
@@ -18,7 +18,7 @@ export interface EventMetadataDB {
 }
 
 export interface EventSearchFilters {
-  cuenta_gmail_id?: number;
+  cuenta_gmail_id?: string;
   search_text?: string;
   start_date?: Date;
   end_date?: Date;
@@ -66,10 +66,10 @@ export class DatabaseService implements OnModuleDestroy {
     activeDays: number = 7, 
     limit: number = 100
   ): Promise<Array<{
-    id: number;
+    id: string;
     email_gmail: string;
     access_token: string;
-    usuario_principal_id: number;
+    usuario_principal_id: string;
   }>> {
     try {
       const query = `
@@ -216,7 +216,7 @@ export class DatabaseService implements OnModuleDestroy {
    * 📖 Obtener eventos con paginación desde BD local
    */
   async getEventsPaginated(
-    cuentaGmailId: number,
+    cuentaGmailId: string, // ✅ CAMBIO: number → string
     page: number = 1,
     limit: number = 10,
     futureOnly: boolean = false
@@ -254,7 +254,7 @@ export class DatabaseService implements OnModuleDestroy {
    * 🔍 Búsqueda avanzada de eventos en BD local
    */
   async searchEventsInDB(
-    cuentaGmailId: number,
+    cuentaGmailId: string, // ✅ CAMBIO: number → string
     filters: EventSearchFilters,
     page: number = 1,
     limit: number = 10
@@ -326,8 +326,8 @@ export class DatabaseService implements OnModuleDestroy {
    * 📅 Obtener todas las cuentas Gmail de un usuario principal
    * 🎯 Para búsqueda global de eventos
    */
-  async obtenerCuentasGmailUsuario(usuarioId: number): Promise<Array<{
-    id: number;
+  async obtenerCuentasGmailUsuario(usuarioId: string): Promise<Array<{ // ✅ CAMBIO: number → string
+    id: string;
     email_gmail: string;
     nombre_cuenta: string;
     alias_personalizado?: string;
@@ -361,7 +361,7 @@ export class DatabaseService implements OnModuleDestroy {
       `;
 
       const result = await this.query<{
-        id: number;
+        id: string;
         email_gmail: string;
         nombre_cuenta: string;
         alias_personalizado?: string;
@@ -393,7 +393,7 @@ export class DatabaseService implements OnModuleDestroy {
   /**
    * 📈 Obtener estadísticas desde BD local
    */
-  async getEventStatsFromDB(cuentaGmailId: number): Promise<{
+  async getEventStatsFromDB(cuentaGmailId: string): Promise<{ // ✅ CAMBIO: number → string
     total_events: number;
     upcoming_events: number;
     past_events: number;
@@ -433,7 +433,7 @@ export class DatabaseService implements OnModuleDestroy {
   /**
    * 🔍 Obtener último evento sincronizado
    */
-  async getLastSyncedEvent(cuentaGmailId: number): Promise<EventMetadataDB | null> {
+  async getLastSyncedEvent(cuentaGmailId: string): Promise<EventMetadataDB | null> { // ✅ CAMBIO: number → string
     const query = `
       SELECT * FROM events_sincronizados 
       WHERE cuenta_gmail_id = $1 
@@ -469,13 +469,13 @@ export class DatabaseService implements OnModuleDestroy {
   /**
    * 🔍 Obtener cuenta Gmail por ID para Calendar
    */
-  async getGmailAccountById(cuentaGmailId: number): Promise<{
-    id: number;
+  async getGmailAccountById(cuentaGmailId: string): Promise<{ // ✅ CAMBIO: number → string
+    id: string;
     email_gmail: string;
     access_token: string;
     refresh_token?: string;
     token_expira_en?: Date;
-    usuario_principal_id: number;
+    usuario_principal_id: string;
   } | null> {
     try {
       this.logger.log(`🔍 Obteniendo cuenta Gmail ID: ${cuentaGmailId}`);
@@ -506,7 +506,7 @@ export class DatabaseService implements OnModuleDestroy {
   /**
    * 🔄 Renovar Google Access Token usando Refresh Token
    */
-  async refreshGoogleToken(cuentaGmailId: number): Promise<string | null> {
+  async refreshGoogleToken(cuentaGmailId: string): Promise<string | null> { // ✅ CAMBIO: number → string
     try {
       this.logger.log(`🔄 Intentando renovar token para cuenta ${cuentaGmailId}`);
 
@@ -568,7 +568,7 @@ export class DatabaseService implements OnModuleDestroy {
   /**
    * 🔐 Obtener Access Token válido (con auto-refresh si es necesario)
    */
-  async getValidAccessToken(cuentaGmailId: number): Promise<string> {
+  async getValidAccessToken(cuentaGmailId: string): Promise<string> { // ✅ CAMBIO: number → string
     try {
       this.logger.log(`🔐 Obteniendo token válido para cuenta ${cuentaGmailId}`);
 
@@ -615,8 +615,8 @@ export class DatabaseService implements OnModuleDestroy {
   /**
    * 🔍 Obtener cuenta Gmail por User ID (para compatibilidad con CalendarService)
    */
-  async getGmailAccountByUserId(userId: number): Promise<{
-    id: number;
+  async getGmailAccountByUserId(userId: string): Promise<{ // ✅ CAMBIO: number → string
+    id: string;
     google_token: string;
     refresh_token?: string;
   } | null> {

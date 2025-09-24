@@ -60,8 +60,8 @@ export class AuthErrorResponseDto {
 }
 
 export class UserDto {
-  @ApiProperty({ example: 1 })
-  id: number;
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  id: string;
 
   @ApiProperty({ example: 'usuario@example.com' })
   email: string;
@@ -81,8 +81,8 @@ export class UserDto {
 
 // 🆕 NUEVOS DTOs PARA EL PERFIL COMPLETO
 export class UsuarioDto {
-  @ApiProperty({ example: 1 })
-  id: number;
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  id: string;
 
   @ApiProperty({ example: 'usuario@example.com' })
   email: string;
@@ -101,8 +101,8 @@ export class UsuarioDto {
 }
 
 export class CuentaGmailCompleteDto {
-  @ApiProperty({ example: 4 })
-  id: number;
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  id: string;
 
   @ApiProperty({ example: 'usuario@gmail.com' })
   email_gmail: string;
@@ -130,7 +130,7 @@ export class CuentaGmailCompleteDto {
 }
 
 export class SesionActivaDto {
-  @ApiProperty({ example: '1' })
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
   id: string;
 
   @ApiProperty({ example: '2024-01-15T10:30:00Z' })
@@ -232,8 +232,8 @@ export class AuthResponseDto {
 
 // ✅ CLASES PARA ENDPOINTS DE CUENTAS GMAIL (las que faltaban)
 export class CuentaGmailDto {
-  @ApiProperty({ example: 4 })
-  id: number;
+  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  id: string;
 
   @ApiProperty({ example: 'usuario@gmail.com' })
   email_gmail: string;
@@ -279,7 +279,7 @@ export class ProfileResponseDto {
 
   @ApiProperty()
   usuario: {
-    id: number;
+    id: string;
     email: string;
     nombre: string;
     fecha_registro: string;

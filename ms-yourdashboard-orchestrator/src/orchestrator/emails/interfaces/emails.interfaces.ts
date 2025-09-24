@@ -52,7 +52,7 @@ export interface EmailDetail extends Email {
   bodyText?: string;
   bodyHtml?: string;
   sourceAccount?: string;  // Cuenta Gmail de origen
-  sourceAccountId?: number;  // ID de la cuenta Gmail de origen
+  sourceAccountId?: string;  // ID de la cuenta Gmail de origen
 }
 
 export interface EmailStats {

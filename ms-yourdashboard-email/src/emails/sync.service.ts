@@ -19,7 +19,7 @@ export interface SyncOptions {
 }
 
 export interface SyncStats {
-  cuenta_gmail_id: number;
+  cuenta_gmail_id: string;
   emails_procesados: number;
   emails_nuevos: number;
   emails_actualizados: number;
@@ -43,7 +43,7 @@ export class SyncService {
    */
   async syncEmailsFromGmail(
     accessToken: string,
-    cuentaGmailId: number,
+    cuentaGmailId: string,
     options: SyncOptions = {}
   ): Promise<SyncStats> {
     const startTime = Date.now();
@@ -239,7 +239,7 @@ private async getGmailMessagesList(
   private async getEmailMetadata(
     gmail: gmail_v1.Gmail,
     messageId: string,
-    cuentaGmailId: number
+    cuentaGmailId: string
   ): Promise<EmailMetadataDB | null> {
     try {
       const emailDetail = await gmail.users.messages.get({
@@ -313,7 +313,7 @@ private async getGmailMessagesList(
    */
   async syncIncrementalEmails(
     accessToken: string,
-    cuentaGmailId: number,
+    cuentaGmailId: string,
     maxEmails: number = 10000
   ): Promise<SyncStats> {
     try {
@@ -346,7 +346,7 @@ private async getGmailMessagesList(
   /**
    * 📊 Obtener estadísticas de sincronización
    */
-  async getSyncStats(cuentaGmailId: number): Promise<{
+  async getSyncStats(cuentaGmailId: string): Promise<{
     total_emails_bd: number;
     ultimo_sync?: Date;
     stats_detalladas: any;

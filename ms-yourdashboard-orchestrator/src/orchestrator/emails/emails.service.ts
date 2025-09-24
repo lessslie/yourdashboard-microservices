@@ -40,7 +40,7 @@ export interface SyncResponse {
     success: boolean;
     message: string;
     stats: {
-      cuenta_gmail_id: number;
+      cuenta_gmail_id: string;
       emails_nuevos: number;
       emails_actualizados: number;
       tiempo_total_ms: number;
@@ -54,7 +54,7 @@ interface ErrorResponse {
 
 // Interface para el payload del JWT
 interface JWTPayload {
-  sub?: number;
+  sub?: string;
   email?: string;
   nombre?: string;
   iat?: number;
@@ -247,7 +247,7 @@ async saveEmailContent(
   /**
    * INVALIDAR CACHES DE EMAILS - Limpia los caches relacionados con emails
    */
-  async invalidateEmailCaches(userId: number): Promise<void> {
+  async invalidateEmailCaches(userId: string): Promise<void> {
     try {
       const cacheKeys = [
         `emails_inbox_${userId}`,
@@ -270,7 +270,7 @@ async saveEmailContent(
   /**
    * Extraer User ID del JWT token - MÉTODO PÚBLICO
    */
-public extractUserIdFromJWT(authHeader: string): number | null {
+public extractUserIdFromJWT(authHeader: string): string | null {
   try {
     const token = authHeader.replace('Bearer ', '');
     
@@ -284,7 +284,7 @@ public extractUserIdFromJWT(authHeader: string): number | null {
     // Usar la interface para tipado
     const decoded = jwt.verify(token, jwtSecret) as JWTPayload;
     
-    if (!decoded.sub || typeof decoded.sub !== 'number') {
+    if (!decoded.sub || typeof decoded.sub !== 'string') {
       this.logger.warn('Token JWT válido pero sin userId válido');
       return null;
     }
@@ -522,9 +522,9 @@ public extractUserIdFromJWT(authHeader: string): number | null {
     try {
       this.logger.log(`BÚSQUEDA GLOBAL para usuario ${userId}: "${searchTerm}"`);
 
-      const userIdNum = parseInt(userId, 10);
-      if (isNaN(userIdNum)) {
-        throw new BadRequestException(`userId debe ser un número válido: ${userId}`);
+      // ✅ VALIDACIÓN CORREGIDA - Sin casting
+      if (!userId || userId.trim() === '') {
+        throw new BadRequestException(`userId debe ser un valor válido: ${userId}`);
       }
 
       const cacheKey = this.cacheService.generateKey('global-search', userId, { 
@@ -608,9 +608,9 @@ public extractUserIdFromJWT(authHeader: string): number | null {
     try {
       this.logger.log(`INBOX UNIFICADO para usuario ${userId} - Página ${page}`);
 
-      const userIdNum = parseInt(userId, 10);
-      if (isNaN(userIdNum)) {
-        throw new BadRequestException(`userId debe ser un número válido: ${userId}`);
+      // ✅ VALIDACIÓN CORREGIDA - Sin casting
+      if (!userId || userId.trim() === '') {
+        throw new BadRequestException(`userId debe ser un valor válido: ${userId}`);
       }
 
       const cacheKey = this.cacheService.generateKey('inbox-unified', userId, { page, limit });
@@ -863,7 +863,7 @@ public extractUserIdFromJWT(authHeader: string): number | null {
   async getEmailsByTrafficLight(
     authHeader: string, 
     status: TrafficLightStatus, 
-    cuentaId?: number,
+    cuentaId?: string,
     limit: number = 10
   ): Promise<OrchestratorEmailsByTrafficLight> {
     try {
@@ -876,7 +876,7 @@ public extractUserIdFromJWT(authHeader: string): number | null {
       }
 
       // Construir parámetros de query
-      const params: { limit?: number; cuentaId?: number } = { limit };
+      const params: { limit?: number; cuentaId?: string } = { limit };
       if (cuentaId) {
         params.cuentaId = cuentaId;
       }
@@ -1018,7 +1018,7 @@ async sendEmail(
   authHeader: string,
   sendEmailData: SendEmailDto
 ): Promise<OrchestratorSendEmailResponse> {
-  let userId: number;
+  let userId: string;
 
   try {
     // 1️⃣ VALIDACIONES INICIALES
@@ -1216,7 +1216,7 @@ private parseEmailServiceError(errorData: string, statusCode: number): ParsedEma
 /**
  * LOGGING DETALLADO PARA DEBUGGING
  */
-private logSendEmailRequest(sendEmailData: SendEmailDto, userId: number): void {
+private logSendEmailRequest(sendEmailData: SendEmailDto, userId: string): void {
   const logData = {
     userId,
     from: sendEmailData.from,
@@ -1237,7 +1237,7 @@ private logSendEmailRequest(sendEmailData: SendEmailDto, userId: number): void {
 /**
  * LOGGING DETALLADO PARA RESPUESTA EXITOSA
  */
-private logSendEmailSuccess(result: SendEmailResponse, userId: number): void {
+private logSendEmailSuccess(result: SendEmailResponse, userId: string): void {
   const logData = {
     userId,
     messageId: result.messageId,
@@ -1256,7 +1256,7 @@ private logSendEmailSuccess(result: SendEmailResponse, userId: number): void {
 /**
  * VALIDAR TOKEN JWT ESPECÍFICAMENTE PARA SEND
  */
-private validateJWTForSend(authHeader: string): number {
+private validateJWTForSend(authHeader: string): string {
   if (!authHeader) {
     throw new UnauthorizedException('Authorization header requerido para enviar emails');
   }

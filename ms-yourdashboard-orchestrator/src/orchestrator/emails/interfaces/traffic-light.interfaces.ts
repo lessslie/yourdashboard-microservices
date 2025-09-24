@@ -11,8 +11,8 @@ export enum TrafficLightStatus {
 
 // Email extendido con campos del semaforo
 export interface EmailWithTrafficLight {
-  id?: number;
-  cuenta_gmail_id: number;
+  id?: string;
+  cuenta_gmail_id: string;
   gmail_message_id: string;
   asunto?: string;
   remitente_email?: string;
@@ -39,7 +39,7 @@ export interface TrafficLightStatusCount {
 
 // Estadísticas por cuenta Gmail
 export interface TrafficLightAccountStats {
-  cuenta_id: number;
+  cuenta_id: string;
   email_gmail: string;
   nombre_cuenta: string;
   estadisticas: TrafficLightStatusCount[];

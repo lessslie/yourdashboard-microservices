@@ -1,3 +1,4 @@
+//ms-yourdashboard-email/src/emails/emails.controller.ts
 import { 
   Controller, 
   Get, 
@@ -561,7 +562,7 @@ async searchAllAccountsEmails(
             isRead: { type: 'boolean', example: false },
             hasAttachments: { type: 'boolean', example: true },
             sourceAccount: { type: 'string', example: 'agata.morales92@gmail.com' },
-            sourceAccountId: { type: 'number', example: 1 }
+            sourceAccountId: { type: 'string', example: '1847a8e123456789' }
           }
         }
       },
@@ -661,7 +662,7 @@ async getCronStatus() {
         items: {
           type: 'object',
           properties: {
-            cuenta_id: { type: 'number', example: 1 },
+            cuenta_id: { type: 'string', example: '1847a8e123456789' },
             email_gmail: { type: 'string', example: 'usuario@gmail.com' },
             nombre_cuenta: { type: 'string', example: 'Juan Pérez' },
             total_sin_responder: { type: 'number', example: 25 },
@@ -722,7 +723,7 @@ async getTrafficLightDashboard(
   name: 'cuentaId', 
   required: false, 
   description: 'ID de cuenta Gmail específica (opcional)',
-  example: 1
+  example: '1847a8e123456789'
 })
 @ApiQuery({ 
   name: 'limit', 
@@ -747,7 +748,7 @@ async getTrafficLightDashboard(
         items: {
           type: 'object',
           properties: {
-            id: { type: 'number', example: 12345 },
+            id: { type: 'string', example: 12345 },
             gmail_message_id: { type: 'string', example: '1847a8e123456789' },
             asunto: { type: 'string', example: 'Proyecto urgente' },
             remitente_email: { type: 'string', example: 'cliente@empresa.com' },
@@ -783,11 +784,11 @@ async getEmailsByTrafficLight(
   }
 
   const trafficStatus = status as TrafficLightStatus;
-  const cuentaIdNum = cuentaId ? parseInt(cuentaId, 10) : undefined;
   const limitNum = limit ? parseInt(limit, 10) : 10;
 
-  if (cuentaId && isNaN(cuentaIdNum!)) {
-    throw new BadRequestException('cuentaId debe ser un número válido');
+  // 🔧 CORRECCIÓN UUID: Validación de cuentaId como string
+  if (cuentaId && (!cuentaId || cuentaId.trim() === '')) {
+    throw new BadRequestException('cuentaId debe ser un valor válido');
   }
 
   if (limit && (isNaN(limitNum) || limitNum < 1 || limitNum > 100)) {
@@ -799,7 +800,7 @@ async getEmailsByTrafficLight(
   return await this.emailsService.getEmailsByTrafficLight(
     authHeader, 
     trafficStatus, 
-    cuentaIdNum, 
+    cuentaId, // 🔧 CORRECCIÓN: pasar cuentaId directamente como string
     limitNum
   );
 }
@@ -1018,36 +1019,6 @@ async replyToEmail(
     }
   }
 })
-/**
- * 📤 POST /emails/send - Enviar email nuevo (REFACTORIZADO)
- */
-@Post('send')
-@ApiOperation({ 
-  summary: 'Enviar email nuevo',
-  description: 'Crea y envía un email completamente nuevo (no respuesta) usando Gmail API.'
-})
-@ApiBody({ description: 'Datos del email a enviar', type: SendEmailDto })
-@ApiOkResponse({ 
-  description: 'Email enviado exitosamente',
-  schema: {
-    type: 'object',
-    properties: {
-      success: { type: 'boolean', example: true },
-      messageId: { type: 'string', example: '1847a8e123456789' },
-      threadId: { type: 'string', example: '1847a8e123456789' },
-      sentAt: { type: 'string', example: '2024-01-15T10:30:00Z' },
-      fromEmail: { type: 'string', example: 'agata.backend@gmail.com' },
-      toEmails: { type: 'array', items: { type: 'string' }, example: ['cliente@empresa.com'] },
-      subject: { type: 'string', example: 'Propuesta comercial' },
-      priority: { type: 'string', enum: ['low', 'normal', 'high'], example: 'normal' },
-      hasAttachments: { type: 'boolean', example: false }
-    }
-  }
-})
-@ApiUnauthorizedResponse({ description: 'Token JWT inválido', type: EmailErrorResponseDto })
-@ApiBadRequestResponse({ description: 'Datos inválidos', type: EmailErrorResponseDto })
-@ApiForbiddenResponse({ description: 'Cuenta no autorizada', type: EmailErrorResponseDto })
-@ApiServiceUnavailableResponse({ description: 'Límite de quota excedido', type: EmailErrorResponseDto })
 async sendEmail(
   @Headers() headers: Record<string, string | undefined >,
   @Body() sendEmailData: SendEmailDto

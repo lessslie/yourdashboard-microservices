@@ -4,9 +4,9 @@ import { ApiProperty } from "@nestjs/swagger";
 export class UserDto {
   @ApiProperty({
     description: 'ID único del usuario',
-    example: 1
+    example: '123e4567-e89b-12d3-a456-426614174000' // ✅ number → string UUID
   })
-  id: number;
+  id: string; // ✅ number → string
 
   @ApiProperty({
     description: 'Email del usuario',
@@ -43,9 +43,9 @@ export class UserDto {
 export class UsuarioPrincipalResponseDto {
   @ApiProperty({
     description: 'ID único del usuario principal',
-    example: 1
+    example: '123e4567-e89b-12d3-a456-426614174000' // ✅ number → string UUID
   })
-  id: number;
+  id: string; // ✅ number → string
 
   @ApiProperty({
     description: 'Email del usuario principal',

@@ -19,9 +19,8 @@ export class TokensService {
     try {
       console.log(`🔵 MS-AUTH - Solicitando token para usuario PRINCIPAL: ${userId}`);
 
-      // Validar que userId sea un número
-      const userIdNum = parseInt(userId, 10);
-      if (isNaN(userIdNum)) {
+      // ✅ CORREGIDO: Validar que userId sea un UUID válido
+      if (!userId || userId.trim() === '') {
         throw new NotFoundException(`ID de usuario inválido: ${userId}`);
       }
 
@@ -45,7 +44,7 @@ export class TokensService {
       `;
 
       const result = await this.databaseService.query<{
-        cuenta_gmail_id: number;
+        cuenta_gmail_id: string; // ✅ CORREGIDO: number → string
         access_token: string;
         refresh_token: string;
         expires_at: Date;
@@ -53,7 +52,7 @@ export class TokensService {
         name: string;
         usuario_principal_email: string;
         usuario_principal_nombre: string;
-      }>(query, [userIdNum]);
+      }>(query, [userId]); // ✅ CORREGIDO: userIdNum → userId
       
       if (result.rows.length === 0) {
         throw new NotFoundException(`Usuario ${userId} no tiene cuentas Gmail conectadas`);
@@ -79,7 +78,7 @@ export class TokensService {
             id: userId, 
             email, 
             name,
-            cuentaGmailId: cuenta_gmail_id.toString() // 🎯 AGREGAMOS CUENTA GMAIL ID
+            cuentaGmailId: cuenta_gmail_id // ✅ CORREGIDO: .toString() eliminado
           },
           renewed: true
         };
@@ -94,7 +93,7 @@ export class TokensService {
           id: userId, 
           email, 
           name,
-          cuentaGmailId: cuenta_gmail_id.toString() // 🎯 AGREGAMOS CUENTA GMAIL ID
+          cuentaGmailId: cuenta_gmail_id // ✅ CORREGIDO: .toString() eliminado
         },
         renewed: false
       };
@@ -112,9 +111,8 @@ export class TokensService {
     try {
       console.log(`🔵 MS-AUTH - Solicitando token para cuenta Gmail: ${cuentaGmailId}`);
 
-      // Validar que cuentaGmailId sea un número
-      const cuentaIdNum = parseInt(cuentaGmailId, 10);
-      if (isNaN(cuentaIdNum)) {
+      // ✅ CORREGIDO: Validar que cuentaGmailId sea un UUID válido
+      if (!cuentaGmailId || cuentaGmailId.trim() === '') {
         throw new NotFoundException(`ID de cuenta Gmail inválido: ${cuentaGmailId}`);
       }
 
@@ -137,16 +135,16 @@ export class TokensService {
       `;
 
       const result = await this.databaseService.query<{
-        cuenta_gmail_id: number;
+        cuenta_gmail_id: string; // ✅ CORREGIDO: number → string
         access_token: string;
         refresh_token: string;
         expires_at: Date;
         email: string;
         name: string;
-        usuario_principal_id: number;
+        usuario_principal_id: string; // ✅ CORREGIDO: number → string
         usuario_principal_email: string;
         usuario_principal_nombre: string;
-      }>(query, [cuentaIdNum]);
+      }>(query, [cuentaGmailId]); // ✅ CORREGIDO: cuentaIdNum → cuentaGmailId
       
       if (result.rows.length === 0) {
         throw new NotFoundException(`Cuenta Gmail ${cuentaGmailId} no encontrada o inactiva`);
@@ -169,10 +167,10 @@ export class TokensService {
           success: true,
           accessToken: newAccessToken,
           user: { 
-            id: usuario_principal_id.toString(), // Usuario principal que posee la cuenta
+            id: usuario_principal_id, // ✅ CORREGIDO: .toString() eliminado
             email, 
             name,
-            cuentaGmailId: cuenta_gmail_id.toString()
+            cuentaGmailId: cuenta_gmail_id // ✅ CORREGIDO: .toString() eliminado
           },
           renewed: true
         };
@@ -184,10 +182,10 @@ export class TokensService {
         success: true,
         accessToken: access_token,
         user: { 
-          id: usuario_principal_id.toString(),
+          id: usuario_principal_id, // ✅ CORREGIDO: .toString() eliminado
           email, 
           name,
-          cuentaGmailId: cuenta_gmail_id.toString()
+          cuentaGmailId: cuenta_gmail_id // ✅ CORREGIDO: .toString() eliminado
         },
         renewed: false
       };

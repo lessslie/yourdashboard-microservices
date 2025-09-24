@@ -19,7 +19,7 @@ export interface SaveFullContentError {
 }
 
 export interface EmailCompleteContent {
-  emailSincronizadoId: number;
+  emailSincronizadoId: string;
   cuerpoTexto: string | null;
   cuerpoHtml: string | null;
   headersCompletos: Record<string, string>;

@@ -49,14 +49,19 @@ import {
   UsuarioAutenticado,
   JwtPayload,
   GoogleOAuthUser,
+  CodigosErrorAuth,
 } from './interfaces/auth.interfaces';
 import axios from 'axios';
+import { Logger } from '@nestjs/common';
 
 @ApiTags('Authentication')
 @Controller('auth')
+
 export class AuthController {
   
   private readonly orchestratorUrl: string;
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
@@ -176,7 +181,7 @@ async login(@Body() loginData: LoginDto): Promise<any> {
       events_count: cuenta.events_count,
     })) || [],
     sesiones_activas: result.sesiones_activas?.map((sesion) => ({
-      id: sesion.id.toString(),
+      id: sesion.id, // ✅ CORREGIDO: Ya es string, no convertir
       fecha_creacion: sesion.fecha_creacion.toISOString(),
       expira_en: sesion.expira_en.toISOString(),
       ip_origen: sesion.ip_origen,
@@ -457,7 +462,7 @@ async login(@Body() loginData: LoginDto): Promise<any> {
         throw new UnauthorizedException('Token JWT inválido');
       }
 
-      if (!verifyResult.sub || typeof verifyResult.sub !== 'number') {
+      if (!verifyResult.sub || typeof verifyResult.sub !== 'string') { // ✅ CORREGIDO: number → string
         throw new UnauthorizedException('Token JWT inválido - sub requerido');
       }
 
@@ -469,7 +474,7 @@ async login(@Body() loginData: LoginDto): Promise<any> {
       }
 
       return {
-        sub: verifyResult.sub as number,
+        sub: verifyResult.sub, // ✅ CORREGIDO: Sin cast innecesario
         email: customData.email as string,
         nombre: customData.nombre as string,
         iat: verifyResult.iat,
@@ -484,7 +489,7 @@ async login(@Body() loginData: LoginDto): Promise<any> {
 /**
  * 🔧 Redirigir a Google OAuth CON SERVICE
  */
-private redirectToGoogleOAuth(res: Response, userId: number, service: 'gmail' | 'calendar'): void {
+private redirectToGoogleOAuth(res: Response, userId: string, service: 'gmail' | 'calendar'): void {
   const authUrl = this.authService.generarUrlOAuth(userId, service);
   
   console.log(`🔗 Redirigiendo a: ${authUrl}`);
@@ -618,7 +623,7 @@ private redirectToGoogleOAuth(res: Response, userId: number, service: 'gmail' | 
     try {
       const cuenta = await this.authService.obtenerCuentaGmailPorId(
         request.user.id,
-        parseInt(cuentaId),
+        cuentaId,
       );
 
       return {
@@ -646,7 +651,7 @@ private redirectToGoogleOAuth(res: Response, userId: number, service: 'gmail' | 
   @ApiParam({
     name: 'id',
     description: 'ID de la cuenta Gmail a desconectar',
-    example: '1',
+    example: 'c7c1c4b7-04a1-4350-9c39-c1d165de88c8',
   })
   @ApiOkResponse({
     description: 'Cuenta Gmail desconectada exitosamente',
@@ -662,7 +667,7 @@ private redirectToGoogleOAuth(res: Response, userId: number, service: 'gmail' | 
     try {
       const resultado = await this.authService.desconectarCuentaGmail(
         request.user.id,
-        parseInt(cuentaId),
+        cuentaId,
       );
 
       return {
@@ -676,78 +681,200 @@ private redirectToGoogleOAuth(res: Response, userId: number, service: 'gmail' | 
     }
   }
 
-  @Put('cuentas-gmail/:id/alias')
+  /**
+   * 🗑️ DELETE /auth/users/:id - Eliminar usuario principal completamente
+   */
+  @Delete('users/:id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Actualizar alias de cuenta Gmail',
-    description: 'Actualiza el alias personalizado de una cuenta Gmail.',
+    summary: 'Eliminar usuario principal completamente',
+    description: `
+      **⚠️ OPERACIÓN DESTRUCTIVA ⚠️**
+      
+      Elimina completamente al usuario principal y TODA su data asociada:
+      - ✅ Usuario principal
+      - ✅ Todas las cuentas Gmail asociadas
+      - ✅ Todos los emails sincronizados
+      - ✅ Todos los eventos sincronizados
+      - ✅ Todas las sesiones JWT activas
+      
+      **Esta operación NO se puede deshacer.**
+      
+      **Seguridad:** Solo el propio usuario puede eliminar su cuenta.
+    `
   })
   @ApiParam({
     name: 'id',
-    description: 'ID de la cuenta Gmail',
-    example: '1',
+    description: 'ID del usuario principal a eliminar',
+    example: 'e5a3d40e-3700-4f7a-b962-e789ed794ce0'
   })
-  @ApiBody({
+  @ApiOkResponse({
+    description: 'Usuario eliminado completamente',
     schema: {
       type: 'object',
       properties: {
-        alias_personalizado: {
-          type: 'string',
-          example: 'Gmail Trabajo',
-          description: 'Nuevo alias para la cuenta Gmail',
+        success: { type: 'boolean', example: true },
+        message: { type: 'string', example: 'Usuario principal eliminado completamente' },
+        usuario_eliminado: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: 'e5a3d40e-3700-4f7a-b962-e789ed794ce0' },
+            email: { type: 'string', example: 'usuario@email.com' },
+            nombre: { type: 'string', example: 'Usuario Ejemplo' },
+            fecha_registro: { type: 'string', example: '2025-01-15T10:30:00Z' }
+          }
         },
-      },
-      required: ['alias_personalizado'],
-    },
+        data_eliminada: {
+          type: 'object',
+          properties: {
+            cuentas_gmail: { type: 'number', example: 2 },
+            emails_sincronizados: { type: 'number', example: 1547 },
+            eventos_sincronizados: { type: 'number', example: 89 },
+            sesiones_activas: { type: 'number', example: 3 },
+            cuentas_gmail_eliminadas: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  email_gmail: { type: 'string' }
+                }
+              },
+              example: [
+                { id: 'cuenta-uuid-1', email_gmail: 'personal@gmail.com' },
+                { id: 'cuenta-uuid-2', email_gmail: 'trabajo@gmail.com' }
+              ]
+            }
+          }
+        },
+        eliminado_en: { type: 'string', example: '2025-09-21T22:45:00Z' }
+      }
+    }
   })
-  @ApiOkResponse({
-    description: 'Alias actualizado exitosamente',
+  @ApiUnauthorizedResponse({
+    description: 'Token faltante, inválido o usuario no autorizado',
+    type: ErrorResponseDto
+  })
+  @ApiNotFoundResponse({
+    description: 'Usuario no encontrado',
+    type: ErrorResponseDto
   })
   @ApiBadRequestResponse({
-    description: 'Alias inválido o faltante',
-    type: ErrorResponseDto,
+    description: 'ID de usuario inválido',
+    type: ErrorResponseDto
   })
-  actualizarAliasCuenta(
+  async deleteUser(
     @Req() request: { user: UsuarioAutenticado },
-    @Param('id') cuentaId: string,
-    @Body() body: { alias_personalizado: string },
+    @Param('id') userId: string
   ) {
     try {
-      if (!body.alias_personalizado || body.alias_personalizado.trim() === '') {
-        throw new BadRequestException('alias_personalizado es requerido');
+      // 🔒 VALIDACIÓN DE SEGURIDAD: Solo el propio usuario puede eliminar su cuenta
+      if (request.user.id !== userId) {
+        throw new UnauthorizedException({
+          codigo: CodigosErrorAuth.PERMISOS_INSUFICIENTES,
+          mensaje: 'Solo puedes eliminar tu propia cuenta'
+        });
       }
 
-      console.log(
-        'Actualizando alias de cuenta ' +
-          cuentaId +
-          ' a: ' +
-          body.alias_personalizado,
-      );
-
-      return {
-        success: true,
-        message: 'Alias actualizado exitosamente',
-        cuenta_actualizada: {
-          id: parseInt(cuentaId),
-          email_gmail: 'cuenta' + cuentaId + '@gmail.com',
-          alias_personalizado: body.alias_personalizado.trim(),
-        },
-      };
+      // 🗑️ PROCEDER CON LA ELIMINACIÓN
+      this.logger.log(`🗑️ Solicitud de eliminación de usuario ${userId} por el usuario autenticado ${request.user.id}`);
+      
+      const result = await this.authService.deleteUser(userId);
+      
+      this.logger.log(`✅ Usuario ${userId} eliminado exitosamente`);
+      
+      return result;
+      
     } catch (error) {
-      console.error('Error actualizando alias:', error);
-
-      if (
-        error instanceof BadRequestException ||
-        error instanceof UnauthorizedException
-      ) {
+      this.logger.error('❌ Error eliminando usuario:', error);
+      
+      if (error instanceof UnauthorizedException || error instanceof NotFoundException) {
         throw error;
       }
-
-      throw new NotFoundException('Cuenta Gmail no encontrada');
+      
+      throw new BadRequestException({
+        codigo: CodigosErrorAuth.GOOGLE_OAUTH_ERROR,
+        mensaje: 'Error interno eliminando usuario'
+      });
     }
   }
 
+ @Put('cuentas-gmail/:id/alias')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth('JWT-auth')
+@ApiOperation({
+  summary: 'Actualizar alias de cuenta Gmail',
+  description: 'Actualiza el alias personalizado de una cuenta Gmail.',
+})
+@ApiParam({
+  name: 'id',
+  description: 'ID de la cuenta Gmail',
+  example: '6627433a-870c-49eb-8645-9c9569de825d',
+})
+@ApiBody({
+  schema: {
+    type: 'object',
+    properties: {
+      alias_personalizado: {
+        type: 'string',
+        example: 'Gmail Trabajo',
+        description: 'Nuevo alias para la cuenta Gmail',
+      },
+    },
+    required: ['alias_personalizado'],
+  },
+})
+@ApiOkResponse({
+  description: 'Alias actualizado exitosamente',
+})
+@ApiBadRequestResponse({
+  description: 'Alias inválido o faltante',
+  type: ErrorResponseDto,
+})
+async actualizarAliasCuenta(
+  @Req() request: { user: UsuarioAutenticado },
+  @Param('id') cuentaId: string,
+  @Body() body: { alias_personalizado: string },
+) {
+  try {
+    // 1️⃣ Validar datos de entrada
+    if (!body.alias_personalizado || body.alias_personalizado.trim() === '') {
+      throw new BadRequestException('alias_personalizado es requerido');
+    }
+
+    const aliasLimpio = body.alias_personalizado.trim();
+    
+    // 2️⃣ Validar longitud del alias
+    if (aliasLimpio.length > 100) {
+      throw new BadRequestException('El alias no puede exceder 100 caracteres');
+    }
+
+    console.log(`🔄 Actualizando alias de cuenta ${cuentaId} a: "${aliasLimpio}"`);
+
+    // 3️⃣ ✅ LLAMAR AL SERVICE REAL (en lugar de retornar datos fake)
+    const resultado = await this.authService.actualizarAliasCuentaGmail(
+      request.user.id,
+      cuentaId,
+      aliasLimpio
+    );
+
+    return resultado;
+
+  } catch (error) {
+    console.error('❌ Error actualizando alias:', error);
+
+    if (
+      error instanceof BadRequestException ||
+      error instanceof NotFoundException ||
+      error instanceof UnauthorizedException
+    ) {
+      throw error;
+    }
+
+    throw new NotFoundException('Cuenta Gmail no encontrada');
+  }
+}
   // ================================
   // ENDPOINTS DE INFORMACIÓN
   // ================================
@@ -847,7 +974,7 @@ private redirectToGoogleOAuth(res: Response, userId: number, service: 'gmail' | 
   /**
    * 🔧 Parsear state (userId:service)
    */
-  private parseState(state?: string): { userId: number; service: 'gmail' | 'calendar' } {
+  private parseState(state?: string): { userId: string; service: 'gmail' | 'calendar' } {
     if (!state) {
       throw new Error('Estado inválido - Usuario y servicio no identificados');
     }
@@ -856,33 +983,27 @@ private redirectToGoogleOAuth(res: Response, userId: number, service: 'gmail' | 
     
     if (parts.length !== 2) {
       // Retrocompatibilidad: si no hay ":", asumir que es solo userId + gmail
-      const userId = parseInt(state, 10);
-      if (isNaN(userId)) {
+      const userId = state;
+      if (!userId || userId.trim() === '') {
         throw new Error('Estado inválido - formato incorrecto');
       }
-      console.log(`🔄 Retrocompatibilidad: userId ${userId}, asumiendo gmail`);
+      console.log(`📄 Retrocompatibilidad: userId ${userId}, asumiendo gmail`);
       return { userId, service: 'gmail' };
     }
 
     const [userIdStr, service] = parts;
-    const userId = parseInt(userIdStr, 10);
-
-    if (isNaN(userId)) {
-      throw new Error('Estado inválido - userId debe ser numérico');
+    const userId = userIdStr; // ✅ CORREGIDO: Ya es string UUID
+    if (!userId || userId.trim() === '') {
+      throw new Error('Estado inválido - userId vacío');
     }
-
-    if (!['gmail', 'calendar'].includes(service)) {
-      throw new Error(`Estado inválido - servicio "${service}" no soportado`);
-    }
-
     return { userId, service: service as 'gmail' | 'calendar' };
   }
 private async handleGmailCallback(
   googleUser: GoogleOAuthUser,
-  userId: number,
+  userId: string,
   res: Response
 ): Promise<void> {
-  console.log(`📧 Procesando conexión Gmail para usuario ${userId}`);
+  console.log(`🔧 Procesando conexión Gmail para usuario ${userId}`);
   
   // Usar el método existente
   await this.authService.manejarCallbackGoogle(googleUser, userId);
@@ -895,7 +1016,7 @@ private async handleGmailCallback(
   );
   redirectUrl.pathname = '/dashboard/email';
   redirectUrl.searchParams.set('success', 'true');
-  redirectUrl.searchParams.set('refresh', 'profile'); // ← AGREGAR
+  redirectUrl.searchParams.set('refresh', 'profile');
   redirectUrl.searchParams.set('message', `Gmail ${googleUser.email} conectado exitosamente`);
 
   console.log(`✅ Gmail conectado, redirigiendo: ${redirectUrl.toString()}`);
@@ -903,7 +1024,7 @@ private async handleGmailCallback(
 }
 
 // ✨ NUEVO MÉTODO
-private async invalidateOrchestratorCache(userId: number): Promise<void> {
+private async invalidateOrchestratorCache(userId: string): Promise<void> {
   try {
     // Invalidar cache de perfil en el Orchestrator
     await axios.post(`${this.orchestratorUrl}/cache/invalidate`, {
@@ -923,7 +1044,7 @@ private async invalidateOrchestratorCache(userId: number): Promise<void> {
    */
 private async handleCalendarCallback(
   googleUser: GoogleOAuthUser,
-  userId: number,
+  userId: string,
   res: Response
 ): Promise<void> {
   console.log(`📅 Procesando conexión Calendar para usuario ${userId}`);

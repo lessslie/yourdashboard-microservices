@@ -564,7 +564,7 @@ export class CalendarOrchestratorService {
       // El aclRuleId se forma como "user:email" para usuarios normales
       const aclRuleId = `user:${userEmail}`;
       
-      const response: AxiosResponse<CalendarApiResponse> = await axios.delete(
+      await axios.delete(
         `${this.msCalendarUrl}/calendar/share/${encodeURIComponent(aclRuleId)}`,
         {
           headers: {

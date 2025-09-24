@@ -139,7 +139,7 @@ export class SearchService {
       });
 
       if (response.data?.usuario?.id) {
-        return response.data.usuario.id.toString();
+        return response.data.usuario.id;
       }
 
       throw new Error('No se pudo obtener el userId del token');
