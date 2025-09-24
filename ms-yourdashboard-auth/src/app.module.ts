@@ -4,6 +4,7 @@ import { AuthModule } from './auth/auth.module';
 import { TokensModule } from './tokens/tokens.module';
 import { DatabaseModule } from './database/database.module';
 
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -12,6 +13,7 @@ import { DatabaseModule } from './database/database.module';
     DatabaseModule,
     AuthModule,
     TokensModule,
+    
   ],
   controllers: [],
   providers: [],

@@ -1,0 +1,198 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model audit_eliminaciones {
+  tabla             String?   @db.VarChar(50)
+  registro_id       Int?
+  datos_eliminados  Json?
+  usuario_bd        String?   @db.VarChar(50)
+  fecha_eliminacion DateTime? @default(now()) @db.Timestamp(6)
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+}
+
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model conversations {
+  id                  String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phone               String             @db.VarChar(20)
+  name                String?            @db.VarChar(100)
+  last_message        String?
+  last_message_date   DateTime           @db.Timestamp(6)
+  created_at          DateTime?          @default(now()) @db.Timestamp(6)
+  whatsapp_account_id String?            @db.Uuid
+  whatsapp_accounts   whatsapp_accounts? @relation(fields: [whatsapp_account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_conversations_whatsapp_account")
+  messages            messages[]
+
+  @@index([last_message_date(sort: Desc)], map: "idx_conversations_last_message_date")
+  @@index([phone], map: "idx_conversations_phone")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model cuentas_gmail_asociadas {
+  email_gmail              String                 @db.VarChar(255)
+  nombre_cuenta            String                 @db.VarChar(255)
+  google_id                String                 @unique @db.VarChar(255)
+  access_token             String?
+  refresh_token            String?
+  token_expira_en          DateTime?              @db.Timestamp(6)
+  fecha_conexion           DateTime?              @default(now()) @db.Timestamp(6)
+  ultima_sincronizacion    DateTime?              @db.Timestamp(6)
+  esta_activa              Boolean?               @default(true)
+  alias_personalizado      String?                @db.VarChar(100)
+  consecutive_zero_syncs   Int?                   @default(0)
+  backfill_checkpoint_date DateTime?              @db.Date
+  backfill_page_token      String?                @db.VarChar(255)
+  id                       String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuario_principal_id     String?                @db.Uuid
+  usuarios_principales     usuarios_principales?  @relation(fields: [usuario_principal_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_cuentas_gmail_usuario_principal")
+  emails_completos         emails_completos[]
+  emails_sincronizados     emails_sincronizados[]
+  events_sincronizados     events_sincronizados[]
+
+  @@unique([usuario_principal_id, email_gmail], map: "cuentas_gmail_asociadas_usuario_email_unique")
+  @@index([esta_activa], map: "idx_cuentas_gmail_activa")
+  @@index([email_gmail], map: "idx_cuentas_gmail_email")
+  @@index([google_id], map: "idx_cuentas_gmail_google_id")
+}
+
+model emails_completos {
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cuerpo_texto            String?
+  cuerpo_html             String?
+  fecha_guardado          DateTime?                @default(now()) @db.Timestamp(6)
+  gmail_message_id        String                   @db.VarChar(255)
+  headers_completos       Json?
+  adjuntos                Json?
+  thread_id               String?                  @db.VarChar(255)
+  labels_completos        Json?
+  email_sincronizado_id   String?                  @db.Uuid
+  cuenta_gmail_id         String?                  @db.Uuid
+  usuario_principal_id    String?                  @db.Uuid
+  cuentas_gmail_asociadas cuentas_gmail_asociadas? @relation(fields: [cuenta_gmail_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  usuarios_principales    usuarios_principales?    @relation(fields: [usuario_principal_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  emails_sincronizados    emails_sincronizados?    @relation(fields: [email_sincronizado_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_emails_completos_sincronizados")
+
+  @@index([gmail_message_id], map: "idx_emails_completos_gmail_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model emails_sincronizados {
+  gmail_message_id        String                   @db.VarChar(255)
+  asunto                  String?
+  remitente_email         String?
+  remitente_nombre        String?
+  destinatario_email      String?
+  fecha_recibido          DateTime?                @db.Timestamp(6)
+  esta_leido              Boolean?                 @default(false)
+  tiene_adjuntos          Boolean?                 @default(false)
+  etiquetas_gmail         String[]
+  tamano_bytes            Int?
+  fecha_sincronizado      DateTime?                @default(now()) @db.Timestamp(6)
+  replied_at              DateTime?                @db.Timestamp(6)
+  days_without_reply      Int?                     @default(0)
+  traffic_light_status    String?                  @default("green") @db.VarChar(10)
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cuenta_gmail_id         String?                  @db.Uuid
+  emails_completos        emails_completos[]
+  cuentas_gmail_asociadas cuentas_gmail_asociadas? @relation(fields: [cuenta_gmail_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_emails_cuenta_gmail")
+
+  @@unique([cuenta_gmail_id, gmail_message_id], map: "emails_sincronizados_cuenta_gmail_message_unique")
+  @@index([esta_leido], map: "idx_emails_esta_leido")
+  @@index([fecha_recibido(sort: Desc)], map: "idx_emails_fecha_recibido")
+  @@index([gmail_message_id], map: "idx_emails_gmail_message_id")
+  @@index([remitente_email], map: "idx_emails_remitente")
+  @@index([traffic_light_status, days_without_reply], map: "idx_emails_traffic_light")
+}
+
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model events_sincronizados {
+  google_event_id         String                   @db.VarChar(255)
+  summary                 String?
+  location                String?
+  description             String?
+  start_time              DateTime?                @db.Timestamptz(6)
+  end_time                DateTime?                @db.Timestamptz(6)
+  attendees               String[]
+  fecha_sincronizado      DateTime?                @default(now()) @db.Timestamptz(6)
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cuenta_gmail_id         String?                  @db.Uuid
+  cuentas_gmail_asociadas cuentas_gmail_asociadas? @relation(fields: [cuenta_gmail_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([cuenta_gmail_id, google_event_id], map: "events_sincronizados_cuenta_gmail_google_event_unique")
+  @@index([google_event_id], map: "idx_events_google_id")
+  @@index([start_time], map: "idx_events_start_time")
+  @@index([fecha_sincronizado], map: "idx_events_sync_date")
+}
+
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model messages {
+  id                  String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversation_id     String             @db.Uuid
+  phone               String             @db.VarChar(20)
+  message             String
+  timestamp           DateTime           @db.Timestamp(6)
+  created_at          DateTime?          @default(now()) @db.Timestamp(6)
+  whatsapp_account_id String?            @db.Uuid
+  conversations       conversations      @relation(fields: [conversation_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_messages_conversation")
+  whatsapp_accounts   whatsapp_accounts? @relation(fields: [whatsapp_account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_messages_whatsapp_account")
+
+  @@index([conversation_id], map: "idx_messages_conversation")
+  @@index([timestamp(sort: Desc)], map: "idx_messages_timestamp")
+}
+
+model sesiones_jwt {
+  jwt_token            String
+  expira_en            DateTime              @db.Timestamp(6)
+  fecha_creacion       DateTime?             @default(now()) @db.Timestamp(6)
+  esta_activa          Boolean?              @default(true)
+  ip_origen            String?               @db.Inet
+  user_agent           String?
+  id                   String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuario_principal_id String?               @db.Uuid
+  usuarios_principales usuarios_principales? @relation(fields: [usuario_principal_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_sesiones_usuario_principal")
+
+  @@index([esta_activa], map: "idx_sesiones_activa")
+  @@index([expira_en], map: "idx_sesiones_expira_en")
+  @@index([jwt_token], map: "idx_sesiones_jwt_token")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model usuarios_principales {
+  email                   String                    @unique @db.VarChar(255)
+  password_hash           String
+  nombre                  String                    @db.VarChar(255)
+  fecha_registro          DateTime?                 @default(now()) @db.Timestamp(6)
+  ultima_actualizacion    DateTime?                 @default(now()) @db.Timestamp(6)
+  estado                  String?                   @default("activo") @db.VarChar(20)
+  email_verificado        Boolean?                  @default(false)
+  id                      String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cuentas_gmail_asociadas cuentas_gmail_asociadas[]
+  emails_completos        emails_completos[]
+  sesiones_jwt            sesiones_jwt[]
+  whatsapp_accounts       whatsapp_accounts[]
+
+  @@index([email], map: "idx_usuarios_principales_email")
+  @@index([estado], map: "idx_usuarios_principales_estado")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model whatsapp_accounts {
+  phone                String                @db.VarChar(50)
+  nombre_cuenta        String                @db.VarChar(255)
+  token                String
+  alias_personalizado  String?               @db.VarChar(255)
+  phone_number_id      String                @unique @db.VarChar(255)
+  fecha_creado         DateTime?             @default(now()) @db.Timestamp(6)
+  estado               String?               @default("activo") @db.VarChar(20)
+  id                   String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuario_principal_id String?               @db.Uuid
+  conversations        conversations[]
+  messages             messages[]
+  usuarios_principales usuarios_principales? @relation(fields: [usuario_principal_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_whatsapp_usuario")
+}

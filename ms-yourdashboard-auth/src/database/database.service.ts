@@ -7,7 +7,6 @@ import {
 
   CuentaGmailAsociada,
   EmailSincronizado,
-  SesionJwt,
   DatabaseQueryResult,
   GoogleOAuthData,
   RegistroUsuarioDto,
@@ -17,13 +16,21 @@ import {
   // UserTokens,
 
 } from '../auth/interfaces/auth.interfaces';
+import { UserRepository } from './repositories/user.repository';
+import { SessionRepository } from './repositories/session.repository';
+import { PrismaService } from './prisma.service';
+import type { sesiones_jwt, usuarios_principales } from 'generated/prisma';
 
 @Injectable()
 export class DatabaseService implements OnModuleDestroy {
   private readonly logger = new Logger(DatabaseService.name);
   private readonly pool: Pool;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(private readonly configService: ConfigService,
+    private readonly userRepository: UserRepository,
+    private readonly sessionRepository: SessionRepository,
+    private readonly prisma: PrismaService
+  ) {
     this.pool = new Pool({
       host: this.configService.get<string>('DB_HOST'),
       port: this.configService.get<number>('DB_PORT'),
@@ -73,102 +80,137 @@ export class DatabaseService implements OnModuleDestroy {
   // 👤 USUARIOS PRINCIPALES
   // ================================
 
-  async crearUsuarioPrincipal(userData: RegistroUsuarioDto & { password_hash: string }): Promise<UsuarioPrincipal> {
-    const query = `
-      INSERT INTO usuarios_principales (email, password_hash, nombre, email_verificado)
-      VALUES ($1, $2, $3, $4)
-      RETURNING *
-    `;
+  // async crearUsuarioPrincipal(userData: RegistroUsuarioDto & { password_hash: string }): Promise<UsuarioPrincipal> {
+  //   const query = `
+  //     INSERT INTO usuarios_principales (email, password_hash, nombre, email_verificado)
+  //     VALUES ($1, $2, $3, $4)
+  //     RETURNING *
+  //   `;
     
-    const result = await this.query<UsuarioPrincipal>(query, [
-      userData.email,
-      userData.password_hash,
-      userData.nombre,
-      false // Email no verificado por defecto
-    ]);
+  //   const result = await this.query<UsuarioPrincipal>(query, [
+  //     userData.email,
+  //     userData.password_hash,
+  //     userData.nombre,
+  //     false // Email no verificado por defecto
+  //   ]);
 
-    this.logger.log(`✅ Usuario principal creado: ${userData.email}`);
-    return result.rows[0];
-  }
+  //   this.logger.log(`✅ Usuario principal creado: ${userData.email}`);
+  //   return result.rows[0];
+  // }
 
-  async buscarUsuarioPorEmail(email: string): Promise<UsuarioPrincipal | null> {
-    const query = `SELECT * FROM usuarios_principales WHERE email = $1 AND estado = 'activo'`;
-    const result = await this.query<UsuarioPrincipal>(query, [email]);
-    return result.rows[0] || null;
-  }
+  // async buscarUsuarioPorEmail(email: string): Promise<UsuarioPrincipal | null> {
+  //   const query = `SELECT * FROM usuarios_principales WHERE email = $1 AND estado = 'activo'`;
+  //   const result = await this.query<UsuarioPrincipal>(query, [email]);
+  //   return result.rows[0] || null;
+  // }
 
-  async buscarUsuarioPorId(id: string): Promise<UsuarioPrincipal | null> {
-    const query = `SELECT * FROM usuarios_principales WHERE id = $1 AND estado = 'activo'`;
-    const result = await this.query<UsuarioPrincipal>(query, [id]);
-    return result.rows[0] || null;
-  }
+  // async buscarUsuarioPorId(id: string): Promise<UsuarioPrincipal | null> {
+  //   const query = `SELECT * FROM usuarios_principales WHERE id = $1 AND estado = 'activo'`;
+  //   const result = await this.query<UsuarioPrincipal>(query, [id]);
+  //   return result.rows[0] || null;
+  // }
 
-  async actualizarUltimaActividad(userId: string): Promise<void> {
-    const query = `
-      UPDATE usuarios_principales 
-      SET ultima_actualizacion = NOW() 
-      WHERE id = $1
-    `;
-    await this.query(query, [userId]);
-  }
+  // async actualizarUltimaActividad(userId: string): Promise<void> {
+  //   const query = `
+  //     UPDATE usuarios_principales 
+  //     SET ultima_actualizacion = NOW() 
+  //     WHERE id = $1
+  //   `;
+  //   await this.query(query, [userId]);
+  // }
+// 👤 USUARIOS PRINCIPALES - PRISMA
 
+
+async crearUsuarioPrincipal(userData: RegistroUsuarioDto & { password_hash: string }): Promise<usuarios_principales> {
+  const usuario = await this.userRepository.create(userData);
+  this.logger.log(`✅ Usuario principal creado: ${userData.email}`);
+  return usuario;
+}
+
+async buscarUsuarioPorEmail(email: string): Promise<usuarios_principales | null> {
+  return this.userRepository.findByEmail(email);
+}
+
+async buscarUsuarioPorId(id: string): Promise<usuarios_principales | null> {
+  return this.userRepository.findById(id);
+}
+
+async actualizarUltimaActividad(userId: string): Promise<void> {
+  await this.userRepository.updateLastActivity(userId);
+}
   // ================================
   // 🔐 SESIONES JWT
   // ================================
 
-  async crearSesion(sessionData: CrearSesionDto & { jwt_token: string }): Promise<SesionJwt> {
-    const horasVida = sessionData.duracion_horas || 24;
-    const query = `
-      INSERT INTO sesiones_jwt (
-        usuario_principal_id, jwt_token, expira_en, 
-        ip_origen, user_agent, esta_activa
-      )
-      VALUES ($1, $2, NOW() + INTERVAL '${horasVida} hours', $3, $4, TRUE)
-      RETURNING *
-    `;
+  // async crearSesion(sessionData: CrearSesionDto & { jwt_token: string }): Promise<SesionJwt> {
+  //   const horasVida = sessionData.duracion_horas || 24;
+  //   const query = `
+  //     INSERT INTO sesiones_jwt (
+  //       usuario_principal_id, jwt_token, expira_en, 
+  //       ip_origen, user_agent, esta_activa
+  //     )
+  //     VALUES ($1, $2, NOW() + INTERVAL '${horasVida} hours', $3, $4, TRUE)
+  //     RETURNING *
+  //   `;
     
-    const result = await this.query<SesionJwt>(query, [
-      sessionData.usuario_principal_id,
-      sessionData.jwt_token,
-      sessionData.ip_origen || null,
-      sessionData.user_agent || null
-    ]);
+  //   const result = await this.query<SesionJwt>(query, [
+  //     sessionData.usuario_principal_id,
+  //     sessionData.jwt_token,
+  //     sessionData.ip_origen || null,
+  //     sessionData.user_agent || null
+  //   ]);
 
-    this.logger.log(`🔐 Sesión JWT creada para usuario ${sessionData.usuario_principal_id}`);
-    return result.rows[0];
-  }
+  //   this.logger.log(`🔐 Sesión JWT creada para usuario ${sessionData.usuario_principal_id}`);
+  //   return result.rows[0];
+  // }
 
-  async validarSesion(jwtToken: string): Promise<SesionJwt | null> {
-    const query = `
-      SELECT * FROM sesiones_jwt 
-      WHERE jwt_token = $1 
-      AND esta_activa = TRUE 
-      AND expira_en > NOW()
-    `;
-    const result = await this.query<SesionJwt>(query, [jwtToken]);
-    return result.rows[0] || null;
-  }
+  // async validarSesion(jwtToken: string): Promise<SesionJwt | null> {
+  //   const query = `
+  //     SELECT * FROM sesiones_jwt 
+  //     WHERE jwt_token = $1 
+  //     AND esta_activa = TRUE 
+  //     AND expira_en > NOW()
+  //   `;
+  //   const result = await this.query<SesionJwt>(query, [jwtToken]);
+  //   return result.rows[0] || null;
+  // }
 
-  async invalidarSesion(jwtToken: string): Promise<void> {
-    const query = `
-      UPDATE sesiones_jwt 
-      SET esta_activa = FALSE 
-      WHERE jwt_token = $1
-    `;
-    await this.query(query, [jwtToken]);
-    this.logger.log(`🚪 Sesión invalidada`);
-  }
+  // async invalidarSesion(jwtToken: string): Promise<void> {
+  //   const query = `
+  //     UPDATE sesiones_jwt 
+  //     SET esta_activa = FALSE 
+  //     WHERE jwt_token = $1
+  //   `;
+  //   await this.query(query, [jwtToken]);
+  //   this.logger.log(`🚪 Sesión invalidada`);
+  // }
 
-  async limpiarSesionesExpiradas(): Promise<number> {
-    const query = `
-      DELETE FROM sesiones_jwt 
-      WHERE expira_en < NOW() OR esta_activa = FALSE
-    `;
-    const result = await this.query(query);
-    this.logger.log(`🧹 ${result.rowCount} sesiones expiradas eliminadas`);
-    return result.rowCount;
-  }
+  // async limpiarSesionesExpiradas(): Promise<number> {
+  //   const query = `
+  //     DELETE FROM sesiones_jwt 
+  //     WHERE expira_en < NOW() OR esta_activa = FALSE
+  //   `;
+  //   const result = await this.query(query);
+  //   this.logger.log(`🧹 ${result.rowCount} sesiones expiradas eliminadas`);
+  //   return result.rowCount;
+  // }
+// 🔐 SESIONES JWT - PRISMA
 
+async crearSesion(sessionData: CrearSesionDto & { jwt_token: string }): Promise<sesiones_jwt> {
+  return this.sessionRepository.create(sessionData);
+}
+
+async validarSesion(jwtToken: string): Promise<sesiones_jwt | null> {
+  return this.sessionRepository.findValidSession(jwtToken);
+}
+
+async invalidarSesion(jwtToken: string): Promise<void> {
+  await this.sessionRepository.invalidate(jwtToken);
+}
+
+async limpiarSesionesExpiradas(): Promise<number> {
+  return this.sessionRepository.cleanExpiredSessions();
+}
   // ================================
   // 📧 CUENTAS GMAIL ASOCIADAS
   // ================================
@@ -248,11 +290,6 @@ export class DatabaseService implements OnModuleDestroy {
       throw error;
     }
   }
-
-
-// ms-yourdashboard-auth/src/database/database.service.ts
-// ✅ MÉTODO CORREGIDO - obtenerCuentasGmailUsuario()
-
 async obtenerCuentasGmailUsuario(usuarioId: string): Promise<CuentaGmailResponse[]> {
   const query = `
     SELECT 

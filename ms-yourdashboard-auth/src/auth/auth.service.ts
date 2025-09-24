@@ -56,7 +56,7 @@ export class AuthService {
       });
 
       // 4️⃣ Generar JWT
-      const token = this.generarJWT(nuevoUsuario);
+      const token = this.generarJWT(nuevoUsuario as UsuarioPrincipal);
 
       // 5️⃣ Crear sesión JWT
       const sesion = await this.databaseService.crearSesion({
@@ -73,9 +73,9 @@ export class AuthService {
           id: nuevoUsuario.id,
           email: nuevoUsuario.email,
           nombre: nuevoUsuario.nombre,
-          fecha_registro: nuevoUsuario.fecha_registro,
-          estado: nuevoUsuario.estado,
-          email_verificado: nuevoUsuario.email_verificado
+          fecha_registro: nuevoUsuario.fecha_registro ?? new Date(),
+          estado: nuevoUsuario.estado ?? 'activo',
+          email_verificado: nuevoUsuario.email_verificado ?? false
         },
         token,
         sesion_id: sesion.id
@@ -142,7 +142,7 @@ export class AuthService {
       }
 
       // 4️⃣ Generar JWT
-      const token = this.generarJWT(usuario);
+      const token = this.generarJWT(usuario as UsuarioPrincipal);
 
       // 5️⃣ Crear nueva sesión
       const sesion = await this.databaseService.crearSesion({
@@ -169,9 +169,9 @@ export class AuthService {
           id: usuario.id,
           email: usuario.email,
           nombre: usuario.nombre,
-          fecha_registro: usuario.fecha_registro,
+          fecha_registro: usuario.fecha_registro ?? new Date(),
           estado: usuario.estado,
-          email_verificado: usuario.email_verificado
+          email_verificado: usuario.email_verificado ?? false
         },
         token,
         sesion_id: sesion.id,
@@ -242,9 +242,9 @@ export class AuthService {
           id: usuario.id,
           email: usuario.email,
           nombre: usuario.nombre,
-          fecha_registro: usuario.fecha_registro,
-          estado: usuario.estado,
-          email_verificado: usuario.email_verificado
+          fecha_registro: usuario.fecha_registro ?? new Date(),
+          estado: usuario.estado ?? 'activo',
+          email_verificado: usuario.email_verificado ?? false
         },
         cuentas_gmail: cuentasGmail.map(cuenta => ({
           ...cuenta,
@@ -735,7 +735,7 @@ async deleteUser(userId: string) {
         this.logger.warn(`⚠️ Usuario no encontrado: ${usuarioId}`);
       }
 
-      return usuario;
+      return usuario as UsuarioPrincipal;
 
     } catch (error) {
       console.log(error);
