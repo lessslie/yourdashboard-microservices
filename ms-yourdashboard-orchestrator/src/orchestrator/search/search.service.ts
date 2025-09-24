@@ -144,6 +144,7 @@ export class SearchService {
 
       throw new Error('No se pudo obtener el userId del token');
     } catch (error) {
+      console.log('Error validando token en MS Auth:', error);
       throw new HttpException('Token inválido o expirado', HttpStatus.UNAUTHORIZED);
     }
   }
@@ -158,6 +159,7 @@ export class SearchService {
       const response: AxiosResponse<EmailSearchResponse> = await axios.get(url, { params });
       return response.data;
     } catch (error) {
+      console.log('Error buscando en emails:', error);
       return null;
     }
   }
@@ -172,6 +174,7 @@ export class SearchService {
       const response: AxiosResponse<CalendarSearchResponse> = await axios.get(url, { params });
       return response.data;
     } catch (error) {
+      console.log('Error buscando en calendar:', error);
       return null;
     }
   }
@@ -214,6 +217,7 @@ export class SearchService {
         accountsSearched: results.map(r => r.sourceAccount)
       };
     } catch (error) {
+      console.log('Error buscando en whatsapp:', error);
       return null;
     }
   }
