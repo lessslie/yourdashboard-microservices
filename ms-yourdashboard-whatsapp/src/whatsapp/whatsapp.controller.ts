@@ -205,45 +205,6 @@ export class WebhookController {
     }
   }
 
-  @Post('/cuentas/vincular')
-  async vincularCuenta(
-    @Body() body: Partial<CreateAccountDTO>,
-    @Res() res: Response,
-  ) {
-    try {
-      if (!body.usuario_principal_id || !body.phone || !body.phone_number_id) {
-        return res.status(400).json({
-          error:
-            'Faltan parámetros obligatorios: usuario_principal_id, phone, phone_number_id',
-        });
-      }
-
-      let cuenta = await this.whatsappAccountsService.findByPhoneNumberId(
-        body.phone_number_id,
-      );
-
-      if (!cuenta) {
-        cuenta = await this.whatsappAccountsService.createAccount({
-          usuario_principal_id: body.usuario_principal_id,
-          phone: body.phone,
-          nombre_cuenta: body.nombre_cuenta || `Cuenta ${body.phone}`,
-          token: body.token || process.env.WHATSAPP_TOKEN || '',
-          alias_personalizado: body.alias_personalizado || null,
-          phone_number_id: body.phone_number_id,
-        });
-      } else {
-        cuenta = await this.whatsappAccountsService.updateAccount(cuenta.id, {
-          usuario_principal_id: body.usuario_principal_id,
-        });
-      }
-
-      return res.status(201).json(cuenta);
-    } catch (error) {
-      console.error('Error vinculando cuenta:', error);
-      return res.status(500).json({ error: 'No se pudo vincular la cuenta' });
-    }
-  }
-
   @Post('/cuentas/vincular-por-numero')
   async vincularPorNumero(
     @Body()
