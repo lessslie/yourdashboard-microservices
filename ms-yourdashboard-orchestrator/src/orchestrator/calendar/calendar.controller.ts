@@ -97,8 +97,8 @@ export class CalendarOrchestratorController {
       throw new BadRequestException('timeMin es requerido');
     }
 
-    const pageNum = page ? parseInt(page, 10) : 1;
-    const limitNum = limit ? parseInt(limit, 10) : 10;
+  const pageNum = page ? Math.max(1, parseInt(page, 10) || 1) : 1;
+const limitNum = limit ? Math.max(1, Math.min(50, parseInt(limit, 10) || 10)) : 10;
 
     try {
       // ✅ TIPADO CORRECTO: resultado del service

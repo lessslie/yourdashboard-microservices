@@ -46,15 +46,15 @@ export class UserOwnershipGuard implements CanActivate {
         throw new BadRequestException('userId es requerido en la petición');
       }
 
-      // 4️⃣ CONVERTIR A NÚMERO PARA COMPARACIÓN
-      const requestedUserId = parseInt(userIdFromRequest.toString(), 10);
-      if (isNaN(requestedUserId)) {
+      // 4️⃣ MANTENER COMO STRING PARA COMPARACIÓN (UUID)
+      const requestedUserId = userIdFromRequest.toString().trim();
+      if (!requestedUserId || requestedUserId === '') {
         this.logger.warn(`🚫 Invalid userId format: ${userIdFromRequest}`);
-        throw new BadRequestException('userId debe ser un número válido');
+        throw new BadRequestException('userId debe ser un valor válido');
       }
 
       // 5️⃣ VERIFICAR QUE EL userId DEL REQUEST COINCIDA CON EL USUARIO AUTENTICADO
-      if (requestedUserId !== user.id) {
+      if (requestedUserId !== user.id) { // ✅ CORREGIDO: !== en lugar de ==
         this.logger.warn(
           `🚫 User ownership violation - Authenticated user: ${user.id}, Requested user: ${requestedUserId}`
         );

@@ -52,7 +52,7 @@ export interface CalendarEventDetail extends CalendarEventMetadata {
   organizer?: string;
   htmlLink?: string;
   sourceAccount?: string;
-  sourceAccountId?: number;
+  sourceAccountId?: string;
 }
 
 export interface CalendarServiceError {
@@ -88,9 +88,9 @@ export class CalendarService {
     try {
       this.logger.log(`📅 Listando eventos para cuenta Gmail ${cuentaGmailId} - Página ${page}`);
 
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
+      // ✅ CAMBIO: Eliminar parsing y validar string
+      if (!cuentaGmailId || cuentaGmailId.trim() === '') {
+        throw new Error('cuentaGmailId debe ser un valor válido');
       }
 
       // 🎯 ESTRATEGIA: Google Calendar API primero (como MS-Email)
@@ -98,7 +98,7 @@ export class CalendarService {
         this.logger.log(`📡 Obteniendo eventos desde Google Calendar API`);
         
         // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
-        const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+        const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailId);
         
         if (!validAccessToken) {
           throw new Error('No se pudo obtener token válido');
@@ -159,7 +159,7 @@ if (timeMax) {
         
         // 🎯 FALLBACK: BD local si falla API
         const dbResult = await this.databaseService.getEventsPaginated(
-          cuentaGmailIdNum, 
+          cuentaGmailId, 
           page, 
           limit,
           true // Solo eventos futuros
@@ -224,9 +224,9 @@ if (timeMax) {
         };
       }
 
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
+      // ✅ CAMBIO: Eliminar parsing y validar string
+      if (!cuentaGmailId || cuentaGmailId.trim() === '') {
+        throw new Error('cuentaGmailId debe ser un valor válido');
       }
 
       // 🎯 ESTRATEGIA: Google Calendar API primero
@@ -234,7 +234,7 @@ if (timeMax) {
         this.logger.log(`🌐 Buscando en Google Calendar API`);
         
         // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
-        const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+        const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailId);
         
         if (!validAccessToken) {
           throw new Error('No se pudo obtener token válido');
@@ -328,7 +328,7 @@ if (timeMax) {
         };
 
         const searchResult = await this.databaseService.searchEventsInDB(
-          cuentaGmailIdNum,
+          cuentaGmailId,
           filters,
           page,
           limit
@@ -375,14 +375,13 @@ if (timeMax) {
     try {
       this.logger.log(`🚫 Revocando acceso al calendar ${calendarId} para ${userEmail} (regla: ${aclRuleId})`);
 
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
-      
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
+      // ✅ CAMBIO: Eliminar parsing y validar string
+      if (!cuentaGmailId || cuentaGmailId.trim() === '') {
+        throw new Error('cuentaGmailId debe ser un valor válido');
       }
 
       // Obtener token válido (con auto-refresh)
-      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailId);
 
       const oauth2Client = new google.auth.OAuth2();
       oauth2Client.setCredentials({ access_token: validAccessToken });
@@ -437,10 +436,9 @@ if (timeMax) {
     try {
       this.logger.log(`📋 Obteniendo evento ${eventId} para cuenta Gmail ${cuentaGmailId}`);
 
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
-      
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
+      // ✅ CAMBIO: Eliminar parsing y validar string
+      if (!cuentaGmailId || cuentaGmailId.trim() === '') {
+        throw new Error('cuentaGmailId debe ser un valor válido');
       }
 
       if (!eventId || eventId.trim() === '') {
@@ -448,7 +446,7 @@ if (timeMax) {
       }
 
       // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
-      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailId);
       
       const oauth2Client = new google.auth.OAuth2();
       oauth2Client.setCredentials({ access_token: validAccessToken });
@@ -541,13 +539,13 @@ if (timeMax) {
         throw new Error('Los campos summary, startDateTime y endDateTime son requeridos');
       }
 
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
+      // ✅ CAMBIO: Eliminar parsing y validar string
+      if (!cuentaGmailId || cuentaGmailId.trim() === '') {
+        throw new Error('cuentaGmailId debe ser un valor válido');
       }
 
       // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
-      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailId);
       
       if (!validAccessToken) {
         throw new Error('No se pudo obtener token válido para la cuenta');
@@ -582,7 +580,7 @@ if (timeMax) {
       }
 
       // 🎯 GUARDAR EN BD EN BACKGROUND (como MS-Email)
-      this.saveEventToDB(response.data as GoogleCalendarEvent, cuentaGmailIdNum).catch(err => {
+      this.saveEventToDB(response.data as GoogleCalendarEvent, cuentaGmailId).catch(err => {
         const errorMessage = safeGetErrorMessage(err);
         this.logger.debug(`Background save error (ignorado): ${errorMessage}`);
       });
@@ -634,14 +632,13 @@ if (timeMax) {
     try {
       this.logger.log(`➕ Creando evento PRIVADO para cuenta Gmail ${cuentaGmailId}`);
 
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
-      
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
+      // ✅ CAMBIO: Eliminar parsing y validar string
+      if (!cuentaGmailId || cuentaGmailId.trim() === '') {
+        throw new Error('cuentaGmailId debe ser un valor válido');
       }
 
       // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
-      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailId);
 
       const oauth2Client = new google.auth.OAuth2();
       oauth2Client.setCredentials({ access_token: validAccessToken });
@@ -665,12 +662,10 @@ if (timeMax) {
       }
 
       // Guardar en BD en background
-      if (!isNaN(cuentaGmailIdNum)) {
-        this.saveEventToDB(response.data as GoogleCalendarEvent, cuentaGmailIdNum).catch(err => {
-          const errorMessage = safeGetErrorMessage(err);
-          this.logger.debug(`Background save error (ignorado): ${errorMessage}`);
-        });
-      }
+      this.saveEventToDB(response.data as GoogleCalendarEvent, cuentaGmailId).catch(err => {
+        const errorMessage = safeGetErrorMessage(err);
+        this.logger.debug(`Background save error (ignorado): ${errorMessage}`);
+      });
 
       this.logger.log(`✅ Evento privado creado: ${response.data.id}`);
       return response.data as GoogleCalendarEvent;
@@ -694,14 +689,13 @@ if (timeMax) {
     try {
       this.logger.log(`✏️ Actualizando evento ${eventId} para cuenta Gmail ${cuentaGmailId}`);
 
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
-      
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
+      // ✅ CAMBIO: Eliminar parsing y validar string
+      if (!cuentaGmailId || cuentaGmailId.trim() === '') {
+        throw new Error('cuentaGmailId debe ser un valor válido');
       }
 
       // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
-      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailId);
       
       const oauth2Client = new google.auth.OAuth2();
       oauth2Client.setCredentials({ access_token: validAccessToken });
@@ -722,7 +716,7 @@ if (timeMax) {
       }
 
       // Actualizar en BD en background
-      this.updateEventInDB(eventId, response.data as GoogleCalendarEvent, cuentaGmailIdNum).catch(err => {
+      this.updateEventInDB(eventId, response.data as GoogleCalendarEvent, cuentaGmailId).catch(err => {
         const errorMessage = safeGetErrorMessage(err);
         this.logger.debug(`Background update error (ignorado): ${errorMessage}`);
       });
@@ -764,14 +758,13 @@ if (timeMax) {
     try {
       this.logger.log(`🗑️ Eliminando evento ${eventId} para cuenta Gmail ${cuentaGmailId}`);
 
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
-      
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
+      // ✅ CAMBIO: Eliminar parsing y validar string
+      if (!cuentaGmailId || cuentaGmailId.trim() === '') {
+        throw new Error('cuentaGmailId debe ser un valor válido');
       }
 
       // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
-      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailId);
       
       const oauth2Client = new google.auth.OAuth2();
       oauth2Client.setCredentials({ access_token: validAccessToken });
@@ -828,14 +821,13 @@ if (timeMax) {
     try {
       this.logger.log(`🤝 Compartiendo calendario con ${userEmail} como ${role}`);
 
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
-      
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
+      // ✅ CAMBIO: Eliminar parsing y validar string
+      if (!cuentaGmailId || cuentaGmailId.trim() === '') {
+        throw new Error('cuentaGmailId debe ser un valor válido');
       }
 
       // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
-      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailId);
 
       const oauth2Client = new google.auth.OAuth2();
       oauth2Client.setCredentials({ access_token: validAccessToken });
@@ -898,10 +890,9 @@ if (timeMax) {
     try {
       this.logger.log(`📊 🎯 ESTADÍSTICAS para cuenta Gmail ${cuentaGmailId}`);
       
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
-      
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
+      // ✅ CAMBIO: Eliminar parsing y validar string
+      if (!cuentaGmailId || cuentaGmailId.trim() === '') {
+        throw new Error('cuentaGmailId debe ser un valor válido');
       }
 
       // 1️⃣ ESTRATEGIA: Google Calendar API primero
@@ -913,7 +904,7 @@ if (timeMax) {
         this.logger.warn(`⚠️ Calendar API no disponible para stats, usando BD local`);
         
         // 2️⃣ FALLBACK: BD local
-        const dbStats = await this.databaseService.getEventStatsFromDB(cuentaGmailIdNum);
+        const dbStats = await this.databaseService.getEventStatsFromDB(cuentaGmailId);
         
         if (dbStats.total_events > 0) {
           this.logger.log(`💾 FALLBACK stats desde BD: ${dbStats.total_events} eventos total`);
@@ -950,14 +941,13 @@ if (timeMax) {
     try {
       this.logger.log(`🔄 🎉 INICIANDO SYNC para cuenta Gmail ${cuentaGmailId}`);
       
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
-      
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
+      // ✅ CAMBIO: Eliminar parsing y validar string
+      if (!cuentaGmailId || cuentaGmailId.trim() === '') {
+        throw new Error('cuentaGmailId debe ser un valor válido');
       }
       
       // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
-      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+      const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailId);
       
       // Obtener eventos desde Google Calendar API
       const oauth2Client = new google.auth.OAuth2();
@@ -994,7 +984,7 @@ if (options.timeMax) {
           success: true,
           message: 'No hay eventos nuevos para sincronizar',
           stats: {
-            cuenta_gmail_id: cuentaGmailIdNum,
+            cuenta_gmail_id: cuentaGmailId,
             events_nuevos: 0,
             events_actualizados: 0,
             tiempo_total_ms: 0
@@ -1004,7 +994,7 @@ if (options.timeMax) {
 
       // Convertir a formato BD y guardar
       const eventsMetadata: EventMetadataDB[] = events.map(event => ({
-        cuenta_gmail_id: cuentaGmailIdNum,
+        cuenta_gmail_id: cuentaGmailId,
         google_event_id: event.id!,
         summary: event.summary || '',
         location: event.location || '',
@@ -1022,7 +1012,7 @@ if (options.timeMax) {
         success: true,
         message: 'Sincronización completada exitosamente',
         stats: {
-          cuenta_gmail_id: cuentaGmailIdNum,
+          cuenta_gmail_id: cuentaGmailId,
           events_nuevos: syncResult.events_nuevos,
           events_actualizados: syncResult.events_actualizados,
           tiempo_total_ms: syncResult.tiempo_ms
@@ -1045,14 +1035,13 @@ if (options.timeMax) {
    * 📊 Obtener estadísticas desde Google Calendar API (CON AUTO-REFRESH)
    */
  private async getStatsFromCalendarAPI(accessToken: string, cuentaGmailId: string): Promise<CalendarStats> {
-    const cuentaGmailIdNum = parseInt(cuentaGmailId);
-    
-    if (isNaN(cuentaGmailIdNum)) {
-      throw new Error('cuentaGmailId debe ser un número válido');
+    // ✅ CAMBIO: Eliminar parsing y validar string
+    if (!cuentaGmailId || cuentaGmailId.trim() === '') {
+      throw new Error('cuentaGmailId debe ser un valor válido');
     }
 
     // 🔄 OBTENER TOKEN VÁLIDO (con auto-refresh)
-    const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailIdNum);
+    const validAccessToken = await this.databaseService.getValidAccessToken(cuentaGmailId);
 
     const oauth2Client = new google.auth.OAuth2();
     oauth2Client.setCredentials({ access_token: validAccessToken });
@@ -1092,7 +1081,7 @@ if (options.timeMax) {
   /**
    * 💾 Guardar evento en BD (background)
    */
- private async saveEventToDB(event: GoogleCalendarEvent, cuentaGmailId: number): Promise<void> {
+ private async saveEventToDB(event: GoogleCalendarEvent, cuentaGmailId: string): Promise<void> {
     try {
       if (!event.id) {
         this.logger.debug(`Evento sin ID, saltando guardado en BD`);
@@ -1121,7 +1110,7 @@ if (options.timeMax) {
   /**
    * ✏️ Actualizar evento en BD (background)
    */
- private async updateEventInDB(eventId: string, event: GoogleCalendarEvent, cuentaGmailId: number): Promise<void> {
+ private async updateEventInDB(eventId: string, event: GoogleCalendarEvent, cuentaGmailId: string): Promise<void> {
     try {
       // Por simplicidad, reutilizamos el método de sync que hace UPSERT
       await this.saveEventToDB(event, cuentaGmailId);
@@ -1157,7 +1146,7 @@ private async deleteEventFromDB(eventId: string): Promise<void> {
    * 🔍 Obtener todas las cuentas Gmail de un usuario
    * Reutiliza la lógica del DatabaseService
    */
-  async obtenerCuentasGmailUsuario(userId: number) {
+  async obtenerCuentasGmailUsuario(userId: string) {
     try {
       this.logger.log(`🔍 Obteniendo cuentas Gmail para usuario ${userId}`);
       
@@ -1177,7 +1166,7 @@ private async deleteEventFromDB(eventId: string): Promise<void> {
  /**
    * 🔑 Obtener token válido para una cuenta específica - TIPADO SEGURO
    */
-  async getValidTokenForAccount(cuentaGmailId: number): Promise<string> {
+  async getValidTokenForAccount(cuentaGmailId: string): Promise<string> {
     try {
       this.logger.log(`🔑 Obteniendo token para cuenta Gmail ${cuentaGmailId}`);
       

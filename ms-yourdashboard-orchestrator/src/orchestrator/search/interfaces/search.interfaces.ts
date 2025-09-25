@@ -24,7 +24,7 @@ export interface EmailResult {
   isRead: boolean;
   hasAttachments: boolean;
   sourceAccount: string;
-  sourceAccountId: number;
+  sourceAccountId: string;
 }
 
 // 📅 NUEVAS INTERFACES PARA CALENDAR
@@ -53,7 +53,7 @@ export interface CalendarResult {
   isAllDay: boolean;
   status: string;
   sourceAccount: string;
-  sourceAccountId: number;
+  sourceAccountId: string;
 }
 
 //*******************************************
@@ -61,29 +61,32 @@ export interface CalendarResult {
 //*******************************************
 
 // Interface para los datos crudos que vienen del microservicio WhatsApp
-export interface WhatsappConversationRaw {
-  conversation_id?: string;
-  id?: string;
-  last_message?: string;
-  message?: string;
-  name?: string;
-  phone?: string;
-  last_message_date?: string;
-  timestamp?: string;
-}
-
+// 📱 NUEVAS INTERFACES PARA WHATSAPP
 export interface WhatsappSearchResponse {
+  success?: boolean;
+  source?: string;
   results: WhatsappResult[];
   total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+  searchTerm: string;
+  accountsSearched: string[];
 }
 
 export interface WhatsappResult {
-  id: string;
-  message: string;
-  from: string;
-  timestamp: string;
-  chatId?: string;
-  type?: string;
+  id: string;                  // message_id
+  message: string;             // contenido del mensaje
+  timestamp: string;           // fecha/hora del mensaje
+  respondido: boolean;
+  categoria: 'verde' | 'amarillo' | 'rojo';
+  conversationId: string;
+  name: string;
+  phone: string;
+  sourceAccount: string;       // whatsapp_account_id
+  sourceAccountId: number;     
 }
 
 export interface GlobalSearchResponse {
@@ -121,7 +124,7 @@ export interface GlobalSearchResponse {
 export interface AuthProfileResponse {
   success: boolean;
   usuario: {
-    id: number;
+    id: string;
     email: string;
     nombre: string;
     fecha_registro: string;
@@ -129,7 +132,7 @@ export interface AuthProfileResponse {
     email_verificado: boolean;
   };
   cuentas_gmail: Array<{
-    id: number;
+    id: string;
     email_gmail: string;
     alias: string | null;
     fecha_conectado: string;

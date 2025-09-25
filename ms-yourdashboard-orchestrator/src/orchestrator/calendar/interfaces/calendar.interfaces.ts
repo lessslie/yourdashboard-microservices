@@ -31,7 +31,7 @@ export interface CalendarEventDetail extends CalendarEvent {
   organizer?: string;
   htmlLink?: string;
   sourceAccount?: string;
-  sourceAccountId?: number;
+  sourceAccountId?: string;
 }
 
 export interface CalendarListResponse {
@@ -55,7 +55,7 @@ export interface CalendarSyncResponse {
   success: boolean;
   message: string;
   stats: {
-    cuenta_gmail_id: number;
+    cuenta_gmail_id: string;
     events_nuevos: number;
     events_actualizados: number;
     tiempo_total_ms: number;

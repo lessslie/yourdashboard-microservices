@@ -117,9 +117,9 @@ export interface SendEmailRequest {
   inReplyTo?: string;
   references?: string[];
   // Datos adicionales del contexto
-  userId: number;
+  userId: string;
   accessToken: string;
-  cuentaGmailId: number;
+  cuentaGmailId: string;
 }
 
 // ================================
@@ -147,7 +147,7 @@ export interface SendEmailValidationError {
 
 export interface SendEmailLog {
   requestId: string; // ID único para tracking
-  userId: number;
+  userId: string;
   fromEmail: string;
   toCount: number;
   ccCount?: number;

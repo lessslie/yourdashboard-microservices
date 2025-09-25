@@ -699,9 +699,9 @@ export class CalendarController {
       throw new BadRequestException('timeMin is required');
     }
 
-    const userIdNum = parseInt(userId, 10);
-    if (isNaN(userIdNum)) {
-      throw new BadRequestException('userId debe ser un número válido');
+    // ✅ CAMBIO: NO PARSEAR - usar string directamente
+    if (!userId || userId.trim() === '') {
+      throw new BadRequestException('userId debe ser un valor válido');
     }
 
     const pageNum = page ? parseInt(page, 10) : 1;
@@ -709,7 +709,7 @@ export class CalendarController {
 
     try {
       // 1️⃣ OBTENER TODAS LAS CUENTAS GMAIL DEL USUARIO
-      const cuentasGmail = await this.calendarService.obtenerCuentasGmailUsuario(userIdNum);
+      const cuentasGmail = await this.calendarService.obtenerCuentasGmailUsuario(userId);
       
       if (!cuentasGmail || cuentasGmail.length === 0) {
         this.logger.warn(`⚠️ Usuario ${userId} no tiene cuentas Gmail conectadas`);
@@ -733,12 +733,13 @@ export class CalendarController {
           this.logger.log(`📅 Obteniendo eventos de cuenta: ${cuenta.email_gmail} (ID: ${cuenta.id})`);
           
           // 🎯 OBTENER TOKEN PARA ESTA CUENTA ESPECÍFICA
+          // ✅ CAMBIO: cuenta.id ya es string, no convertir
           const accessToken = await this.calendarService.getValidTokenForAccount(cuenta.id);
           
           // 🎯 OBTENER EVENTOS USANDO EL MÉTODO EXISTENTE
           const eventosCuenta = await this.calendarService.listEventsWithToken(
             accessToken,
-            cuenta.id.toString(),
+            cuenta.id, // ✅ Ya es string
             timeMin,
             timeMax,
             1, // Siempre página 1 para cada cuenta
@@ -877,9 +878,9 @@ export class CalendarController {
       throw new BadRequestException('q (término de búsqueda) is required');
     }
 
-    const userIdNum = parseInt(userId, 10);
-    if (isNaN(userIdNum)) {
-      throw new BadRequestException('userId debe ser un número válido');
+    // ✅ CAMBIO: NO PARSEAR - usar string directamente
+    if (!userId || userId.trim() === '') {
+      throw new BadRequestException('userId debe ser un valor válido');
     }
 
     const pageNum = page ? parseInt(page, 10) : 1;
@@ -887,7 +888,7 @@ export class CalendarController {
 
     try {
       // 1️⃣ OBTENER TODAS LAS CUENTAS GMAIL DEL USUARIO
-      const cuentasGmail = await this.calendarService.obtenerCuentasGmailUsuario(userIdNum);
+      const cuentasGmail = await this.calendarService.obtenerCuentasGmailUsuario(userId);
       
       if (!cuentasGmail || cuentasGmail.length === 0) {
         this.logger.warn(`⚠️ Usuario ${userId} no tiene cuentas Gmail conectadas`);
@@ -912,12 +913,13 @@ export class CalendarController {
           this.logger.log(`🔍 Buscando "${searchTerm}" en cuenta: ${cuenta.email_gmail} (ID: ${cuenta.id})`);
           
           // 🎯 OBTENER TOKEN PARA ESTA CUENTA ESPECÍFICA
+          // ✅ CAMBIO: cuenta.id ya es string, no convertir
           const accessToken = await this.calendarService.getValidTokenForAccount(cuenta.id);
           
           // 🎯 BUSCAR EN ESTA CUENTA USANDO EL MÉTODO EXISTENTE
           const resultadoBusqueda = await this.calendarService.searchEventsWithToken(
             accessToken,
-            cuenta.id.toString(),
+            cuenta.id, // ✅ Ya es string
             timeMin,
             searchTerm.trim(),
             1, // Siempre página 1 para cada cuenta

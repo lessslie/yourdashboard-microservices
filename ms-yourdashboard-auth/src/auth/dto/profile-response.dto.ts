@@ -4,9 +4,9 @@ import { UsuarioPrincipalResponseDto } from "./auth-response.dto";
 export class CuentaGmailResponseDto {
   @ApiProperty({
     description: 'ID único de la cuenta Gmail',
-    example: 1
+    example: '456e7890-f12a-34b5-c678-901234567890' // ✅ number → string UUID
   })
-  id: number;
+  id: string; // ✅ number → string
 
   @ApiProperty({
     description: 'Email de la cuenta Gmail conectada',
@@ -62,9 +62,9 @@ export class CuentaGmailResponseDto {
 export class SesionResponseDto {
   @ApiProperty({
     description: 'ID único de la sesión',
-    example: 1
+    example: '789a0123-b456-78c9-d012-345678901234' // ✅ number → string UUID
   })
-  id: number;
+  id: string; // ✅ number → string
 
   @ApiProperty({
     description: 'Fecha de creación de la sesión',
@@ -99,67 +99,67 @@ export class SesionResponseDto {
   esta_activa: boolean;
 }
 
-export class EstadisticasUsuarioDto {
+export class EstadisticasResponseDto {
   @ApiProperty({
-    description: 'Total de cuentas Gmail conectadas',
-    example: 3
+    description: 'Número total de cuentas Gmail conectadas',
+    example: 2
   })
   total_cuentas_gmail: number;
 
   @ApiProperty({
-    description: 'Cuentas Gmail activas',
-    example: 3
+    description: 'Número de cuentas Gmail activas',
+    example: 2
   })
   cuentas_gmail_activas: number;
 
   @ApiProperty({
     description: 'Total de emails sincronizados',
-    example: 450
+    example: 1250
   })
   total_emails_sincronizados: number;
 
   @ApiProperty({
     description: 'Emails no leídos',
-    example: 23
+    example: 45
   })
   emails_no_leidos: number;
 
   @ApiProperty({
-  description: 'Total de eventos sincronizados',
-  example: 847
-})
-total_eventos_sincronizados: number;
-
-@ApiProperty({
-  description: 'Eventos próximos (futuros)',
-  example: 125
-})
-eventos_proximos: number;
-
-@ApiProperty({
-  description: 'Eventos pasados',
-  example: 722
-})
-eventos_pasados: number;
+    description: 'Total de eventos sincronizados',
+    example: 120
+  })
+  total_eventos_sincronizados: number;
 
   @ApiProperty({
-    description: 'Última sincronización',
+    description: 'Eventos próximos',
+    example: 15
+  })
+  eventos_proximos: number;
+
+  @ApiProperty({
+    description: 'Eventos pasados',
+    example: 105
+  })
+  eventos_pasados: number;
+
+  @ApiProperty({
+    description: 'Última sincronización general',
     example: '2024-01-15T14:30:00Z'
   })
   ultima_sincronizacion: string;
 
   @ApiProperty({
     description: 'Cuenta Gmail más activa',
-    type: 'object',
-    properties: {
-      email_gmail: { type: 'string', example: 'alonso@gmail.com' },
-      emails_count: { type: 'number', example: 200 }
-    }
+    example: {
+      email_gmail: 'alonso@gmail.com',
+      emails_count: 850
+    },
+    nullable: true
   })
   cuenta_mas_activa: {
     email_gmail: string;
     emails_count: number;
-  };
+  } | null;
 }
 
 export class ProfileResponseDto {
@@ -170,13 +170,13 @@ export class ProfileResponseDto {
   success: boolean;
 
   @ApiProperty({
-    description: 'Datos del usuario',
+    description: 'Información del usuario',
     type: UsuarioPrincipalResponseDto
   })
   usuario: UsuarioPrincipalResponseDto;
 
   @ApiProperty({
-    description: 'Cuentas Gmail conectadas',
+    description: 'Lista de cuentas Gmail conectadas',
     type: [CuentaGmailResponseDto]
   })
   cuentas_gmail: CuentaGmailResponseDto[];
@@ -189,7 +189,7 @@ export class ProfileResponseDto {
 
   @ApiProperty({
     description: 'Estadísticas del usuario',
-    type: EstadisticasUsuarioDto
+    type: EstadisticasResponseDto
   })
-  estadisticas: EstadisticasUsuarioDto;
+  estadisticas: EstadisticasResponseDto;
 }

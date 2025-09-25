@@ -6,7 +6,7 @@ import { IsString, IsEmail, IsNotEmpty } from 'class-validator';
 export class UnshareCalendarDto {
   @ApiProperty({
     description: 'ID de la cuenta Gmail propietaria del calendar',
-    example: '78',
+    example: 'abc123def456ghi789',
     required: true
   })
   @IsString()

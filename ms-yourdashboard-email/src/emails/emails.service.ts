@@ -83,16 +83,14 @@ export class EmailsService {
       this.logger.log(
         `🔄 🎉 INICIANDO SINCRONIZACIÓN para cuenta Gmail ${cuentaGmailId}`,
       );
-
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
-
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
-      }
+      if (!cuentaGmailId || cuentaGmailId.trim() === '') {
+      throw new Error('cuentaGmailId debe ser un valor válido');
+    }
+    await this.syncService.syncEmailsFromGmail(accessToken, cuentaGmailId, options);
 
       const syncStats = await this.syncService.syncEmailsFromGmail(
         accessToken,
-        cuentaGmailIdNum,
+        cuentaGmailId,
         options,
       );
 
@@ -130,12 +128,9 @@ export class EmailsService {
       this.logger.log(
         `📧 🎯 INBOX para cuenta Gmail ${cuentaGmailId} - Página ${page}`,
       );
-
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
-
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
-      }
+    if (!cuentaGmailId || cuentaGmailId.trim() === '') {
+  throw new Error('cuentaGmailId debe ser un valor válido');
+}
 
       // 🎮 DECISIÓN BASADA EN USE_DATABASE
       if (this.USE_DATABASE) {
@@ -143,7 +138,7 @@ export class EmailsService {
 
         // Intentar obtener desde BD
         const dbResult = await this.databaseService.getEmailsPaginated(
-          cuentaGmailIdNum,
+          cuentaGmailId,
           page,
           limit,
         );
@@ -190,7 +185,7 @@ export class EmailsService {
           );
 
           // Iniciar sync en background si es necesario
-          this.checkAndStartBackgroundSync(accessToken, cuentaGmailIdNum).catch(
+          this.checkAndStartBackgroundSync(accessToken, cuentaGmailId).catch(
             (err) => {
               this.logger.debug(`Background sync error (ignorado):`, err);
             },
@@ -207,7 +202,7 @@ export class EmailsService {
           this.logger.warn(`⚠️ Gmail API falló, intentando BD como fallback`);
 
           const dbResult = await this.databaseService.getEmailsPaginated(
-            cuentaGmailIdNum,
+            cuentaGmailId,
             page,
             limit,
           );
@@ -247,7 +242,7 @@ export class EmailsService {
    */
   private async checkAndStartBackgroundSync(
     accessToken: string,
-    cuentaGmailId: number,
+    cuentaGmailId: string,
   ): Promise<void> {
     try {
       // Verificar si ya hay emails sincronizados
@@ -299,7 +294,7 @@ export class EmailsService {
    */
   private async performProgressiveBackgroundSync(
     accessToken: string,
-    cuentaGmailId: number,
+    cuentaGmailId: string,
   ): Promise<void> {
     try {
       // Etapa 1: Primeros 100 emails más recientes
@@ -361,12 +356,9 @@ export class EmailsService {
       this.logger.log(
         `🔍 🎯 BÚSQUEDA "${searchTerm}" para cuenta Gmail ${cuentaGmailId}`,
       );
-
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
-
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
-      }
+   if (!cuentaGmailId || cuentaGmailId.trim() === '') {
+  throw new Error('cuentaGmailId debe ser un valor válido');
+}
 
       // 🎮 DECISIÓN BASADA EN USE_DATABASE
       if (this.USE_DATABASE) {
@@ -377,7 +369,7 @@ export class EmailsService {
         };
 
         const searchResult = await this.databaseService.searchEmailsInDB(
-          cuentaGmailIdNum,
+          cuentaGmailId,
           filters,
           page,
           limit,
@@ -421,7 +413,7 @@ export class EmailsService {
           };
 
           const searchResult = await this.databaseService.searchEmailsInDB(
-            cuentaGmailIdNum,
+            cuentaGmailId,
             filters,
             page,
             limit,
@@ -464,12 +456,9 @@ export class EmailsService {
       this.logger.log(
         `📊 🎯 ESTADÍSTICAS GMAIL-LIKE para cuenta Gmail ${cuentaGmailId}`,
       );
-
-      const cuentaGmailIdNum = parseInt(cuentaGmailId);
-
-      if (isNaN(cuentaGmailIdNum)) {
-        throw new Error('cuentaGmailId debe ser un número válido');
-      }
+      if (!cuentaGmailId || cuentaGmailId.trim() === '') {
+        throw new Error('cuentaGmailId debe ser un valor válido');
+}
 
       // 1️⃣ ESTRATEGIA GMAIL-LIKE: Gmail API primero
       try {
@@ -482,7 +471,7 @@ export class EmailsService {
 
         // 2️⃣ FALLBACK: BD local
         const dbStats =
-          await this.databaseService.getEmailStatsFromDB(cuentaGmailIdNum);
+          await this.databaseService.getEmailStatsFromDB(cuentaGmailId);
 
         if (dbStats.total_emails > 0) {
           this.logger.log(
@@ -606,7 +595,7 @@ export class EmailsService {
   /**
    * 🔧 Extraer User ID del JWT token
    */
-  private extractUserIdFromJWT(authHeader: string): number | null {
+  private extractUserIdFromJWT(authHeader: string): string | null {
     try {
       // Extraer token del header "Bearer TOKEN"
       const token = authHeader.replace('Bearer ', '');
@@ -634,7 +623,7 @@ export class EmailsService {
    */
   private decodeJWTPayload(
     token: string,
-  ): { sub: number; email: string; nombre: string } | null {
+  ): { sub: string; email: string; nombre: string } | null {
     try {
       // JWT format: header.payload.signature
       const parts = token.split('.');
@@ -651,7 +640,7 @@ export class EmailsService {
       const payload = JSON.parse(payloadJson);
 
       // Validar estructura
-      if (!payload.sub || typeof payload.sub !== 'number') {
+      if (!payload.sub || typeof payload.sub !== 'string') {
         throw new Error('Token JWT inválido - sub debe ser número');
       }
 
@@ -714,14 +703,13 @@ export class EmailsService {
         `🌍 💾 BÚSQUEDA GLOBAL BD "${searchTerm}" para usuario ${userId}`,
       );
 
-      const userIdNum = parseInt(userId, 10);
-      if (isNaN(userIdNum)) {
-        throw new Error('userId debe ser un número válido');
-      }
+     if (!userId || userId.trim() === '') {
+  throw new Error('userId debe ser un valor válido');
+}
 
       // 1️⃣ OBTENER TODAS LAS CUENTAS GMAIL DEL USUARIO
       const cuentasGmail =
-        await this.databaseService.obtenerCuentasGmailUsuario(userIdNum);
+        await this.databaseService.obtenerCuentasGmailUsuario(userId);
 
       if (!cuentasGmail || cuentasGmail.length === 0) {
         this.logger.warn(
@@ -849,14 +837,13 @@ export class EmailsService {
       );
 
       // 🎯 VALIDAR USERID
-      const userIdNum = parseInt(userId, 10);
-      if (isNaN(userIdNum)) {
-        throw new Error('userId debe ser un número válido');
-      }
+     if (!userId || userId.trim() === '') {
+  throw new Error('userId debe ser un valor válido');
+}
 
       // 1️⃣ OBTENER TODAS LAS CUENTAS GMAIL DEL USUARIO
       const cuentasGmail =
-        await this.databaseService.obtenerCuentasGmailUsuario(userIdNum);
+        await this.databaseService.obtenerCuentasGmailUsuario(userId);
 
       if (!cuentasGmail || cuentasGmail.length === 0) {
         this.logger.warn(
@@ -1067,14 +1054,13 @@ return {
       );
 
       // 🎯 VALIDAR USERID
-      const userIdNum = parseInt(userId, 10);
-      if (isNaN(userIdNum)) {
-        throw new Error('userId debe ser un número válido');
-      }
+    if (!userId || userId.trim() === '') {
+  throw new Error('userId debe ser un valor válido');
+}
 
       // 1️⃣ OBTENER TODAS LAS CUENTAS GMAIL DEL USUARIO
       const cuentasGmail =
-        await this.databaseService.obtenerCuentasGmailUsuario(userIdNum);
+        await this.databaseService.obtenerCuentasGmailUsuario(userId);
 
       if (!cuentasGmail || cuentasGmail.length === 0) {
         this.logger.warn(
@@ -1231,14 +1217,13 @@ return {
       this.logger.log(`📥 🎯 INBOX UNIFICADO para usuario principal ${userId}`);
 
       // 🎯 VALIDAR USERID
-      const userIdNum = parseInt(userId, 10);
-      if (isNaN(userIdNum)) {
-        throw new Error('userId debe ser un número válido');
-      }
+      if (!userId || userId.trim() === '') {
+  throw new Error('userId debe ser un valor válido');
+}
 
       // 1️⃣ OBTENER TODAS LAS CUENTAS GMAIL DEL USUARIO
       const cuentasGmail =
-        await this.databaseService.obtenerCuentasGmailUsuario(userIdNum);
+        await this.databaseService.obtenerCuentasGmailUsuario(userId);
 
       if (!cuentasGmail || cuentasGmail.length === 0) {
         this.logger.warn(
@@ -1458,14 +1443,13 @@ return {
     try {
       this.logger.log(`📊 💾 ESTADÍSTICAS DESDE BD para usuario ${userId}`);
 
-      const userIdNum = parseInt(userId, 10);
-      if (isNaN(userIdNum)) {
-        throw new Error('userId debe ser un número válido');
-      }
+      if (!userId || userId.trim() === '') {
+  throw new Error('userId debe ser un valor válido');
+}
 
       // Obtener todas las cuentas del usuario
       const cuentasGmail =
-        await this.databaseService.obtenerCuentasGmailUsuario(userIdNum);
+        await this.databaseService.obtenerCuentasGmailUsuario(userId);
 
       if (!cuentasGmail || cuentasGmail.length === 0) {
         return {
@@ -1517,14 +1501,13 @@ return {
     try {
       this.logger.log(`📊 🌐 ESTADÍSTICAS DESDE API para usuario ${userId}`);
 
-      const userIdNum = parseInt(userId, 10);
-      if (isNaN(userIdNum)) {
-        throw new Error('userId debe ser un número válido');
-      }
+     if (!userId || userId.trim() === '') {
+  throw new Error('userId debe ser un valor válido');
+}
 
       // Obtener todas las cuentas del usuario
       const cuentasGmail =
-        await this.databaseService.obtenerCuentasGmailUsuario(userIdNum);
+        await this.databaseService.obtenerCuentasGmailUsuario(userId);
 
       if (!cuentasGmail || cuentasGmail.length === 0) {
         return {
@@ -1589,15 +1572,14 @@ return {
     );
 
     try {
-      const userIdNum = parseInt(userId, 10);
-      if (isNaN(userIdNum)) {
-        throw new Error('userId debe ser un número válido');
-      }
+    if (!userId || userId.trim() === '') {
+  throw new Error('userId debe ser un valor válido');
+}
 
       // Buscar en qué cuenta está este email
       // Por ahora, buscaremos en todas las cuentas del usuario
       const cuentasGmail =
-        await this.databaseService.obtenerCuentasGmailUsuario(userIdNum);
+        await this.databaseService.obtenerCuentasGmailUsuario(userId);
 
       if (!cuentasGmail || cuentasGmail.length === 0) {
         throw new NotFoundException(
@@ -3352,7 +3334,7 @@ private sanitizeFilename(filename: string): string {
   async getEmailsByTrafficLight(
     authHeader: string,
     status: TrafficLightStatus,
-    cuentaId?: number,
+    cuentaId?: string,
     limit: number = 10,
   ): Promise<EmailsByTrafficLightResponse> {
     try {
@@ -3602,7 +3584,7 @@ private sanitizeFilename(filename: string): string {
    * 🔑 Obtener token válido para una cuenta específica
    */
   private async getValidTokenForAccount(
-    cuentaGmailId: number,
+    cuentaGmailId: string,
   ): Promise<string> {
     try {
       // 🎯 CONSULTAR A MS-AUTH PARA OBTENER TOKEN
