@@ -8,7 +8,6 @@ import {
   AuthProfileResponse,
   WhatsappSearchResponse,
   WhatsappResult,
-  WhatsappConversationRaw,
   CalendarSearchResponse,
   CalendarResult
 } from './interfaces/search.interfaces';
@@ -28,154 +27,115 @@ export class SearchService {
   }
 
   /**
- * 🔍 Búsqueda global en todos los microservicios
- */
-async searchGlobal(authHeader: string, query: string, page: string, limit: string): Promise<GlobalSearchResponse> {
-  console.log('🔍 SearchService - Params recibidos:', { authHeader: !!authHeader, query, page, limit });
-  
-  // Validación de parámetros
-  if (!query) {
-    throw new HttpException(
-      'q es un parámetro requerido',
-      HttpStatus.BAD_REQUEST
-    );
-  }
-
-  if (!authHeader) {
-    throw new HttpException(
-      'Authorization header es requerido',
-      HttpStatus.BAD_REQUEST
-    );
-  }
-
-  // Extraer userId del token JWT
-  const userId = await this.extractUserIdFromToken(authHeader);
-
-  // Buscar en los 3 microservicios en paralelo
-  const [emailsResult, calendarResult, whatsappResult] = await Promise.allSettled([
-    this.searchInEmails(userId, query, page, limit),
-    this.searchInCalendar(userId, query, page, limit),
-    this.searchInWhatsapp(userId, query, page, limit)
-  ]);
-
-  console.log('[SEARCH] Resultados de emails, calendar y whatsapp:', emailsResult, calendarResult, whatsappResult);
-
-  // Procesar resultado de emails
-  let emailsTotal = 0;
-  let emailsResults: EmailResult[] = [];
-  let accountsSearched: string[] = [];
-
-  if (emailsResult.status === 'fulfilled' && emailsResult.value) {
-    console.log('[SEARCH] Procesando resultado de emails:', {
-      hasEmails: !!emailsResult.value.emails,
-      totalEmails: emailsResult.value.total,
-      emailCount: emailsResult.value.emails?.length
-    });
+   * 🔍 Búsqueda global en todos los microservicios
+   */
+  async searchGlobal(authHeader: string, query: string, page: string, limit: string): Promise<GlobalSearchResponse> {
+    console.log('🔍 SearchService - Params recibidos:', { authHeader: !!authHeader, query, page, limit });
     
-    emailsTotal = emailsResult.value.total || 0;
-    emailsResults = emailsResult.value.emails || [];
-    accountsSearched = emailsResult.value.accountsSearched || [];
-  } else {
-    console.error('[SEARCH] Error en emails (continuando con otros servicios):', 
-      emailsResult.status === 'rejected' ? emailsResult.reason : 'Unknown error');
-  }
-
-  // Procesar resultado de Calendar
-  let calendarTotal = 0;
-  let calendarResults: CalendarResult[] = [];
-  let calendarAccountsSearched: string[] = [];
-
-  if (calendarResult.status === 'fulfilled' && calendarResult.value) {
-    console.log('[SEARCH] Procesando resultado de calendar:', {
-      hasEvents: !!calendarResult.value.events,
-      totalEvents: calendarResult.value.total,
-      eventsCount: calendarResult.value.events?.length
-    });
-    
-    calendarTotal = calendarResult.value.total || 0;
-    calendarResults = calendarResult.value.events || [];
-    calendarAccountsSearched = calendarResult.value.accountsSearched || [];
-  } else {
-    console.error('[SEARCH] Error en calendar (continuando con otros servicios):', 
-      calendarResult.status === 'rejected' ? calendarResult.reason : 'Unknown error');
-  }
-
-  // Procesar resultado de WhatsApp
-  let whatsappTotal = 0;
-  let whatsappResults: WhatsappResult[] = [];
-
-  if (whatsappResult.status === 'fulfilled' && whatsappResult.value) {
-    console.log('[SEARCH] Procesando resultado de whatsapp:', {
-      hasResults: !!whatsappResult.value.results,
-      totalResults: whatsappResult.value.total,
-      resultsCount: whatsappResult.value.results?.length
-    });
-    
-    whatsappTotal = whatsappResult.value.total || 0;
-    whatsappResults = whatsappResult.value.results || [];
-  } else if (whatsappResult.status === 'rejected') {
-    console.error('[SEARCH] Error en whatsapp (continuando con otros servicios):', whatsappResult.reason);
-  }
-
-  return {
-    success: true,
-    source: 'orchestrator-global-search',
-    searchTerm: query,
-    data: {
-      emails: {
-        results: emailsResults,
-        total: emailsTotal,
-        accountsSearched: accountsSearched
-      },
-      calendar: {
-        results: calendarResults,
-        total: calendarTotal,
-        accountsSearched: calendarAccountsSearched
-      },
-      whatsapp: {
-        results: whatsappResults,
-        total: whatsappTotal,
-        accountsSearched: []
-      }
-    },
-    summary: {
-      totalResults: emailsTotal + calendarTotal + whatsappTotal,
-      resultsPerSource: {
-        emails: emailsTotal,
-        calendar: calendarTotal,
-        whatsapp: whatsappTotal
-      }
+    // Validación de parámetros
+    if (!query) {
+      throw new HttpException(
+        'q es un parámetro requerido',
+        HttpStatus.BAD_REQUEST
+      );
     }
-  };
-}
 
+    if (!authHeader) {
+      throw new HttpException(
+        'Authorization header es requerido',
+        HttpStatus.BAD_REQUEST
+      );
+    }
+
+    // Extraer userId del token JWT
+    const userId = await this.extractUserIdFromToken(authHeader);
+
+    // Buscar en los 3 microservicios en paralelo
+    const [emailsResult, calendarResult, whatsappResult] = await Promise.allSettled([
+      this.searchInEmails(userId, query, page, limit),
+      this.searchInCalendar(userId, query, page, limit),
+      this.searchInWhatsapp(userId, query, page, limit)
+    ]);
+
+    console.log('[SEARCH] Resultados de emails, calendar y whatsapp:', emailsResult, calendarResult, whatsappResult);
+
+    // Procesar resultado de emails
+    let emailsTotal = 0;
+    let emailsResults: EmailResult[] = [];
+    let accountsSearched: string[] = [];
+
+    if (emailsResult.status === 'fulfilled' && emailsResult.value) {
+      emailsTotal = emailsResult.value.total || 0;
+      emailsResults = emailsResult.value.emails || [];
+      accountsSearched = emailsResult.value.accountsSearched || [];
+    }
+
+    // Procesar resultado de Calendar
+    let calendarTotal = 0;
+    let calendarResults: CalendarResult[] = [];
+    let calendarAccountsSearched: string[] = [];
+
+    if (calendarResult.status === 'fulfilled' && calendarResult.value) {
+      calendarTotal = calendarResult.value.total || 0;
+      calendarResults = calendarResult.value.events || [];
+      calendarAccountsSearched = calendarResult.value.accountsSearched || [];
+    }
+
+    // Procesar resultado de WhatsApp
+    let whatsappTotal = 0;
+    let whatsappResults: WhatsappResult[] = [];
+    let whatsappAccountsSearched: string[] = [];
+
+    if (whatsappResult.status === 'fulfilled' && whatsappResult.value) {
+      whatsappTotal = whatsappResult.value.total || 0;
+      whatsappResults = whatsappResult.value.results || [];
+      whatsappAccountsSearched = whatsappResult.value.accountsSearched || [];
+    }
+
+    return {
+      success: true,
+      source: 'orchestrator-global-search',
+      searchTerm: query,
+      data: {
+        emails: {
+          results: emailsResults,
+          total: emailsTotal,
+          accountsSearched: accountsSearched
+        },
+        calendar: {
+          results: calendarResults,
+          total: calendarTotal,
+          accountsSearched: calendarAccountsSearched
+        },
+        whatsapp: {
+          results: whatsappResults,
+          total: whatsappTotal,
+          accountsSearched: whatsappAccountsSearched
+        }
+      },
+      summary: {
+        totalResults: emailsTotal + calendarTotal + whatsappTotal,
+        resultsPerSource: {
+          emails: emailsTotal,
+          calendar: calendarTotal,
+          whatsapp: whatsappTotal
+        }
+      }
+    };
+  }
 
   /**
    * 🔑 Extraer userId del token JWT
    */
-
   private async extractUserIdFromToken(authHeader: string): Promise<string> {
     try {
-      // Llamar a ms-auth para validar el token y obtener el perfil
       const msAuthUrl = this.configService.get<string>('MS_AUTH_URL') || 'http://localhost:3001';
       const url = `${msAuthUrl}/auth/me`;
       
-      console.log('📞 Llamando a ms-auth:', {
-        url,
-        authHeader: authHeader.substring(0, 50) + '...'
-      });
-
       const response: AxiosResponse<AuthProfileResponse> = await axios.get(url, {
         headers: {
           'Authorization': authHeader
         }
-      });
-
-      console.log('✅ Respuesta de ms-auth:', {
-        status: response.status,
-        hasData: !!response.data,
-        hasUsuario: !!response.data?.usuario,
-        usuarioId: response.data?.usuario?.id
       });
 
       if (response.data?.usuario?.id) {
@@ -184,15 +144,7 @@ async searchGlobal(authHeader: string, query: string, page: string, limit: strin
 
       throw new Error('No se pudo obtener el userId del token');
     } catch (error) {
-      console.error('[SEARCH] Error extrayendo userId del token:', error);
-      
-      if (axios.isAxiosError(error)) {
-        console.error('Detalles del error:', {
-          status: error.response?.status,
-          message: error.message
-        });
-      }
-      
+      console.log('Error validando token en MS Auth:', error);
       throw new HttpException('Token inválido o expirado', HttpStatus.UNAUTHORIZED);
     }
   }
@@ -203,122 +155,70 @@ async searchGlobal(authHeader: string, query: string, page: string, limit: strin
   private async searchInEmails(userId: string, query: string, page: string, limit: string): Promise<EmailSearchResponse | null> {
     try {
       const url = `${this.msEmailUrl}/emails/search-all-accounts`;
-      const params = {
-        userId,
-        q: query,
-        page,
-        limit
-      };
-
-      console.log(`[SEARCH-EMAILS] Llamando a: ${url}`, params);
-      
+      const params = { userId, q: query, page, limit };
       const response: AxiosResponse<EmailSearchResponse> = await axios.get(url, { params });
-      
-      console.log('[SEARCH-EMAILS] Respuesta recibida:', {
-        status: response.status,
-        dataKeys: Object.keys(response.data || {}),
-        hasData: !!response.data,
-        dataPreview: JSON.stringify(response.data).substring(0, 200) + '...'
-      });
-
       return response.data;
     } catch (error) {
-      console.error('[SEARCH-EMAILS] Error completo:', error);
-      if (axios.isAxiosError(error)) {
-        console.error('[SEARCH-EMAILS] Detalles del error Axios:', {
-          status: error.response?.status,
-          message: error.message
-        });
-      }
+      console.log('Error buscando en emails:', error);
       return null;
     }
   }
 
   /**
- * 📅 Buscar en microservicio de calendar
- */
-private async searchInCalendar(userId: string, query: string, page: string, limit: string): Promise<CalendarSearchResponse | null> {
-  try {
-    const url = `${this.msCalendarUrl}/calendar/search-global`;
-    const params = {
-      userId,
-      q: query,
-      timeMin: '2025-08-01T00:00:00Z',  // Fecha desde donde buscar
-      page,
-      limit
-    };
-
-    console.log(`[SEARCH-CALENDAR] Llamando a: ${url}`, params);
-    
-    const response: AxiosResponse<CalendarSearchResponse> = await axios.get(url, { params });
-    
-    console.log('[SEARCH-CALENDAR] Respuesta recibida:', {
-      status: response.status,
-      hasData: !!response.data,
-      eventsCount: response.data?.events?.length || 0
-    });
-
-    return response.data;
-  } catch (error) {
-    console.error('[SEARCH-CALENDAR] Error completo:', error);
-    if (axios.isAxiosError(error)) {
-      console.error('[SEARCH-CALENDAR] Detalles del error Axios:', {
-        status: error.response?.status,
-        message: error.message
-      });
+   * 📅 Buscar en microservicio de calendar
+   */
+  private async searchInCalendar(userId: string, query: string, page: string, limit: string): Promise<CalendarSearchResponse | null> {
+    try {
+      const url = `${this.msCalendarUrl}/calendar/search-global`;
+      const params = { userId, q: query, page, limit };
+      const response: AxiosResponse<CalendarSearchResponse> = await axios.get(url, { params });
+      return response.data;
+    } catch (error) {
+      console.log('Error buscando en calendar:', error);
+      return null;
     }
-    return null;
   }
-}
 
   /**
-   * 💬 Buscar en microservicio de whatsapp (PENDIENTE de completar por userId)
+   * 💬 Buscar en microservicio de whatsapp
    */
-private async searchInWhatsapp(
-  userId: string,
-  query: string,
-  page: string,
-  limit: string
-): Promise<WhatsappSearchResponse | null> {
-  try {
-    const msWhatsappUrl = this.configService.get<string>('MS_WHATSAPP_URL') || 'http://localhost:3004';
-    const url = `${msWhatsappUrl}/search`;
-    const params = {
-      q: query,
-      userId: userId
-    };
-    
-    console.log(page, limit);
-    console.log(`[SEARCH-WHATSAPP] Llamando a: ${url}`, params);
-    
-    const response: AxiosResponse<WhatsappConversationRaw[]> = await axios.get(url, { params });
-    
-    console.log('[SEARCH-WHATSAPP] Respuesta recibida:', {
-      status: response.status,
-      resultCount: response.data?.length || 0,
-      dataPreview: JSON.stringify(response.data).substring(0, 200) + '...'
-    });
+  private async searchInWhatsapp(userId: string, query: string, page: string, limit: string): Promise<WhatsappSearchResponse | null> {
+    try {
+      const url = `${this.msWhatsappUrl}/search`;
+      const params = { q: query, userId, page, limit };
 
-    return {
-      results: response.data.map((conversation: WhatsappConversationRaw): WhatsappResult => ({
-        id: conversation.conversation_id || conversation.id || '',
-        message: conversation.last_message || conversation.message || '',
-        from: conversation.name || conversation.phone || 'Unknown',
-        timestamp: conversation.last_message_date || conversation.timestamp || new Date().toISOString(),
-        chatId: conversation.conversation_id || conversation.id,
-        type: 'conversation'
-      })),
-      total: response.data.length
-    };
-  } catch (error) {
-    console.error('[SEARCH-WHATSAPP] Error completo:', error);
-    if (axios.isAxiosError(error)) {
-      console.error('[SEARCH-WHATSAPP] Detalles del error Axios:', {
-        status: error.response?.status,
-        message: error.message
-      });
+      const response: AxiosResponse<any[]> = await axios.get(url, { params });
+
+      // Mapear resultados crudos al modelo WhatsappResult
+      const results: WhatsappResult[] = response.data.map((msg: any) => ({
+        id: msg.message_id,
+        message: msg.message,
+        timestamp: msg.timestamp,
+        respondido: msg.respondido,
+        categoria: msg.categoria,
+        conversationId: msg.conversation_id,
+        name: msg.name,
+        phone: msg.phone,
+        sourceAccount: msg.whatsapp_account_id,
+        sourceAccountId: msg.whatsapp_account_id ? Number(msg.whatsapp_account_id) : 0
+      }));
+
+      return {
+        success: true,
+        source: 'whatsapp',
+        results,
+        total: results.length,
+        page: Number(page) || 1,
+        limit: Number(limit) || results.length,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+        searchTerm: query,
+        accountsSearched: results.map(r => r.sourceAccount)
+      };
+    } catch (error) {
+      console.log('Error buscando en whatsapp:', error);
+      return null;
     }
-    return null;
   }
-}
 }

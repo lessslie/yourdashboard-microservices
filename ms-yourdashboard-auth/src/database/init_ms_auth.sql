@@ -638,6 +638,10 @@ CREATE TABLE messages (
     ON DELETE CASCADE
 );
 
+ALTER TABLE messages
+  ADD COLUMN categoria VARCHAR(20) DEFAULT null,
+  ADD COLUMN respondido BOOLEAN DEFAULT false,
+  ADD COLUMN canal VARCHAR(20); -- Ej: "WhatsApp"
 -- =====================================
 -- ÍNDICES PARA WHATSAPP
 -- =====================================
