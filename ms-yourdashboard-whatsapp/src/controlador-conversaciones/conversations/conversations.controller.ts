@@ -9,8 +9,7 @@ function isValidUUID(uuid: string): boolean {
 
 @Controller()
 export class ConversationsController {
-  constructor(private readonly conversationsService: ConversationsService) { }
-
+  constructor(private readonly conversationsService: ConversationsService) {}
 
   @Get('/conversations')
   async getConversations(
@@ -34,7 +33,7 @@ export class ConversationsController {
   @Get('/messages')
   async getConversationById(
     @Query('conversationId') conversationId: string,
-    @Query('whatsappAccountId') whatsappAccountId: string, // nuevo filtro opcional
+    @Query('whatsappAccountId') whatsappAccountId: string,
     @Res() res: Response,
   ) {
     if (!conversationId) {
@@ -62,7 +61,7 @@ export class ConversationsController {
   @Get('/search')
   async getConversationsSearched(
     @Query('q') contentMessage: string,
-    @Query('whatsappAccountId') whatsappAccountId: string, // nuevo filtro opcional
+    @Query('whatsappAccountId') whatsappAccountId: string,
     @Res() res: Response,
   ) {
     if (!contentMessage || contentMessage.trim() === '') {
@@ -83,4 +82,5 @@ export class ConversationsController {
     }
   }
 }
+
 

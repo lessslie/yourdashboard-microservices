@@ -61,29 +61,32 @@ export interface CalendarResult {
 //*******************************************
 
 // Interface para los datos crudos que vienen del microservicio WhatsApp
-export interface WhatsappConversationRaw {
-  conversation_id?: string;
-  id?: string;
-  last_message?: string;
-  message?: string;
-  name?: string;
-  phone?: string;
-  last_message_date?: string;
-  timestamp?: string;
-}
-
+// 📱 NUEVAS INTERFACES PARA WHATSAPP
 export interface WhatsappSearchResponse {
+  success?: boolean;
+  source?: string;
   results: WhatsappResult[];
   total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+  searchTerm: string;
+  accountsSearched: string[];
 }
 
 export interface WhatsappResult {
-  id: string;
-  message: string;
-  from: string;
-  timestamp: string;
-  chatId?: string;
-  type?: string;
+  id: string;                  // message_id
+  message: string;             // contenido del mensaje
+  timestamp: string;           // fecha/hora del mensaje
+  respondido: boolean;
+  categoria: 'verde' | 'amarillo' | 'rojo';
+  conversationId: string;
+  name: string;
+  phone: string;
+  sourceAccount: string;       // whatsapp_account_id
+  sourceAccountId: number;     
 }
 
 export interface GlobalSearchResponse {
