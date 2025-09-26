@@ -49,7 +49,8 @@ export class WhatsappAccountsService {
       return res.data;
     } catch (error: any) {
       const status = error?.response?.status || 500;
-      const message = error?.response?.data || error?.message || 'Unknown error';
+      const message =
+        error?.response?.data || error?.message || 'Unknown error';
       throw new HttpException(message, status);
     }
   }
@@ -65,26 +66,53 @@ export class WhatsappAccountsService {
     return this.request('post', `/webhook/cuentas`, payload);
   }
 
-  async updateAccount(id: string, payload: Partial<CreateAccountDTO>): Promise<any> {
-    return this.request('put', `/webhook/cuentas/${encodeURIComponent(id)}`, payload);
+  async updateAccount(
+    id: string,
+    payload: Partial<CreateAccountDTO>,
+  ): Promise<any> {
+    return this.request(
+      'put',
+      `/webhook/cuentas/${encodeURIComponent(id)}`,
+      payload,
+    );
   }
 
-  async vincularCuenta(payload: { usuario_principal_id: number; phone: string; phone_number_id: string }): Promise<any> {
+  async vincularCuenta(payload: {
+    usuario_principal_id: number;
+    phone: string;
+    phone_number_id: string;
+  }): Promise<any> {
     return this.request('post', `/webhook/cuentas/vincular`, payload);
   }
 
-  async vincularCuentaPorNumero(payload: { usuario_principal_id: number; phone: string; nombre_cuenta: string; token: string }): Promise<any> {
-    return this.request('post', `/webhook/cuentas/vincular-por-numero`, payload);
+  async vincularCuentaPorNumero(payload: {
+    usuario_principal_id: number;
+    phone: string;
+    nombre_cuenta: string;
+    token: string;
+  }): Promise<any> {
+    return this.request(
+      'post',
+      `/webhook/cuentas/vincular-por-numero`,
+      payload,
+    );
   }
 
   async refreshToken(id: string): Promise<any> {
-    return this.request('get', `/webhook/refresh-token/${encodeURIComponent(id)}`);
+    return this.request(
+      'get',
+      `/webhook/refresh-token/${encodeURIComponent(id)}`,
+    );
   }
 
   // ---------------------
   // Mensajes
   // ---------------------
-  async sendMessage(payload: { to: string; message: string; cuentaId: string }): Promise<any> {
+  async sendMessage(payload: {
+    to: string;
+    message: string;
+    cuentaId: string;
+  }): Promise<any> {
     return this.request('post', `/webhook/send`, payload);
   }
 
@@ -92,11 +120,16 @@ export class WhatsappAccountsService {
   // Conversaciones
   // ---------------------
   async getConversations(whatsappAccountId?: string): Promise<any[]> {
-    const query = whatsappAccountId ? `?whatsappAccountId=${encodeURIComponent(whatsappAccountId)}` : '';
+    const query = whatsappAccountId
+      ? `?whatsappAccountId=${encodeURIComponent(whatsappAccountId)}`
+      : '';
     return this.request('get', `/conversations${query}`);
   }
 
-  async getMessages(conversationId: string, whatsappAccountId?: string): Promise<any[]> {
+  async getMessages(
+    conversationId: string,
+    whatsappAccountId?: string,
+  ): Promise<any[]> {
     let query = `?conversationId=${encodeURIComponent(conversationId)}`;
     if (whatsappAccountId) {
       query += `&whatsappAccountId=${encodeURIComponent(whatsappAccountId)}`;

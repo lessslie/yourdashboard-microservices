@@ -1,12 +1,18 @@
 // orchestrator/auth/dto/auth-dto.ts
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsString, MinLength, MaxLength, IsNotEmpty } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  MinLength,
+  MaxLength,
+  IsNotEmpty,
+} from 'class-validator';
 
 export class RegisterDto {
   @ApiProperty({
     description: 'Email del usuario',
     example: 'usuario@gmail.com',
-    format: 'email'
+    format: 'email',
   })
   @IsEmail({}, { message: 'Debe ser un email válido' })
   @IsNotEmpty({ message: 'Email es requerido' })
@@ -16,7 +22,7 @@ export class RegisterDto {
     description: 'Contraseña del usuario',
     example: 'Clave123',
     minLength: 6,
-    maxLength: 50
+    maxLength: 50,
   })
   @IsString({ message: 'Password debe ser un string' })
   @MinLength(6, { message: 'Password debe tener al menos 6 caracteres' })
@@ -28,7 +34,7 @@ export class RegisterDto {
     description: 'Nombre completo del usuario',
     example: 'Juan Pérez',
     minLength: 2,
-    maxLength: 100
+    maxLength: 100,
   })
   @IsString({ message: 'Nombre debe ser un string' })
   @MinLength(2, { message: 'Nombre debe tener al menos 2 caracteres' })
@@ -41,7 +47,7 @@ export class LoginDto {
   @ApiProperty({
     description: 'Email del usuario',
     example: 'usuario@gmail.com',
-    format: 'email'
+    format: 'email',
   })
   @IsEmail({}, { message: 'Debe ser un email válido' })
   @IsNotEmpty({ message: 'Email es requerido' })
@@ -49,7 +55,7 @@ export class LoginDto {
 
   @ApiProperty({
     description: 'Contraseña del usuario',
-    example: 'Clave123'
+    example: 'Clave123',
   })
   @IsString({ message: 'Password debe ser un string' })
   @IsNotEmpty({ message: 'Password es requerido' })

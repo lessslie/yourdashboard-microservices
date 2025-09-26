@@ -7,7 +7,7 @@ export class OrchestratorEmailQueryDto {
   @ApiProperty({
     description: 'ID del usuario (requerido)',
     example: '1',
-    required: true
+    required: true,
   })
   @IsString()
   userId: string;
@@ -17,7 +17,7 @@ export class OrchestratorEmailQueryDto {
     example: 1,
     default: 1,
     minimum: 1,
-    required: false
+    required: false,
   })
   @IsOptional()
   @Type(() => Number)
@@ -31,7 +31,7 @@ export class OrchestratorEmailQueryDto {
     default: 10,
     minimum: 1,
     maximum: 50,
-    required: false
+    required: false,
   })
   @IsOptional()
   @Type(() => Number)
@@ -45,7 +45,7 @@ export class OrchestratorSearchQueryDto extends OrchestratorEmailQueryDto {
   @ApiProperty({
     description: 'Término de búsqueda en emails',
     example: 'reunión proyecto',
-    required: true
+    required: true,
   })
   @IsString()
   q: string;

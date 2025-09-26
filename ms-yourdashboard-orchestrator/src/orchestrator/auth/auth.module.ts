@@ -5,14 +5,10 @@ import { AuthOrchestratorService } from './auth.service';
 import { ConfigModule } from '@nestjs/config';
 import { CacheModule } from '../cache/cache.module';
 
-
 @Module({
-  imports: [
-    ConfigModule,
-    CacheModule,
-  ],
+  imports: [ConfigModule, CacheModule],
   controllers: [AuthOrchestratorController],
   providers: [AuthOrchestratorService],
-  exports: [AuthOrchestratorService]
+  exports: [AuthOrchestratorService],
 })
 export class AuthOrchestratorModule {}

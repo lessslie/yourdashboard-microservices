@@ -7,32 +7,36 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // ✅ VALIDACIÓN GLOBAL CON CLASS-VALIDATOR
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,//elimina propiedades no definidas en DTOs
-    forbidNonWhitelisted: true,//lanza error si se envían propiedades no definidas
-    transform: true,//transforma automáticamente los tipos de datos
-    disableErrorMessages: false,//muestra mensajes de error detallados
-  }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true, //elimina propiedades no definidas en DTOs
+      forbidNonWhitelisted: true, //lanza error si se envían propiedades no definidas
+      transform: true, //transforma automáticamente los tipos de datos
+      disableErrorMessages: false, //muestra mensajes de error detallados
+    }),
+  );
 
   // CONFIGURACIÓN DE SWAGGER PARA MS-ORCHESTRATOR
   const config = new DocumentBuilder()
     .setTitle('YourDashboard Orchestrator API')
-    .setDescription('Backend For Frontend (BFF) - Coordina todos los microservicios de YourDashboard')
+    .setDescription(
+      'Backend For Frontend (BFF) - Coordina todos los microservicios de YourDashboard',
+    )
     .setVersion('1.0')
     .addTag('Emails', 'Endpoints de emails (coordina MS-Auth + MS-Email)')
     .addTag('Authentication', 'Endpoints de autenticación')
     .addTag('Health', 'Estado del servicio')
     .addBearerAuth(
-    {
-      type: 'http',
-      scheme: 'bearer',
-      bearerFormat: 'JWT',
-      name: 'JWT',
-      description: 'Ingresa tu JWT token',
-      in: 'header',
-    },
-    'JWT-auth' 
-  )
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'JWT',
+        description: 'Ingresa tu JWT token',
+        in: 'header',
+      },
+      'JWT-auth',
+    )
     .addServer('http://localhost:3003', 'MS-Orchestrator Principal')
     .addServer('http://localhost:3000', 'Usado por Frontend')
     .build();
@@ -78,20 +82,24 @@ async function bootstrap() {
           }
         }, 500);
       }
-      `
-    ]
+      `,
+    ],
   });
 
   // CONFIGURACIÓN DE CORS
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'],// Permite solicitudes desde estos orígenes para hacer peticiones a este microservicio
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:3002',
+    ], // Permite solicitudes desde estos orígenes para hacer peticiones a este microservicio
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    credentials: true,// Permite el uso de cookies y credenciales
-    allowedHeaders: ['Content-Type', 'Authorization'],// Permite estos encabezados en las solicitudes
+    credentials: true, // Permite el uso de cookies y credenciales
+    allowedHeaders: ['Content-Type', 'Authorization'], // Permite estos encabezados en las solicitudes
   });
-  
+
   await app.listen(process.env.PORT ?? 3003);
-  
+
   // LOGS INFORMATIVOS
   console.log(`🎭 MS-ORCHESTRATOR running on: ${await app.getUrl()}`);
   console.log(`📚 Swagger API: http://localhost:3003/api`);

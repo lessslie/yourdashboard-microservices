@@ -1,46 +1,46 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty } from '@nestjs/swagger';
 
 // orchestrator-response.dto.ts
 export class OrchestratorEmailDto {
   @ApiProperty({
     description: 'ID único del email',
-    example: '1847a8e123456789'
+    example: '1847a8e123456789',
   })
   id: string;
 
   @ApiProperty({
     description: 'Asunto del email',
-    example: 'Reunión de proyecto - Viernes 10am'
+    example: 'Reunión de proyecto - Viernes 10am',
   })
   subject: string;
 
   @ApiProperty({
     description: 'Email del remitente',
-    example: 'jefe@empresa.com'
+    example: 'jefe@empresa.com',
   })
   fromEmail: string;
 
   @ApiProperty({
     description: 'Nombre del remitente',
-    example: 'Juan Pérez'
+    example: 'Juan Pérez',
   })
   fromName: string;
 
   @ApiProperty({
     description: 'Fecha de recepción (ISO string)',
-    example: '2024-01-15T10:30:00Z'
+    example: '2024-01-15T10:30:00Z',
   })
   receivedDate: string;
 
   @ApiProperty({
     description: 'Si el email ha sido leído',
-    example: false
+    example: false,
   })
   isRead: boolean;
 
   @ApiProperty({
     description: 'Si tiene archivos adjuntos',
-    example: true
+    example: true,
   })
   hasAttachments: boolean;
 }
@@ -48,13 +48,13 @@ export class OrchestratorEmailDto {
 export class OrchestratorEmailListDto {
   @ApiProperty({
     description: 'Indica si la operación fue exitosa',
-    example: true
+    example: true,
   })
   success: boolean;
 
   @ApiProperty({
     description: 'Fuente de los datos',
-    example: 'orchestrator'
+    example: 'orchestrator',
   })
   source: string;
 
@@ -62,17 +62,17 @@ export class OrchestratorEmailListDto {
     description: 'Datos de emails con paginación',
     type: 'object',
     properties: {
-    emails: {
+      emails: {
         type: 'array',
-        items: { $ref: '#/components/schemas/OrchestratorEmailDto' }
+        items: { $ref: '#/components/schemas/OrchestratorEmailDto' },
+      },
+      total: { type: 'number', example: 150 },
+      page: { type: 'number', example: 1 },
+      limit: { type: 'number', example: 10 },
+      totalPages: { type: 'number', example: 15 },
+      hasNextPage: { type: 'boolean', example: true },
+      hasPreviousPage: { type: 'boolean', example: false },
     },
-    total: { type: 'number', example: 150 },
-    page: { type: 'number', example: 1 },
-    limit: { type: 'number', example: 10 },
-    totalPages: { type: 'number', example: 15 },
-    hasNextPage: { type: 'boolean', example: true },
-    hasPreviousPage: { type: 'boolean', example: false }
-    }
   })
   data: {
     emails: OrchestratorEmailDto[];
@@ -88,7 +88,7 @@ export class OrchestratorEmailListDto {
   @ApiProperty({
     description: 'Término de búsqueda (solo en search)',
     example: 'reunión',
-    required: false
+    required: false,
   })
   searchTerm?: string;
 }
@@ -96,13 +96,13 @@ export class OrchestratorEmailListDto {
 export class OrchestratorStatsDto {
   @ApiProperty({
     description: 'Indica si la operación fue exitosa',
-    example: true
+    example: true,
   })
   success: boolean;
 
   @ApiProperty({
     description: 'Fuente de los datos',
-    example: 'orchestrator'
+    example: 'orchestrator',
   })
   source: string;
 
@@ -112,8 +112,8 @@ export class OrchestratorStatsDto {
     properties: {
       totalEmails: { type: 'number', example: 247 },
       unreadEmails: { type: 'number', example: 23 },
-      readEmails: { type: 'number', example: 224 }
-    }
+      readEmails: { type: 'number', example: 224 },
+    },
   })
   data: {
     totalEmails: number;
@@ -125,25 +125,25 @@ export class OrchestratorStatsDto {
 export class OrchestratorErrorDto {
   @ApiProperty({
     description: 'Indica que hubo un error',
-    example: false
+    example: false,
   })
   success: boolean;
 
   @ApiProperty({
     description: 'Mensaje de error',
-    example: 'Usuario no tiene tokens configurados'
+    example: 'Usuario no tiene tokens configurados',
   })
   message: string;
 
   @ApiProperty({
     description: 'Código de estado HTTP',
-    example: 404
+    example: 404,
   })
   statusCode: number;
 
   @ApiProperty({
     description: 'Timestamp del error',
-    example: '2024-01-15T10:30:00Z'
+    example: '2024-01-15T10:30:00Z',
   })
   timestamp: string;
 }

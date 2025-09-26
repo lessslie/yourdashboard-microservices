@@ -23,13 +23,13 @@ export interface SendEmailResponse {
 export class OrchestratorSendEmailResponseDto {
   @ApiProperty({
     description: 'Indica si el email fue enviado exitosamente',
-    example: true
+    example: true,
   })
   success: boolean;
 
   @ApiProperty({
     description: 'Fuente que procesó la solicitud',
-    example: 'orchestrator'
+    example: 'orchestrator',
   })
   source: string;
 
@@ -37,71 +37,71 @@ export class OrchestratorSendEmailResponseDto {
     description: 'Datos del email enviado',
     type: 'object',
     properties: {
-      messageId: { 
-        type: 'string', 
+      messageId: {
+        type: 'string',
         example: '1847a8e123456789',
-        description: 'ID único del mensaje en Gmail'
+        description: 'ID único del mensaje en Gmail',
       },
-      threadId: { 
-        type: 'string', 
+      threadId: {
+        type: 'string',
         example: '1847a8e123456789',
-        description: 'ID del hilo de conversación'
+        description: 'ID del hilo de conversación',
       },
-      sentAt: { 
-        type: 'string', 
+      sentAt: {
+        type: 'string',
         example: '2024-01-15T10:30:00Z',
-        description: 'Timestamp de cuándo se envió el email'
+        description: 'Timestamp de cuándo se envió el email',
       },
-      fromEmail: { 
-        type: 'string', 
+      fromEmail: {
+        type: 'string',
         example: 'agata.backend@gmail.com',
-        description: 'Email remitente confirmado'
+        description: 'Email remitente confirmado',
       },
-      toEmails: { 
-        type: 'array', 
-        items: { type: 'string' }, 
+      toEmails: {
+        type: 'array',
+        items: { type: 'string' },
         example: ['cliente@empresa.com', 'socio@empresa.com'],
-        description: 'Lista de destinatarios principales'
+        description: 'Lista de destinatarios principales',
       },
-      ccEmails: { 
-        type: 'array', 
-        items: { type: 'string' }, 
+      ccEmails: {
+        type: 'array',
+        items: { type: 'string' },
         example: ['jefe@empresa.com'],
-        description: 'Lista de destinatarios en copia'
+        description: 'Lista de destinatarios en copia',
       },
-      bccEmails: { 
-        type: 'array', 
-        items: { type: 'string' }, 
+      bccEmails: {
+        type: 'array',
+        items: { type: 'string' },
         example: ['supervisor@empresa.com'],
-        description: 'Lista de destinatarios en copia oculta'
+        description: 'Lista de destinatarios en copia oculta',
       },
-      subject: { 
-        type: 'string', 
+      subject: {
+        type: 'string',
         example: 'Propuesta comercial - Proyecto ABC',
-        description: 'Asunto del email enviado'
+        description: 'Asunto del email enviado',
       },
-      priority: { 
-        type: 'string', 
+      priority: {
+        type: 'string',
         enum: ['low', 'normal', 'high'],
         example: 'normal',
-        description: 'Prioridad del email'
+        description: 'Prioridad del email',
       },
-      hasAttachments: { 
-        type: 'boolean', 
+      hasAttachments: {
+        type: 'boolean',
         example: true,
-        description: 'Si el email incluye archivos adjuntos'
+        description: 'Si el email incluye archivos adjuntos',
       },
-      attachmentCount: { 
-        type: 'number', 
+      attachmentCount: {
+        type: 'number',
         example: 2,
-        description: 'Número de archivos adjuntos'
+        description: 'Número de archivos adjuntos',
       },
-      sizeEstimate: { 
-        type: 'number', 
+      sizeEstimate: {
+        type: 'number',
         example: 2048000,
-        description: 'Tamaño aproximado del email en bytes'
-      }
-    }
+        description: 'Tamaño aproximado del email en bytes',
+      },
+    },
   })
   data: {
     messageId: string;
@@ -123,7 +123,7 @@ export class OrchestratorSendEmailResponseDto {
 export class SendEmailErrorResponseDto {
   @ApiProperty({
     description: 'Indica que ocurrió un error',
-    example: false
+    example: false,
   })
   success: boolean;
 
@@ -132,7 +132,7 @@ export class SendEmailErrorResponseDto {
     example: 'INVALID_RECIPIENTS',
     enum: [
       'INVALID_EMAIL',
-      'INVALID_RECIPIENTS', 
+      'INVALID_RECIPIENTS',
       'TOO_MANY_RECIPIENTS',
       'INVALID_ACCOUNT',
       'ACCOUNT_NOT_AUTHORIZED',
@@ -140,40 +140,40 @@ export class SendEmailErrorResponseDto {
       'EMAIL_TOO_LARGE',
       'INVALID_ATTACHMENT',
       'SEND_FAILED',
-      'TOKEN_EXPIRED'
-    ]
+      'TOKEN_EXPIRED',
+    ],
   })
   error: string;
 
   @ApiProperty({
     description: 'Mensaje descriptivo del error',
-    example: 'El email cliente@empresa..com tiene formato inválido'
+    example: 'El email cliente@empresa..com tiene formato inválido',
   })
   message: string;
 
   @ApiProperty({
     description: 'Campo específico que causó el error (si aplica)',
     example: 'to[0]',
-    required: false
+    required: false,
   })
   field?: string;
 
   @ApiProperty({
     description: 'Tiempo de espera antes de reintentar (en segundos)',
     example: 3600,
-    required: false
+    required: false,
   })
   retryAfter?: number;
 
   @ApiProperty({
     description: 'Detalles adicionales del error',
-    required: false
+    required: false,
   })
   details?: any;
 
   @ApiProperty({
     description: 'Timestamp del error',
-    example: '2024-01-15T10:30:00Z'
+    example: '2024-01-15T10:30:00Z',
   })
   timestamp: string;
 }

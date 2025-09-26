@@ -4,31 +4,31 @@ import { ApiProperty } from '@nestjs/swagger';
 export class AuthStartResponseDto {
   @ApiProperty({
     description: 'Indica si la operación fue exitosa',
-    example: true
+    example: true,
   })
   success: boolean;
 
   @ApiProperty({
     description: 'Mensaje descriptivo',
-    example: 'Usar /auth/google para iniciar OAuth'
+    example: 'Usar /auth/google para iniciar OAuth',
   })
   message: string;
 
   @ApiProperty({
     description: 'URL directa del MS-Auth',
-    example: 'http://localhost:3001/auth/google'
+    example: 'http://localhost:3001/auth/google',
   })
   authUrl: string;
 
   @ApiProperty({
     description: 'URL del orquestador (recomendada)',
-    example: 'http://localhost:3003/auth/google'
+    example: 'http://localhost:3003/auth/google',
   })
   orchestratorUrl: string;
 
   @ApiProperty({
     description: 'Instrucciones para el frontend',
-    example: 'Recomendado: usar /auth/google del orquestador'
+    example: 'Recomendado: usar /auth/google del orquestador',
   })
   instructions: string;
 }
@@ -36,31 +36,31 @@ export class AuthStartResponseDto {
 export class AuthErrorResponseDto {
   @ApiProperty({
     description: 'Indica que hubo un error',
-    example: false
+    example: false,
   })
   success: boolean;
 
   @ApiProperty({
     description: 'Mensaje de error',
-    example: 'Error en autenticación OAuth'
+    example: 'Error en autenticación OAuth',
   })
   message: string;
 
   @ApiProperty({
     description: 'Código de estado HTTP',
-    example: 500
+    example: 500,
   })
   statusCode: number;
 
   @ApiProperty({
     description: 'Timestamp del error',
-    example: '2024-01-15T10:30:00Z'
+    example: '2024-01-15T10:30:00Z',
   })
   timestamp: string;
 }
 
 export class UserDto {
-  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000' })
   id: string;
 
   @ApiProperty({ example: 'usuario@example.com' })
@@ -81,7 +81,7 @@ export class UserDto {
 
 // 🆕 NUEVOS DTOs PARA EL PERFIL COMPLETO
 export class UsuarioDto {
-  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000' })
   id: string;
 
   @ApiProperty({ example: 'usuario@example.com' })
@@ -101,7 +101,7 @@ export class UsuarioDto {
 }
 
 export class CuentaGmailCompleteDto {
-  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000' })
   id: string;
 
   @ApiProperty({ example: 'usuario@gmail.com' })
@@ -130,7 +130,7 @@ export class CuentaGmailCompleteDto {
 }
 
 export class SesionActivaDto {
-  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000' })
   id: string;
 
   @ApiProperty({ example: '2024-01-15T10:30:00Z' })
@@ -174,12 +174,12 @@ export class EstadisticasDto {
   @ApiProperty({ example: '2024-01-15T14:45:05.157Z' })
   ultima_sincronizacion: string;
 
-  @ApiProperty({ 
-    example: { 
-      email_gmail: 'usuario@gmail.com', 
-      emails_count: 16696 
+  @ApiProperty({
+    example: {
+      email_gmail: 'usuario@gmail.com',
+      emails_count: 16696,
     },
-    nullable: true 
+    nullable: true,
   })
   cuenta_mas_activa: {
     email_gmail: string;
@@ -195,9 +195,9 @@ export class AuthResponseDto {
   @ApiProperty({ example: 'Login exitoso' })
   message: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     type: UserDto,
-    description: 'Datos básicos del usuario (compatibilidad)' 
+    description: 'Datos básicos del usuario (compatibilidad)',
   })
   user: UserDto;
 
@@ -205,34 +205,34 @@ export class AuthResponseDto {
   token: string;
 
   // 🆕 NUEVOS CAMPOS DEL PERFIL
-  @ApiProperty({ 
+  @ApiProperty({
     type: UsuarioDto,
-    description: 'Datos completos del usuario (formato igual a /auth/me)' 
+    description: 'Datos completos del usuario (formato igual a /auth/me)',
   })
   usuario: UsuarioDto;
 
-  @ApiProperty({ 
+  @ApiProperty({
     type: [CuentaGmailCompleteDto],
-    description: 'Cuentas Gmail conectadas con estadísticas completas' 
+    description: 'Cuentas Gmail conectadas con estadísticas completas',
   })
   cuentas_gmail: CuentaGmailCompleteDto[];
 
-  @ApiProperty({ 
+  @ApiProperty({
     type: [SesionActivaDto],
-    description: 'Sesiones activas del usuario' 
+    description: 'Sesiones activas del usuario',
   })
   sesiones_activas: SesionActivaDto[];
 
-  @ApiProperty({ 
+  @ApiProperty({
     type: EstadisticasDto,
-    description: 'Estadísticas completas del usuario' 
+    description: 'Estadísticas completas del usuario',
   })
   estadisticas: EstadisticasDto;
 }
 
 // ✅ CLASES PARA ENDPOINTS DE CUENTAS GMAIL (las que faltaban)
 export class CuentaGmailDto {
-  @ApiProperty({ example: "550e8400-e29b-41d4-a716-446655440000" })
+  @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000' })
   id: string;
 
   @ApiProperty({ example: 'usuario@gmail.com' })

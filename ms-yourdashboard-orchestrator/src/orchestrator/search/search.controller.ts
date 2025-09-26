@@ -1,5 +1,20 @@
-import { Controller, Get, Query, Req, UnauthorizedException, HttpException, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiOkResponse, ApiQuery, ApiBearerAuth, ApiUnauthorizedResponse } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Query,
+  Req,
+  UnauthorizedException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiOkResponse,
+  ApiQuery,
+  ApiBearerAuth,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import { SearchService } from './search.service';
 import { Request } from 'express';
 
@@ -13,14 +28,30 @@ export class SearchController {
    */
   @Get('global')
   @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Búsqueda global',
-    description: 'Busca simultáneamente en todos los microservicios (emails, calendar, whatsapp) desde la dashboard principal.'
+    description:
+      'Busca simultáneamente en todos los microservicios (emails, calendar, whatsapp) desde la dashboard principal.',
   })
-  @ApiQuery({ name: 'q', required: true, description: 'Término de búsqueda', example: 'mañana' })
-  @ApiQuery({ name: 'page', required: false, description: 'Página de resultados', example: '1' })
-  @ApiQuery({ name: 'limit', required: false, description: 'Cantidad de resultados por servicio', example: '5' })
-  @ApiOkResponse({ 
+  @ApiQuery({
+    name: 'q',
+    required: true,
+    description: 'Término de búsqueda',
+    example: 'mañana',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    description: 'Página de resultados',
+    example: '1',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Cantidad de resultados por servicio',
+    example: '5',
+  })
+  @ApiOkResponse({
     description: 'Resultados de búsqueda obtenidos exitosamente',
     schema: {
       type: 'object',
@@ -36,24 +67,24 @@ export class SearchController {
               properties: {
                 results: { type: 'array', items: { type: 'object' } },
                 total: { type: 'number', example: 179 },
-                accountsSearched: { type: 'array', items: { type: 'string' } }
-              }
+                accountsSearched: { type: 'array', items: { type: 'string' } },
+              },
             },
             calendar: {
               type: 'object',
               properties: {
                 results: { type: 'array', items: { type: 'object' } },
-                total: { type: 'number', example: 0 }
-              }
+                total: { type: 'number', example: 0 },
+              },
             },
             whatsapp: {
               type: 'object',
               properties: {
                 results: { type: 'array', items: { type: 'object' } },
-                total: { type: 'number', example: 0 }
-              }
-            }
-          }
+                total: { type: 'number', example: 0 },
+              },
+            },
+          },
         },
         summary: {
           type: 'object',
@@ -64,13 +95,13 @@ export class SearchController {
               properties: {
                 emails: { type: 'number', example: 179 },
                 calendar: { type: 'number', example: 0 },
-                whatsapp: { type: 'number', example: 0 }
-              }
-            }
-          }
-        }
-      }
-    }
+                whatsapp: { type: 'number', example: 0 },
+              },
+            },
+          },
+        },
+      },
+    },
   })
   @ApiUnauthorizedResponse({
     description: 'Token de autorización requerido',
@@ -79,27 +110,27 @@ export class SearchController {
       properties: {
         statusCode: { type: 'number', example: 401 },
         message: { type: 'string', example: 'Token de autorización requerido' },
-        error: { type: 'string', example: 'Unauthorized' }
-      }
-    }
+        error: { type: 'string', example: 'Unauthorized' },
+      },
+    },
   })
   async searchGlobal(
     @Req() req: Request,
     @Query('q') query: string,
     @Query('page') page: string = '1',
-    @Query('limit') limit: string = '10'
+    @Query('limit') limit: string = '10',
   ) {
     console.log('🔍 Request completo:', {
       url: req.url,
       method: req.method,
       headers: req.headers,
       query: req.query,
-      params: { query, page, limit }
+      params: { query, page, limit },
     });
 
     // Verificar token de autorización
     const authHeader = req.headers?.authorization;
-    
+
     if (!authHeader) {
       console.log('❌ No se encontró Authorization header');
       throw new UnauthorizedException('Token de autorización requerido');
@@ -107,13 +138,23 @@ export class SearchController {
 
     if (!query) {
       console.log('❌ No se encontró parámetro q');
-      throw new HttpException('El parámetro q es requerido', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'El parámetro q es requerido',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
-    console.log(`🔵 SEARCH-GLOBAL - Búsqueda solicitada: "${query}" con token presente`);
+    console.log(
+      `🔵 SEARCH-GLOBAL - Búsqueda solicitada: "${query}" con token presente`,
+    );
 
     try {
-      return await this.searchService.searchGlobal(authHeader, query, page, limit);
+      return await this.searchService.searchGlobal(
+        authHeader,
+        query,
+        page,
+        limit,
+      );
     } catch (error) {
       console.error('❌ Error en searchGlobal:', error);
       throw error;

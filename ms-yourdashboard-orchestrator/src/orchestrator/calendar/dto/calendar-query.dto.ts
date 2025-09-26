@@ -1,13 +1,20 @@
 // ms-yourdashboard-orchestrator/src/orchestrator/calendar/dto/calendar-query.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsInt, Min, Max, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsInt,
+  Min,
+  Max,
+  IsDateString,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CalendarQueryDto {
   @ApiProperty({
     description: 'ID de la cuenta Gmail específica',
     example: 'abc123def456ghi789',
-    required: true
+    required: true,
   })
   @IsString()
   cuentaGmailId: string;
@@ -15,7 +22,7 @@ export class CalendarQueryDto {
   @ApiProperty({
     description: 'Fecha mínima (ISO)',
     example: '2025-08-01T00:00:00Z',
-    required: true
+    required: true,
   })
   @IsDateString()
   timeMin: string;
@@ -23,7 +30,7 @@ export class CalendarQueryDto {
   @ApiProperty({
     description: 'Fecha máxima (ISO)',
     example: '2025-08-31T23:59:59Z',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsDateString()
@@ -34,7 +41,7 @@ export class CalendarQueryDto {
     example: 1,
     default: 1,
     minimum: 1,
-    required: false
+    required: false,
   })
   @IsOptional()
   @Type(() => Number)
@@ -48,7 +55,7 @@ export class CalendarQueryDto {
     default: 10,
     minimum: 1,
     maximum: 50,
-    required: false
+    required: false,
   })
   @IsOptional()
   @Type(() => Number)
@@ -62,7 +69,7 @@ export class CalendarSearchQueryDto extends CalendarQueryDto {
   @ApiProperty({
     description: 'Término de búsqueda en eventos',
     example: 'reunión proyecto',
-    required: true
+    required: true,
   })
   @IsString()
   q: string;
@@ -72,7 +79,7 @@ export class CalendarStatsQueryDto {
   @ApiProperty({
     description: 'ID de la cuenta Gmail específica',
     example: 'abc123def456ghi789',
-    required: true
+    required: true,
   })
   @IsString()
   cuentaGmailId: string;
@@ -82,7 +89,7 @@ export class CalendarSyncQueryDto {
   @ApiProperty({
     description: 'ID de la cuenta Gmail específica',
     example: '4',
-    required: true
+    required: true,
   })
   @IsString()
   cuentaGmailId: string;
@@ -93,7 +100,7 @@ export class CalendarSyncQueryDto {
     default: 100,
     minimum: 1,
     maximum: 250,
-    required: false
+    required: false,
   })
   @IsOptional()
   @Type(() => Number)
@@ -108,7 +115,7 @@ export class CalendarJWTQueryDto {
   @ApiProperty({
     description: 'ID del usuario principal (extraído del JWT)',
     example: 'abc123def456ghi789',
-    required: true
+    required: true,
   })
   @IsString()
   userId: string;
@@ -116,7 +123,7 @@ export class CalendarJWTQueryDto {
   @ApiProperty({
     description: 'Fecha mínima (ISO)',
     example: '2025-08-01T00:00:00Z',
-    required: true
+    required: true,
   })
   @IsDateString()
   timeMin: string;
@@ -124,7 +131,7 @@ export class CalendarJWTQueryDto {
   @ApiProperty({
     description: 'Fecha máxima (ISO)',
     example: '2025-08-31T23:59:59Z',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsDateString()
@@ -135,7 +142,7 @@ export class CalendarJWTQueryDto {
     example: 1,
     default: 1,
     minimum: 1,
-    required: false
+    required: false,
   })
   @IsOptional()
   @Type(() => Number)
@@ -149,7 +156,7 @@ export class CalendarJWTQueryDto {
     default: 10,
     minimum: 1,
     maximum: 50,
-    required: false
+    required: false,
   })
   @IsOptional()
   @Type(() => Number)
@@ -163,7 +170,7 @@ export class CalendarJWTSearchQueryDto extends CalendarJWTQueryDto {
   @ApiProperty({
     description: 'Término de búsqueda global en eventos',
     example: 'reunión proyecto',
-    required: true
+    required: true,
   })
   @IsString()
   q: string;

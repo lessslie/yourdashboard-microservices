@@ -11,6 +11,6 @@ import { ConfigModule } from '@nestjs/config';
   ],
   controllers: [CalendarOrchestratorController],
   providers: [CalendarOrchestratorService],
-  exports: [CalendarOrchestratorService]
+  exports: [CalendarOrchestratorService],
 })
 export class CalendarOrchestratorModule {}

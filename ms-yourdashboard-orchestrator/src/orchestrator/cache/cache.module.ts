@@ -10,6 +10,6 @@ import { CacheService } from './cache.service';
 @Module({
   imports: [ConfigModule],
   providers: [CacheService],
-  exports: [CacheService]
+  exports: [CacheService],
 })
 export class CacheModule {}

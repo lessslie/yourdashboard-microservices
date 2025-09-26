@@ -7,7 +7,7 @@ export class ShareCalendarDto {
   @ApiProperty({
     description: 'ID de la cuenta Gmail que quiere compartir su calendar',
     example: 'abc123def456ghi789',
-    required: true
+    required: true,
   })
   @IsString()
   @IsNotEmpty()
@@ -16,7 +16,7 @@ export class ShareCalendarDto {
   @ApiProperty({
     description: 'Email del usuario con quien compartir el calendar',
     example: 'amigo@gmail.com',
-    required: true
+    required: true,
   })
   @IsEmail()
   @IsNotEmpty()
@@ -26,17 +26,18 @@ export class ShareCalendarDto {
     description: 'Nivel de acceso para el calendar compartido',
     example: 'reader',
     enum: ['reader', 'writer'],
-    required: true
+    required: true,
   })
   @IsIn(['reader', 'writer'])
   @IsNotEmpty()
   role: 'reader' | 'writer';
 
   @ApiProperty({
-    description: 'ID del calendar a compartir (opcional, por defecto "primary")',
+    description:
+      'ID del calendar a compartir (opcional, por defecto "primary")',
     example: 'primary',
     required: false,
-    default: 'primary'
+    default: 'primary',
   })
   @IsString()
   calendarId?: string = 'primary';
@@ -45,13 +46,13 @@ export class ShareCalendarDto {
 export class ShareCalendarResponseDto {
   @ApiProperty({
     description: 'Indica si la operación fue exitosa',
-    example: true
+    example: true,
   })
   success: boolean;
 
   @ApiProperty({
     description: 'Fuente de los datos',
-    example: 'orchestrator'
+    example: 'orchestrator',
   })
   source: string;
 
@@ -63,8 +64,8 @@ export class ShareCalendarResponseDto {
       message: { type: 'string', example: 'Calendar compartido exitosamente' },
       shared_with: { type: 'string', example: 'amigo@gmail.com' },
       role: { type: 'string', example: 'reader' },
-      calendar_id: { type: 'string', example: 'primary' }
-    }
+      calendar_id: { type: 'string', example: 'primary' },
+    },
   })
   data: {
     success: boolean;
@@ -77,7 +78,7 @@ export class ShareCalendarResponseDto {
   @ApiProperty({
     description: 'Mensaje adicional',
     example: 'Calendar compartido con amigo@gmail.com como reader',
-    required: false
+    required: false,
   })
   message?: string;
 }

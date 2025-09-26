@@ -16,7 +16,7 @@ export interface WhatsAppWebhookPayload {
         messages: Array<{
           from: string;
           id: string;
-          timestamp: string;  // es string en la API
+          timestamp: string; // es string en la API
           text?: { body: string };
           type: string;
         }>;
@@ -25,4 +25,3 @@ export interface WhatsAppWebhookPayload {
     }>;
   }>;
 }
-

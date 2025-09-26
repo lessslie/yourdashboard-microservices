@@ -9,7 +9,7 @@ export interface SaveFullContentResponse {
     contentSize: number;
     attachmentsCount: number;
     hasFullContent: boolean;
-    wasAlreadySaved: boolean
+    wasAlreadySaved: boolean;
   };
 }
 

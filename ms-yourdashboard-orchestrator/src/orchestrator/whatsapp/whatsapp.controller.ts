@@ -1,9 +1,13 @@
 import { Controller, Get, Post, Put, Body, Param, Query } from '@nestjs/common';
-import { WhatsappAccountsService, CreateAccountDTO, SendMessageDTO } from './whatsapp-accounts.service';
+import {
+  WhatsappAccountsService,
+  CreateAccountDTO,
+  SendMessageDTO,
+} from './whatsapp-accounts.service';
 
 @Controller('orchestrator/whatsapp')
 export class WhatsappController {
-  constructor(private readonly whatsappService: WhatsappAccountsService) { }
+  constructor(private readonly whatsappService: WhatsappAccountsService) {}
 
   // Cuentas
   @Get('accounts')
@@ -17,17 +21,35 @@ export class WhatsappController {
   }
 
   @Put('accounts/:id')
-  updateAccount(@Param('id') id: string, @Body() body: Partial<CreateAccountDTO>) {
+  updateAccount(
+    @Param('id') id: string,
+    @Body() body: Partial<CreateAccountDTO>,
+  ) {
     return this.whatsappService.updateAccount(id, body);
   }
 
   @Post('accounts/vincular')
-  vincularCuenta(@Body() body: { usuario_principal_id: number; phone: string; phone_number_id: string }) {
+  vincularCuenta(
+    @Body()
+    body: {
+      usuario_principal_id: number;
+      phone: string;
+      phone_number_id: string;
+    },
+  ) {
     return this.whatsappService.vincularCuenta(body);
   }
 
   @Post('accounts/vincular-por-numero')
-  vincularCuentaPorNumero(@Body() body: { usuario_principal_id: number; phone: string; nombre_cuenta: string; token: string }) {
+  vincularCuentaPorNumero(
+    @Body()
+    body: {
+      usuario_principal_id: number;
+      phone: string;
+      nombre_cuenta: string;
+      token: string;
+    },
+  ) {
     return this.whatsappService.vincularCuentaPorNumero(body);
   }
 

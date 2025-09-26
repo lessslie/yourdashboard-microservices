@@ -1,11 +1,11 @@
 // orchestrator/auth/interfaces/auth.interfaces.ts
 export { RegisterDto, LoginDto } from '../dto/auth-dto';
-export { 
-  AuthResponseDto, 
+export {
+  AuthResponseDto,
   ProfileResponseDto,
   CuentasGmailResponseDto,
   CuentaGmailResponseDto,
-  CuentaGmailDto
+  CuentaGmailDto,
 } from '../dto/auth-response.dto';
 
 // Respuestas del Orchestrator Auth
