@@ -644,7 +644,7 @@ private redirectToGoogleOAuth(res: Response, userId: string, service: 'gmail' | 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({
-    summary: 'Desconectar cuenta Gmail',
+    summary: 'Desconectar cuenta Gmail de usuario principal',
     description:
       'Desconecta y elimina una cuenta Gmail específica del usuario.',
   })
@@ -691,7 +691,6 @@ private redirectToGoogleOAuth(res: Response, userId: string, service: 'gmail' | 
     summary: 'Eliminar usuario principal completamente',
     description: `
       **⚠️ OPERACIÓN DESTRUCTIVA ⚠️**
-      
       Elimina completamente al usuario principal y TODA su data asociada:
       - ✅ Usuario principal
       - ✅ Todas las cuentas Gmail asociadas
@@ -949,7 +948,7 @@ async actualizarAliasCuenta(
 
   
   // ================================
-  // 🔧 MÉTODOS PRIVADOS NUEVOS - AGREGAR AL FINAL DE LA CLASE
+  // 🔧 MÉTODOS PRIVADOS NUEVOS
   // ================================
 
   /**
@@ -992,7 +991,7 @@ async actualizarAliasCuenta(
     }
 
     const [userIdStr, service] = parts;
-    const userId = userIdStr; // ✅ CORREGIDO: Ya es string UUID
+    const userId = userIdStr;
     if (!userId || userId.trim() === '') {
       throw new Error('Estado inválido - userId vacío');
     }
@@ -1008,7 +1007,7 @@ private async handleGmailCallback(
   // Usar el método existente
   await this.authService.manejarCallbackGoogle(googleUser, userId);
 
-  // ✨ NUEVO: Invalidar cache del Orchestrator
+  //Invalidar cache del Orchestrator
   await this.invalidateOrchestratorCache(userId);
 
   const redirectUrl = new URL(
@@ -1023,7 +1022,6 @@ private async handleGmailCallback(
   res.redirect(redirectUrl.toString());
 }
 
-// ✨ NUEVO MÉTODO
 private async invalidateOrchestratorCache(userId: string): Promise<void> {
   try {
     // Invalidar cache de perfil en el Orchestrator

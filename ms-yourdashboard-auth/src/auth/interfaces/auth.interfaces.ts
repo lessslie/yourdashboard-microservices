@@ -5,12 +5,12 @@
 import { Profile } from "passport";
 
 export interface UsuarioPrincipal {
-  id: string; // ✅ number → string
+  id: string;
   email: string;
-  password_hash?: string; // Opcional al retornar al frontend
+  password_hash?: string;
   nombre: string;
-  fecha_registro: Date;
-  ultima_actualizacion: Date;
+  fecha_registro: Date | null;
+  ultima_actualizacion: Date | null;
   estado: 'activo' | 'suspendido' | 'eliminado';
   email_verificado: boolean;
 }
