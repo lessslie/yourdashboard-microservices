@@ -581,9 +581,9 @@ const WhatsAppCard = ({ onConnect }: { onConnect: () => void }) => {
   };
 
   //!!! Sin funcionalidad por ahora
-  const handleCardClick = () => {
-    router.push("/dashboard/whatsapp");
-  };
+  //const handleCardClick = () => {
+   // router.push("/dashboard/whatsapp");
+  //};
 
   return (
     <Card

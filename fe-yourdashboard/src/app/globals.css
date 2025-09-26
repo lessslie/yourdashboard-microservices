@@ -41,3 +41,22 @@ a {
     color-scheme: dark;
   }
 } */
+
+.custom-scrollbar {
+  overflow-y: auto;
+  max-height: 500px;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px; /* ancho de la barra */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #6E95FF; /* color de la parte que se mueve */
+  border-radius: 10px;
+  min-height: 69px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background-color: #ffffff; /* fondo de la barra */
+}
