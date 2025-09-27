@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import AggMessage from "../../assets/aggMessageBlue.svg";
 import Buscador from "../../assets/buscador.svg";
 import MyChatsMessage from "./MyChatsMessage";
 import NotMyChats from "./NotMyChats";
+import LinkWhatsappModal from "./linkWhatsappModal";
 
 interface ChatItem {
   id: string;
@@ -22,6 +23,8 @@ const MisChatsList: React.FC<MisChatsListProps> = ({
   onSelectChat,
   selectedChat,
 }) => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  
   return (
     <div>
       <div
@@ -31,15 +34,41 @@ const MisChatsList: React.FC<MisChatsListProps> = ({
         {/* Encabezado */}
         <div className="flex flex-col">
           <div className="flex items-center justify-between">
-            <div className="flex gap-3 items-center justify-center ">
+            <div className="flex gap-3 items-center justify-center relative">
               <div className="flex flex-col">
                 <h2 className="font-bold text-[32px] leading-[35.2px] tracking-normal text-[#1D2EB6]">
                   Mis chats
                 </h2>
               </div>
-              <div className="w-[17px] h-[17px] rounded-full p-1 mt-1.5 bg-[#DBEAFF] flex items-center justify-center">
-                <img src="/dropdown.png" alt="" className="cursor-pointer" />
+              <div
+                className="w-[17px] h-[17px] rounded-full p-1 mt-1.5 bg-[#DBEAFF] flex items-center justify-center cursor-pointer relative"
+                onClick={() => setIsModalOpen(true)}
+              >
+                <img src="/dropdown.png" alt="" />
               </div>
+
+              {/* Modal fuera del botón */}
+              {isModalOpen && (
+                <div>
+                  {/* Backdrop */}
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsModalOpen(false)}
+                    style={{ background: "transparent" }}
+                  />
+                  {/* Modal */}
+                  <div
+                    className="fixed z-50"
+                    style={{
+                      left: "calc(50% + -410px)", 
+                      top: "145px",           
+                    }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <LinkWhatsappModal />
+                  </div>
+                </div>
+              )}
             </div>
             <div className="mt-1.5 flex items-center justify-center">
               <AggMessage className="w-[24px] h-[24px] cursor-pointer" />
@@ -63,12 +92,12 @@ const MisChatsList: React.FC<MisChatsListProps> = ({
 
       {/* Lista de chats */}
       <div className="overflow-y-auto custom-scrollbar">
-        <NotMyChats />
-        {/* <MyChatsMessage
+        {/* <NotMyChats /> */}
+        <MyChatsMessage
           chats={chats}
           onSelectChat={onSelectChat}
           selectedChat={selectedChat}
-        /> */}
+        />
       </div>
     </div>
   );

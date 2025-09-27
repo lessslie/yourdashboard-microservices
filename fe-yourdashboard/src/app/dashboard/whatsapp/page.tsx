@@ -70,7 +70,7 @@ export default function Home() {
         >
          <div className="flex h-screen">
       <MisChatsList chats={chats} onSelectChat={setSelectedChat} selectedChat={selectedChat}  />
-      {/* {selectedChat && (
+      {selectedChat && (
         <ChatWindow
           selectedChatName={
             chats.find((c) => c.id === selectedChat)?.name || ''
@@ -78,9 +78,9 @@ export default function Home() {
           messages={messages}
           onSendMessage={(msg) => console.log('enviar', msg)}
         />
-      )} */}
+      )}
 
-      <LinkWhatsapp />
+      {/* <LinkWhatsapp /> */}
        </div>
         </Content>
       </Layout>
