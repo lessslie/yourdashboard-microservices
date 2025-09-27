@@ -13,6 +13,8 @@ import {
   UnauthorizedException,
   NotFoundException,
   BadRequestException,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -43,7 +45,12 @@ import {
   ProfileResponseDto,
   ErrorResponseDto,
   HealthResponseDto,
+  ValidateTokenResponseDto,
+  ResetPasswordDto,
+
 } from './dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { PasswordResetService } from './password-reset.service';
 import {
   ReqCallbackGoogle,
   UsuarioAutenticado,
@@ -53,6 +60,8 @@ import {
 } from './interfaces/auth.interfaces';
 import axios from 'axios';
 import { Logger } from '@nestjs/common';
+import { DatabaseService } from 'src/database/database.service';
+import * as bcrypt from 'bcrypt';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -65,12 +74,16 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly passwordResetService: PasswordResetService,
+    private readonly databaseService: DatabaseService
   ) {
     this.orchestratorUrl = this.configService.get<string>('ORCHESTRATOR_URL') || 'http://localhost:3003';
   }
 
+
+  
   // ================================
-  // ENDPOINTS TRADICIONALES (sin cambios)
+  // ENDPOINTS TRADICIONALES
   // ================================
 
   @Post('register')
@@ -118,7 +131,6 @@ export class AuthController {
   }
 
 @Post('login')
-
 @ApiOperation({
   summary: 'Iniciar sesión',
   description: 'Autenticarse con email y contraseña. Ahora retorna JWT token + perfil completo del usuario.',
@@ -337,6 +349,165 @@ async login(@Body() loginData: LoginDto): Promise<any> {
     return this.authService.logout(token);
   }
 
+
+
+  /**
+   * Solicitar recuperación de contraseña
+   * Siempre retorna éxito por seguridad (no revela si email existe)
+   */
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ 
+    summary: 'Solicitar recuperación de contraseña',
+    description: 'Genera un token de recuperación y envía email al usuario. Siempre retorna éxito por seguridad.'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Email enviado correctamente (si el email existe)',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', example: 'Si el email existe, recibirás instrucciones para restablecer tu contraseña' },
+        success: { type: 'boolean', example: true }
+      }
+    }
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Email inválido o faltante' 
+  })
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    // 1. Intentar crear token de recuperación
+    const tokenData = await this.passwordResetService.createResetToken(
+      forgotPasswordDto.email
+    );
+
+    // 2. Si se creó el token, aquí enviarías el email
+    if (tokenData) {
+      // TODO: Aquí irá la integración con el servicio de email
+      console.log('🔐 Token generado:', {
+        email: tokenData.email,
+        token: tokenData.token,
+        expira: tokenData.expira_en
+      });
+
+      // TODO: Enviar email con el link:
+      // const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${tokenData.token}`;
+      // await this.emailService.sendPasswordResetEmail(tokenData.email, resetLink);
+    }
+
+    // 3. SIEMPRE retornar éxito (seguridad: no revelar si email existe)
+    return {
+      message: 'Si el email existe, recibirás instrucciones para restablecer tu contraseña',
+      success: true
+    };
+  }
+
+  /**
+   * Validar token de recuperación de contraseña
+   * Verifica si el token existe, no está usado y no expiró
+   */
+  @Get('validate-reset-token/:token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ 
+    summary: 'Validar token de recuperación',
+    description: 'Verifica si un token de recuperación de contraseña es válido (existe, no usado, no expirado)'
+  })
+  @ApiParam({
+    name: 'token',
+    description: 'Token UUID de recuperación',
+    example: '550e8400-e29b-41d4-a716-446655440000'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Resultado de la validación del token',
+    type: ValidateTokenResponseDto,
+    schema: {
+      type: 'object',
+      properties: {
+        valid: { type: 'boolean', example: true },
+        message: { type: 'string', example: 'Token válido' }
+      }
+    }
+  })
+  async validateResetToken(
+    @Param('token') token: string
+  ): Promise<ValidateTokenResponseDto> {
+    // Validar token usando el servicio
+    const result = await this.passwordResetService.validateToken(token);
+
+    return {
+      valid: result.valid,
+      message: result.message
+    };
+  }
+
+/**
+ * Restablecer contraseña usando token de recuperación
+ * Actualiza la contraseña y marca el token como usado
+ */
+@Post('reset-password')
+@HttpCode(HttpStatus.OK)
+@ApiOperation({ 
+  summary: 'Restablecer contraseña',
+  description: 'Cambia la contraseña del usuario usando un token válido de recuperación'
+})
+@ApiResponse({ 
+  status: 200, 
+  description: 'Contraseña actualizada correctamente',
+  schema: {
+    type: 'object',
+    properties: {
+      message: { type: 'string', example: 'Contraseña actualizada correctamente' },
+      success: { type: 'boolean', example: true }
+    }
+  }
+})
+@ApiResponse({ 
+  status: 400, 
+  description: 'Token inválido, expirado o contraseñas no coinciden' 
+})
+async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+  const { token, newPassword, confirmPassword } = resetPasswordDto;
+
+  if (newPassword !== confirmPassword) {
+    throw new BadRequestException('Las contraseñas no coinciden');
+  }
+
+  const validation = await this.passwordResetService.validateToken(token);
+  
+  if (!validation.valid) {
+    throw new BadRequestException(validation.message);
+  }
+
+  const userId = validation.userId;
+  
+  if (!userId) {
+    throw new BadRequestException('No se pudo identificar el usuario');
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+  // ✅ SIN updated_at
+  await this.databaseService.query(
+    'UPDATE usuarios_principales SET password_hash = $1 WHERE id = $2',
+    [hashedPassword, userId]
+  );
+
+  await this.passwordResetService.markTokenAsUsed(token);
+
+  await this.databaseService.query(
+    'UPDATE sesiones_jwt SET esta_activa = false WHERE usuario_principal_id = $1 AND esta_activa = true',
+    [userId]
+  );
+
+  console.log('🔐 Contraseña restablecida para usuario:', userId);
+
+  return {
+    message: 'Contraseña actualizada correctamente',
+    success: true
+  };
+}
   // ================================
   // 🎯 OAUTH GOOGLE
   // ================================
@@ -561,7 +732,7 @@ private redirectToGoogleOAuth(res: Response, userId: string, service: 'gmail' | 
   }
 
   // ================================
-  // GESTIÓN DE CUENTAS GMAIL (sin cambios)
+  // GESTIÓN DE CUENTAS GMAIL
   // ================================
 
   @Get('cuentas-gmail')
@@ -948,7 +1119,7 @@ async actualizarAliasCuenta(
 
   
   // ================================
-  // 🔧 MÉTODOS PRIVADOS NUEVOS
+  // 🔧 MÉTODOS PRIVADOS
   // ================================
 
   /**

@@ -6,6 +6,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UserOwnershipGuard } from './guards/user-ownership.guard';
 import { GoogleOAuthGuard } from './guards/google-oauth.guard';
 import { ConfigService } from '@nestjs/config';
+import { PasswordResetService } from './password-reset.service';
 
 @Module({
   controllers: [AuthController],
@@ -15,8 +16,11 @@ import { ConfigService } from '@nestjs/config';
     ConfigService,
     JwtAuthGuard,
     UserOwnershipGuard,
-    GoogleOAuthGuard
+    GoogleOAuthGuard,
+    PasswordResetService,
+    
+  
   ],
-  exports: [AuthService, JwtAuthGuard, UserOwnershipGuard]
+  exports: [AuthService, JwtAuthGuard, UserOwnershipGuard, GoogleOAuthGuard, PasswordResetService],
 })
 export class AuthModule {}
