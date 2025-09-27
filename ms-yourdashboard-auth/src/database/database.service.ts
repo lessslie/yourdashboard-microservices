@@ -121,9 +121,17 @@ export class DatabaseService implements OnModuleDestroy {
 // 👤 USUARIOS PRINCIPALES - PRISMA
 
 
+// Desestructurar y pasar solo lo necesario
 async crearUsuarioPrincipal(userData: RegistroUsuarioDto & { password_hash: string }): Promise<usuarios_principales> {
-  const usuario = await this.userRepository.create(userData);
-  this.logger.log(`✅ Usuario principal creado: ${userData.email}`);
+  const { email, nombre, password_hash } = userData;
+  
+  const usuario = await this.userRepository.create({
+    email,
+    nombre,
+    password_hash
+  });
+  
+  this.logger.log(`✅ Usuario principal creado: ${email}`);
   return usuario;
 }
 
